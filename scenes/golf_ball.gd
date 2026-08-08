@@ -93,9 +93,11 @@ func hit_shot() -> void:
 	print("Target selected: ", chosen_target.name)
 
 	shot_destination = shot_simulator.simulate_shot(
-		golfer,
-		chosen_shot_type,
-		chosen_target.global_position,
-		max_lateral_error,
-		max_distance_error
-	)
+	golfer,
+	chosen_shot_type,
+	chosen_target.global_position,
+	max_lateral_error,
+	max_distance_error,
+	water_hazard.required_carry,
+	water_hazard.global_position
+)

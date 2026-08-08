@@ -86,3 +86,4 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, -8)
 material_override = SubResource("StandardMaterial3D_scx6k")
 mesh = SubResource("BoxMesh_n048l")
 script = ExtResource("4_jyhfs")
+required_carry = 55.0
