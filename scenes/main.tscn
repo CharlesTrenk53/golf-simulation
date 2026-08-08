@@ -32,6 +32,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 25)
 material_override = SubResource("StandardMaterial3D_sgp6g")
 mesh = SubResource("SphereMesh_u2d4l")
 script = ExtResource("1_o5qli")
+shot_duration = 4.0
+arc_height = 12.0
 
 [node name="Target" type="MeshInstance3D" parent="." unique_id=853342908]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -25)
