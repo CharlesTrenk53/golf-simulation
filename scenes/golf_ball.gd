@@ -1,8 +1,5 @@
 extends MeshInstance3D
 
-@export_enum("DRIVE", "APPROACH", "SHORT_GAME", "PUTT")
-var shot_type: int = 1
-
 @export var shot_duration: float = 2.0
 @export var arc_height: float = 6.0
 
@@ -60,9 +57,25 @@ func hit_shot() -> void:
 	elapsed_time = 0.0
 	shot_complete = false
 
+	var distance_to_target = start_position.distance_to(
+		target.global_position
+	)
+
+	var chosen_shot_type = golfer.choose_shot(
+		distance_to_target
+	)
+
+	print("====================")
+	print("DECISION")
+	print("Distance to target: ", distance_to_target)
+	print(
+		"Golfer chose: ",
+		golfer.ShotType.keys()[chosen_shot_type]
+	)
+
 	shot_destination = shot_simulator.simulate_shot(
 		golfer,
-		shot_type,
+		chosen_shot_type,
 		target.global_position,
 		max_lateral_error,
 		max_distance_error
