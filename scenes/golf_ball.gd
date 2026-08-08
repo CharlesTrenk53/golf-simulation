@@ -64,9 +64,13 @@ func hit_shot() -> void:
 		aggressive_target.global_position
 	)
 
+	var calculated_hazard_risk = water_hazard.calculate_hazard_risk(
+	golfer
+)
+
 	var chosen_shot_type = golfer.choose_shot(
 	distance_to_aggressive_target,
-	water_hazard.hazard_risk
+	calculated_hazard_risk
 )
 
 	var chosen_target: MeshInstance3D

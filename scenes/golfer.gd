@@ -1,5 +1,11 @@
 extends Node
 
+enum GolferProfile {
+	WILD_BILL,
+	RECKLESS_RICK,
+	CAREFUL_CARL
+}
+
 enum ShotType {
 	DRIVE,
 	APPROACH,
@@ -7,13 +13,60 @@ enum ShotType {
 	PUTT
 }
 
-@export var golfer_name: String = "Test Golfer"
+@export var profile: GolferProfile = GolferProfile.WILD_BILL
 
-@export_range(0.0, 100.0, 1.0) var driving: float = 70.0
-@export_range(0.0, 100.0, 1.0) var approach: float = 70.0
-@export_range(0.0, 100.0, 1.0) var short_game: float = 70.0
-@export_range(0.0, 100.0, 1.0) var putting: float = 70.0
-@export_range(0.0, 100.0, 1.0) var risk_tolerance: float = 50.0
+var golfer_name: String
+var driving: float
+var driving_distance: float
+var approach: float
+var short_game: float
+var putting: float
+var risk_tolerance: float
+
+
+func _ready() -> void:
+	apply_profile()
+
+	print("=== ACTIVE GOLFER ===")
+	print("Profile: ", GolferProfile.keys()[profile])
+	print("Name: ", golfer_name)
+	print("Driving: ", driving)
+	print("Driving distance: ", driving_distance)
+	print("Approach: ", approach)
+	print("Short game: ", short_game)
+	print("Putting: ", putting)
+	print("Risk tolerance: ", risk_tolerance)
+
+
+func apply_profile() -> void:
+	match profile:
+		GolferProfile.WILD_BILL:
+			golfer_name = "Wild Bill"
+			driving = 95.0
+			driving_distance = 70.0
+			approach = 70.0
+			short_game = 70.0
+			putting = 70.0
+			risk_tolerance = 90.0
+
+		GolferProfile.RECKLESS_RICK:
+			golfer_name = "Reckless Rick"
+			driving = 30.0
+			driving_distance = 48.0
+			approach = 70.0
+			short_game = 70.0
+			putting = 70.0
+			risk_tolerance = 90.0
+
+		GolferProfile.CAREFUL_CARL:
+			golfer_name = "Careful Carl"
+			driving = 30.0
+			driving_distance = 48.0
+			approach = 70.0
+			short_game = 70.0
+			putting = 70.0
+			risk_tolerance = 10.0
+
 
 func choose_shot(
 	distance_to_target: float,
@@ -34,7 +87,6 @@ func choose_shot(
 func choose_long_shot(hazard_risk: float) -> ShotType:
 	var safe_reward: float = 50.0
 	var safe_risk: float = 20.0
-
 	var aggressive_reward: float = 80.0
 
 	var ability_factor = driving / 100.0
@@ -56,6 +108,7 @@ func choose_long_shot(hazard_risk: float) -> ShotType:
 	print("------ DECISION ANALYSIS ------")
 	print("Golfer: ", golfer_name)
 	print("Driving ability: ", driving)
+	print("Driving distance: ", driving_distance)
 	print("Risk tolerance: ", risk_tolerance)
 	print("Hazard risk: ", hazard_risk)
 	print("Safe utility: ", safe_utility)
