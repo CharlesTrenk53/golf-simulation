@@ -1,0 +1,46 @@
+[gd_scene format=3 uid="uid://dpn7ob7bq1a0b"]
+
+[ext_resource type="Script" uid="uid://biopxaovxncil" path="res://scenes/golf_ball.gd" id="1_o5qli"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_u2d4l"]
+size = Vector3(30, 0.2, 60)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_n048l"]
+albedo_color = Color(0.023529412, 0.43529412, 0.1254902, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sgp6g"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_u2d4l"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0wfyh"]
+albedo_color = Color(0.9254902, 0.019607844, 0.023529412, 1)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_u2d4l"]
+top_radius = 1.5
+bottom_radius = 1.5
+height = 0.1
+
+[node name="Main" type="Node3D" unique_id=1033694137]
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=415340805]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5158367, 0.44966555, 0.0018823147)
+mesh = SubResource("BoxMesh_u2d4l")
+surface_material_override/0 = SubResource("StandardMaterial3D_n048l")
+
+[node name="GolfBall" type="MeshInstance3D" parent="." unique_id=1111362663]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 25)
+material_override = SubResource("StandardMaterial3D_sgp6g")
+mesh = SubResource("SphereMesh_u2d4l")
+script = ExtResource("1_o5qli")
+
+[node name="Target" type="MeshInstance3D" parent="." unique_id=853342908]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -25)
+material_override = SubResource("StandardMaterial3D_0wfyh")
+mesh = SubResource("CylinderMesh_u2d4l")
+
+[node name="MainCamera" type="Camera3D" parent="." unique_id=651669325]
+transform = Transform3D(0.81915206, -0.3686878, 0.43938506, 0, 0.76604444, 0.6427876, -0.57357645, -0.52654076, 0.62750685, 25, 35, 35)
+current = true
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1571448415]
+transform = Transform3D(0.8660254, 0.43301272, -0.24999999, 0, 0.49999997, 0.86602545, 0.5, -0.75, 0.43301266, 0, 0, 0)
