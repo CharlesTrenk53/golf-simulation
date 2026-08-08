@@ -6,7 +6,9 @@ extends MeshInstance3D
 @export var max_lateral_error: float = 8.0
 @export var max_distance_error: float = 8.0
 
-@onready var target: MeshInstance3D = $"../Target"
+@export var aggressive_target: MeshInstance3D
+@export var layup_target: MeshInstance3D
+
 @onready var golfer: Node = $"../Golfer"
 @onready var shot_simulator: Node = $"../ShotSimulator"
 
@@ -57,26 +59,35 @@ func hit_shot() -> void:
 	elapsed_time = 0.0
 	shot_complete = false
 
-	var distance_to_target = start_position.distance_to(
-		target.global_position
+	var distance_to_aggressive_target = start_position.distance_to(
+		aggressive_target.global_position
 	)
 
 	var chosen_shot_type = golfer.choose_shot(
-		distance_to_target
+		distance_to_aggressive_target
 	)
 
+	var chosen_target: MeshInstance3D
+
+	if chosen_shot_type == golfer.ShotType.DRIVE:
+		chosen_target = aggressive_target
+	else:
+		chosen_target = layup_target
+
 	print("====================")
-	print("DECISION")
-	print("Distance to target: ", distance_to_target)
+	print("COURSE DECISION")
+	print("Golfer: ", golfer.golfer_name)
+	print("Risk tolerance: ", golfer.risk_tolerance)
 	print(
-		"Golfer chose: ",
+		"Shot selected: ",
 		golfer.ShotType.keys()[chosen_shot_type]
 	)
+	print("Target selected: ", chosen_target.name)
 
 	shot_destination = shot_simulator.simulate_shot(
 		golfer,
 		chosen_shot_type,
-		target.global_position,
+		chosen_target.global_position,
 		max_lateral_error,
 		max_distance_error
 	)
