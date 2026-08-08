@@ -36,7 +36,7 @@ mesh = SubResource("SphereMesh_u2d4l")
 script = ExtResource("1_o5qli")
 
 [node name="Target" type="MeshInstance3D" parent="." unique_id=853342908]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -25)
 material_override = SubResource("StandardMaterial3D_0wfyh")
 mesh = SubResource("CylinderMesh_u2d4l")
 
@@ -49,11 +49,12 @@ transform = Transform3D(0.8660254, 0.43301272, -0.24999999, 0, 0.49999997, 0.866
 
 [node name="Golfer" type="Node" parent="." unique_id=1383481587]
 script = ExtResource("2_0wfyh")
-golfer_name = "Wild Bill"
+golfer_name = "Conservative Bill"
 driving = 95.0
 approach = 20.0
 short_game = 80.0
 putting = 40.0
+risk_tolerance = 10.0
 
 [node name="ShotSimulator" type="Node" parent="." unique_id=916358192]
 script = ExtResource("3_sugp2")
