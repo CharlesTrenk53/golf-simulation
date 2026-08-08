@@ -18,11 +18,17 @@ func simulate_shot(
 	water_position: Vector3 = Vector3.ZERO
 ) -> Vector3:
 
-	var ability = get_shot_ability(golfer, shot_type)
+	var ability = get_shot_ability(
+		golfer,
+		shot_type
+	)
 
-	# Only aggressive DRIVE shots test whether the golfer
-	# successfully clears the water.
-	if shot_type == ShotType.DRIVE and required_carry > 0.0:
+	var is_aggressive = (
+		shot_type == ShotType.DRIVE
+		and required_carry > 0.0
+	)
+
+	if is_aggressive:
 		var carry_result = calculate_carry_result(
 			golfer,
 			required_carry
@@ -38,16 +44,22 @@ func simulate_shot(
 			print("SHOT RESULT: WATER")
 			print("Water destination: ", water_destination)
 
-			golfer.record_shot_result("WATER")
+			golfer.record_shot_result(
+				"WATER",
+				true
+			)
 
 			return water_destination
 
-	# If the golfer clears the hazard, or the shot is not
-	# an aggressive drive, calculate the normal shot result.
 	var accuracy_factor = 1.0 - (ability / 100.0)
 
-	var lateral_error_range = max_lateral_error * accuracy_factor
-	var distance_error_range = max_distance_error * accuracy_factor
+	var lateral_error_range = (
+		max_lateral_error * accuracy_factor
+	)
+
+	var distance_error_range = (
+		max_distance_error * accuracy_factor
+	)
 
 	var x_error = randf_range(
 		-lateral_error_range,
@@ -68,30 +80,42 @@ func simulate_shot(
 	print("--------------------")
 	print("SHOT RESULT: SUCCESS")
 	print("Golfer: ", golfer.golfer_name)
-	print("Shot type: ", ShotType.keys()[shot_type])
+	print(
+		"Shot type: ",
+		ShotType.keys()[shot_type]
+	)
 	print("Ability used: ", ability)
 	print("Lateral error: ", x_error)
 	print("Distance error: ", z_error)
 	print("Shot destination: ", shot_destination)
 
-	golfer.record_shot_result("SUCCESS")
+	golfer.record_shot_result(
+		"SUCCESS",
+		is_aggressive
+	)
 
 	return shot_destination
 
 
-func calculate_carry_result(
+func calculate_carry_success_chance(
 	golfer: Node,
 	required_carry: float
-) -> Dictionary:
+) -> float:
 
-	var carry_margin = golfer.driving_distance - required_carry
+	var carry_margin = (
+		golfer.driving_distance
+		- required_carry
+	)
 
-	# 50% success when normal driving distance exactly
-	# equals the required carry.
-	var success_chance = 50.0 + (carry_margin * 5.0)
+	var success_chance = (
+		50.0
+		+ (carry_margin * 5.0)
+	)
 
-	# Driving ability modifies execution quality.
-	var ability_adjustment = (golfer.driving - 50.0) * 0.3
+	var ability_adjustment = (
+		(golfer.driving - 50.0) * 0.3
+	)
+
 	success_chance += ability_adjustment
 
 	success_chance = clamp(
@@ -100,15 +124,48 @@ func calculate_carry_result(
 		95.0
 	)
 
-	var roll = randf_range(0.0, 100.0)
-	var success = roll <= success_chance
+	return success_chance
+
+
+func calculate_carry_result(
+	golfer: Node,
+	required_carry: float
+) -> Dictionary:
+
+	var carry_margin = (
+		golfer.driving_distance
+		- required_carry
+	)
+
+	var success_chance = calculate_carry_success_chance(
+		golfer,
+		required_carry
+	)
+
+	var roll = randf_range(
+		0.0,
+		100.0
+	)
+
+	var success = (
+		roll <= success_chance
+	)
 
 	print("------ SHOT EXECUTION ------")
 	print("Required carry: ", required_carry)
-	print("Golfer distance: ", golfer.driving_distance)
+	print(
+		"Golfer distance: ",
+		golfer.driving_distance
+	)
 	print("Carry margin: ", carry_margin)
-	print("Driving ability: ", golfer.driving)
-	print("Success chance: ", success_chance)
+	print(
+		"Driving ability: ",
+		golfer.driving
+	)
+	print(
+		"Success chance: ",
+		success_chance
+	)
 	print("Execution roll: ", roll)
 
 	if success:
@@ -133,7 +190,10 @@ func create_water_destination(
 		max_lateral_error * 0.5
 	)
 
-	var water_z = randf_range(-3.0, 3.0)
+	var water_z = randf_range(
+		-3.0,
+		3.0
+	)
 
 	return water_position + Vector3(
 		water_x,
