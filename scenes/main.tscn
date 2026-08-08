@@ -42,6 +42,11 @@ albedo_color = Color(0.03529412, 0.050980393, 1, 1)
 material = SubResource("StandardMaterial3D_jrx5g")
 size = Vector3(20, 1, 10)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1gysy"]
+albedo_color = Color(0.95686275, 0.38431373, 0.023529412, 1)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_4dv3d"]
+
 [node name="Main" type="Node3D" unique_id=1033694137]
 
 [node name="Ground" type="MeshInstance3D" parent="." unique_id=415340805]
@@ -49,12 +54,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5158367, 0.44966555, 0.001
 mesh = SubResource("BoxMesh_u2d4l")
 surface_material_override/0 = SubResource("StandardMaterial3D_n048l")
 
-[node name="GolfBall" type="MeshInstance3D" parent="." unique_id=1111362663 node_paths=PackedStringArray("aggressive_target", "layup_target", "water_hazard")]
+[node name="GolfBall" type="MeshInstance3D" parent="." unique_id=1111362663 node_paths=PackedStringArray("aggressive_target", "bailout_target", "layup_target", "water_hazard")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 25)
 material_override = SubResource("StandardMaterial3D_sgp6g")
 mesh = SubResource("SphereMesh_u2d4l")
 script = ExtResource("1_o5qli")
 aggressive_target = NodePath("../AgressiveTarget")
+bailout_target = NodePath("../BailoutTarget")
 layup_target = NodePath("../LayupTarget")
 water_hazard = NodePath("../WaterHazard")
 
@@ -72,7 +78,7 @@ transform = Transform3D(0.8660254, 0.43301272, -0.24999999, 0, 0.49999997, 0.866
 
 [node name="Golfer" type="Node" parent="." unique_id=1383481587]
 script = ExtResource("2_0wfyh")
-profile = 2
+profile = 1
 
 [node name="ShotSimulator" type="Node" parent="." unique_id=916358192]
 script = ExtResource("3_sugp2")
@@ -87,3 +93,8 @@ material_override = SubResource("StandardMaterial3D_scx6k")
 mesh = SubResource("BoxMesh_n048l")
 script = ExtResource("4_jyhfs")
 required_carry = 55.0
+
+[node name="BailoutTarget" type="MeshInstance3D" parent="." unique_id=588012535]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.6, 0)
+material_override = SubResource("StandardMaterial3D_1gysy")
+mesh = SubResource("CylinderMesh_4dv3d")

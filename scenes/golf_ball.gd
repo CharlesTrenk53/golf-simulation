@@ -7,6 +7,7 @@ extends MeshInstance3D
 @export var max_distance_error: float = 8.0
 
 @export var aggressive_target: MeshInstance3D
+@export var bailout_target: MeshInstance3D
 @export var layup_target: MeshInstance3D
 @export var water_hazard: MeshInstance3D
 
@@ -22,6 +23,7 @@ var shot_complete: bool = false
 
 func _ready() -> void:
 	randomize()
+
 	start_position = global_position
 
 	await get_tree().process_frame
@@ -83,12 +85,6 @@ func hit_shot() -> void:
 	elapsed_time = 0.0
 	shot_complete = false
 
-	var distance_to_aggressive_target = (
-		start_position.distance_to(
-			aggressive_target.global_position
-		)
-	)
-
 	var calculated_hazard_risk = (
 		water_hazard.calculate_hazard_risk(
 			golfer
@@ -102,54 +98,72 @@ func hit_shot() -> void:
 		)
 	)
 
-	var chosen_shot_type = golfer.choose_shot(
-		distance_to_aggressive_target,
-		calculated_hazard_risk,
-		model_success_chance
+	var shot_options = [
+		{
+			"name": "LAYUP",
+			"shot_type": golfer.ShotType.APPROACH,
+			"target": layup_target,
+			"reward": 45.0,
+			"risk": 10.0,
+			"is_aggressive": false,
+			"model_success_chance": 100.0
+		},
+		{
+			"name": "BAILOUT",
+			"shot_type": golfer.ShotType.APPROACH,
+			"target": bailout_target,
+			"reward": 55.0,
+			"risk": 30.0,
+			"is_aggressive": false,
+			"model_success_chance": 100.0
+		},
+		{
+			"name": "ATTACK",
+			"shot_type": golfer.ShotType.DRIVE,
+			"target": aggressive_target,
+			"reward": 65.0,
+			"risk": calculated_hazard_risk,
+			"is_aggressive": true,
+			"model_success_chance": model_success_chance
+		}
+	]
+
+	var chosen_option = golfer.choose_best_option(
+		shot_options
 	)
 
-	var chosen_target: MeshInstance3D
+	var chosen_target: MeshInstance3D = (
+		chosen_option["target"]
+	)
 
-	if (
-		chosen_shot_type
-		== golfer.ShotType.DRIVE
-	):
-		chosen_target = aggressive_target
-	else:
-		chosen_target = layup_target
+	var chosen_shot_type: int = (
+		chosen_option["shot_type"]
+	)
 
 	print("====================")
 	print("COURSE DECISION")
+	print("Golfer: ", golfer.golfer_name)
 	print(
-		"Golfer: ",
-		golfer.golfer_name
-	)
-	print(
-		"Driving distance: ",
-		golfer.driving_distance
-	)
-	print(
-		"Risk tolerance: ",
-		golfer.risk_tolerance
-	)
-	print(
-		"Calculated hazard risk: ",
-		calculated_hazard_risk
-	)
-	print(
-		"Model carry success chance: ",
-		model_success_chance
-	)
-	print(
-		"Shot selected: ",
-		golfer.ShotType.keys()[
-			chosen_shot_type
-		]
+		"Selected option: ",
+		chosen_option["name"]
 	)
 	print(
 		"Target selected: ",
 		chosen_target.name
 	)
+	print(
+		"Shot type: ",
+		golfer.ShotType.keys()[
+			chosen_shot_type
+		]
+	)
+
+	var required_carry: float = 0.0
+
+	if chosen_option["is_aggressive"]:
+		required_carry = (
+			water_hazard.required_carry
+		)
 
 	shot_destination = (
 		shot_simulator.simulate_shot(
@@ -158,7 +172,7 @@ func hit_shot() -> void:
 			chosen_target.global_position,
 			max_lateral_error,
 			max_distance_error,
-			water_hazard.required_carry,
+			required_carry,
 			water_hazard.global_position
 		)
 	)

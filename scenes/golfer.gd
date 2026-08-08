@@ -22,10 +22,6 @@ var approach: float
 var short_game: float
 var putting: float
 var risk_tolerance: float
-
-# How strongly personal outcomes influence future choices.
-# 0 = almost ignores experience
-# 100 = highly responsive to experience
 var responsiveness_to_experience: float
 
 # General outcome memory
@@ -33,7 +29,7 @@ var shots_attempted: int = 0
 var successful_shots: int = 0
 var water_balls: int = 0
 
-# Memory specifically for aggressive carry attempts
+# Memory specifically for aggressive attempts
 var aggressive_attempts: int = 0
 var aggressive_successes: int = 0
 var aggressive_failures: int = 0
@@ -90,123 +86,155 @@ func apply_profile() -> void:
 			responsiveness_to_experience = 85.0
 
 
-func choose_shot(
-	distance_to_target: float,
-	hazard_risk: float,
-	model_success_chance: float
-) -> ShotType:
+func choose_best_option(
+	options: Array
+) -> Dictionary:
 
-	if distance_to_target > 40.0:
-		return choose_long_shot(
-			hazard_risk,
-			model_success_chance
+	var best_option: Dictionary = {}
+	var best_utility: float = -999999.0
+
+	print("====== SHOT OPTION EVALUATION ======")
+
+	for option in options:
+		var evaluation = evaluate_option(option)
+		var utility: float = evaluation["utility"]
+
+		print("Option: ", option["name"])
+		print("Reward: ", option["reward"])
+		print("Risk: ", option["risk"])
+		print("Relevant ability: ", evaluation["ability"])
+		print("Ability bonus: ", evaluation["ability_bonus"])
+
+		if option["is_aggressive"]:
+			print(
+				"Model success chance: ",
+				option["model_success_chance"]
+			)
+			print(
+				"Believed success chance: ",
+				evaluation["believed_success_chance"]
+			)
+			print(
+				"Experience penalty: ",
+				evaluation["experience_penalty"]
+			)
+
+		print("Utility: ", utility)
+		print("--------------------")
+
+		if utility > best_utility:
+			best_utility = utility
+			best_option = option
+
+	print("SELECTED OPTION: ", best_option["name"])
+	print("SELECTED UTILITY: ", best_utility)
+
+	return best_option
+
+
+func evaluate_option(
+	option: Dictionary
+) -> Dictionary:
+
+	var reward: float = option["reward"]
+	var risk: float = option["risk"]
+	var shot_type: int = option["shot_type"]
+
+	var ability = get_shot_ability(shot_type)
+
+	# Better skill with the required shot makes an option
+	# somewhat more attractive.
+	var ability_bonus = ability * 0.10
+
+	# High risk tolerance reduces the golfer's perceived
+	# cost of risky options.
+	var risk_weight = (
+		1.0
+		- (risk_tolerance / 100.0)
+	)
+
+	var risk_penalty = (
+		risk * risk_weight
+	)
+
+	var experience_penalty: float = 0.0
+	var believed_success_chance: float = 100.0
+
+	if option["is_aggressive"]:
+		var model_success_chance: float = (
+			option["model_success_chance"]
 		)
 
-	if distance_to_target > 15.0:
-		return ShotType.APPROACH
-
-	if distance_to_target > 5.0:
-		return ShotType.SHORT_GAME
-
-	return ShotType.PUTT
-
-
-func choose_long_shot(
-	hazard_risk: float,
-	model_success_chance: float
-) -> ShotType:
-
-	var safe_reward: float = 50.0
-	var safe_risk: float = 20.0
-	var aggressive_reward: float = 65.0
-
-	var believed_success_chance = get_believed_aggressive_success(
-		model_success_chance
-	)
-
-	var ability_factor = driving / 100.0
-
-	var ability_adjusted_aggressive_risk = (
-		hazard_risk
-		* (1.0 - (ability_factor * 0.6))
-	)
-
-	var experience_adjusted_aggressive_reward = aggressive_reward
-
-	# Experience only begins to influence the choice after
-	# several attempts.
-	if aggressive_attempts >= 3:
-		var experience_factor = (
-			responsiveness_to_experience / 100.0
+		believed_success_chance = (
+			get_believed_aggressive_success(
+				model_success_chance
+			)
 		)
 
-		# Lower believed success makes the aggressive option
-		# less attractive. The effect depends on how strongly
-		# this golfer responds to experience.
-		var failure_belief = (
-			1.0
-			- (believed_success_chance / 100.0)
-		)
+		# The golfer must actually build some experience
+		# before personal history begins affecting utility.
+		if aggressive_attempts >= 3:
+			var experience_factor = (
+				responsiveness_to_experience / 100.0
+			)
 
-		# The effect increases gradually as the golfer builds
-		# a larger personal sample of aggressive attempts.
-		var learning_maturity = clamp(
-			float(aggressive_attempts - 2) / 18.0,
-			0.0,
-			1.0
-		)
+			var failure_belief = (
+				1.0
+				- (
+					believed_success_chance
+					/ 100.0
+				)
+			)
 
-		var experience_penalty = (
-			failure_belief
-			* experience_factor
-			* learning_maturity
-			* 30.0
-		)
+			var learning_maturity = clamp(
+				float(aggressive_attempts - 2)
+				/ 18.0,
+				0.0,
+				1.0
+			)
 
-		experience_adjusted_aggressive_reward -= experience_penalty
+			experience_penalty = (
+				failure_belief
+				* experience_factor
+				* learning_maturity
+				* 30.0
+			)
 
-	var risk_weight = 1.0 - (risk_tolerance / 100.0)
-
-	var safe_utility = safe_reward - (
-		safe_risk * risk_weight
+	var utility = (
+		reward
+		+ ability_bonus
+		- risk_penalty
+		- experience_penalty
 	)
 
-	var aggressive_utility = (
-		experience_adjusted_aggressive_reward
-		- (
-			ability_adjusted_aggressive_risk
-			* risk_weight
-		)
-	)
+	return {
+		"utility": utility,
+		"ability": ability,
+		"ability_bonus": ability_bonus,
+		"risk_penalty": risk_penalty,
+		"experience_penalty": experience_penalty,
+		"believed_success_chance": believed_success_chance
+	}
 
-	print("------ DECISION ANALYSIS ------")
-	print("Golfer: ", golfer_name)
-	print("Driving ability: ", driving)
-	print("Driving distance: ", driving_distance)
-	print("Risk tolerance: ", risk_tolerance)
-	print(
-		"Responsiveness to experience: ",
-		responsiveness_to_experience
-	)
-	print("Hazard risk: ", hazard_risk)
-	print("Model success chance: ", model_success_chance)
-	print(
-		"Believed aggressive success chance: ",
-		believed_success_chance
-	)
-	print(
-		"Experience-adjusted aggressive reward: ",
-		experience_adjusted_aggressive_reward
-	)
-	print("Safe utility: ", safe_utility)
-	print("Aggressive utility: ", aggressive_utility)
 
-	if aggressive_utility > safe_utility:
-		print("Decision preference: AGGRESSIVE")
-		return ShotType.DRIVE
+func get_shot_ability(
+	shot_type: int
+) -> float:
 
-	print("Decision preference: SAFE")
-	return ShotType.APPROACH
+	match shot_type:
+		ShotType.DRIVE:
+			return driving
+
+		ShotType.APPROACH:
+			return approach
+
+		ShotType.SHORT_GAME:
+			return short_game
+
+		ShotType.PUTT:
+			return putting
+
+	return approach
 
 
 func get_believed_aggressive_success(
@@ -227,21 +255,14 @@ func get_believed_aggressive_success(
 		0.75
 	)
 
-	var model_weight = 1.0 - experience_weight
+	var model_weight = (
+		1.0 - experience_weight
+	)
 
 	var believed_success = (
 		model_success_chance * model_weight
 		+ observed_success_rate * experience_weight
 	)
-
-	print("------ EXPERIENCE BELIEF ------")
-	print("Aggressive attempts: ", aggressive_attempts)
-	print("Aggressive successes: ", aggressive_successes)
-	print("Aggressive failures: ", aggressive_failures)
-	print("Observed success rate: ", observed_success_rate)
-	print("Experience weight: ", experience_weight)
-	print("Model weight: ", model_weight)
-	print("Believed success chance: ", believed_success)
 
 	return believed_success
 
@@ -281,11 +302,24 @@ func record_shot_result(
 			/ float(shots_attempted)
 		) * 100.0
 
-		print("Overall success rate: ", success_rate, "%")
+		print(
+			"Overall success rate: ",
+			success_rate,
+			"%"
+		)
 
-	print("Aggressive attempts: ", aggressive_attempts)
-	print("Aggressive successes: ", aggressive_successes)
-	print("Aggressive failures: ", aggressive_failures)
+	print(
+		"Aggressive attempts: ",
+		aggressive_attempts
+	)
+	print(
+		"Aggressive successes: ",
+		aggressive_successes
+	)
+	print(
+		"Aggressive failures: ",
+		aggressive_failures
+	)
 
 	if aggressive_attempts > 0:
 		var aggressive_success_rate = (
