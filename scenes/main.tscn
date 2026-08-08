@@ -48,8 +48,8 @@ transform = Transform3D(0.8660254, 0.43301272, -0.24999999, 0, 0.49999997, 0.866
 
 [node name="Golfer" type="Node" parent="." unique_id=1383481587]
 script = ExtResource("2_0wfyh")
-golfer_name = "Charles"
-driving = 85.0
-approach = 95.0
-short_game = 65.0
-putting = 78.0
+golfer_name = "Wild Bill"
+driving = 95.0
+approach = 20.0
+short_game = 80.0
+putting = 40.0
