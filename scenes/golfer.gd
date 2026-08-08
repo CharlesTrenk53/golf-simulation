@@ -24,6 +24,15 @@ var putting: float
 var risk_tolerance: float
 var responsiveness_to_experience: float
 
+# How likely the golfer is to reconsider a near-best option.
+# 0 = almost perfectly consistent
+# 100 = highly variable / exploratory
+var decision_variability: float
+
+# Maximum utility difference for an option to be considered
+# a reasonable alternative.
+var exploration_margin: float = 5.0
+
 # General outcome memory
 var shots_attempted: int = 0
 var successful_shots: int = 0
@@ -51,6 +60,10 @@ func _ready() -> void:
 		"Responsiveness to experience: ",
 		responsiveness_to_experience
 	)
+	print(
+		"Decision variability: ",
+		decision_variability
+	)
 
 
 func apply_profile() -> void:
@@ -64,6 +77,7 @@ func apply_profile() -> void:
 			putting = 70.0
 			risk_tolerance = 90.0
 			responsiveness_to_experience = 50.0
+			decision_variability = 20.0
 
 		GolferProfile.RECKLESS_RICK:
 			golfer_name = "Reckless Rick"
@@ -74,6 +88,7 @@ func apply_profile() -> void:
 			putting = 70.0
 			risk_tolerance = 90.0
 			responsiveness_to_experience = 15.0
+			decision_variability = 65.0
 
 		GolferProfile.CAREFUL_CARL:
 			golfer_name = "Careful Carl"
@@ -84,20 +99,27 @@ func apply_profile() -> void:
 			putting = 70.0
 			risk_tolerance = 10.0
 			responsiveness_to_experience = 85.0
+			decision_variability = 5.0
 
 
 func choose_best_option(
 	options: Array
 ) -> Dictionary:
 
-	var best_option: Dictionary = {}
+	var evaluated_options: Array = []
 	var best_utility: float = -999999.0
+	var best_option: Dictionary = {}
 
 	print("====== SHOT OPTION EVALUATION ======")
 
 	for option in options:
 		var evaluation = evaluate_option(option)
 		var utility: float = evaluation["utility"]
+
+		evaluated_options.append({
+			"option": option,
+			"utility": utility
+		})
 
 		print("Option: ", option["name"])
 		print("Reward: ", option["reward"])
@@ -126,10 +148,80 @@ func choose_best_option(
 			best_utility = utility
 			best_option = option
 
-	print("SELECTED OPTION: ", best_option["name"])
-	print("SELECTED UTILITY: ", best_utility)
+	var selected_option = apply_behavioral_variability(
+		evaluated_options,
+		best_option,
+		best_utility
+	)
 
-	return best_option
+	print("UTILITY-BEST OPTION: ", best_option["name"])
+	print("UTILITY-BEST SCORE: ", best_utility)
+	print("FINAL SELECTED OPTION: ", selected_option["name"])
+
+	return selected_option
+
+
+func apply_behavioral_variability(
+	evaluated_options: Array,
+	best_option: Dictionary,
+	best_utility: float
+) -> Dictionary:
+
+	var alternatives: Array = []
+
+	for entry in evaluated_options:
+		var option: Dictionary = entry["option"]
+		var utility: float = entry["utility"]
+
+		if option["name"] == best_option["name"]:
+			continue
+
+		var utility_gap = best_utility - utility
+
+		if utility_gap <= exploration_margin:
+			alternatives.append(entry)
+
+	print("------ BEHAVIORAL VARIABILITY ------")
+	print("Golfer: ", golfer_name)
+	print("Decision variability: ", decision_variability)
+	print("Exploration margin: ", exploration_margin)
+	print("Near-best alternatives: ", alternatives.size())
+
+	if alternatives.is_empty():
+		print("No reasonable alternative available.")
+		print("Decision: UTILITY BEST")
+		return best_option
+
+	var exploration_roll = randf_range(
+		0.0,
+		100.0
+	)
+
+	print("Exploration roll: ", exploration_roll)
+
+	if exploration_roll > decision_variability:
+		print("Decision: UTILITY BEST")
+		return best_option
+
+	var selected_entry = alternatives.pick_random()
+	var selected_option: Dictionary = selected_entry["option"]
+	var selected_utility: float = selected_entry["utility"]
+
+	print("Decision: EXPLORE")
+	print(
+		"Exploration option: ",
+		selected_option["name"]
+	)
+	print(
+		"Exploration utility: ",
+		selected_utility
+	)
+	print(
+		"Utility gap: ",
+		best_utility - selected_utility
+	)
+
+	return selected_option
 
 
 func evaluate_option(
@@ -142,12 +234,8 @@ func evaluate_option(
 
 	var ability = get_shot_ability(shot_type)
 
-	# Better skill with the required shot makes an option
-	# somewhat more attractive.
 	var ability_bonus = ability * 0.10
 
-	# High risk tolerance reduces the golfer's perceived
-	# cost of risky options.
 	var risk_weight = (
 		1.0
 		- (risk_tolerance / 100.0)
@@ -171,8 +259,6 @@ func evaluate_option(
 			)
 		)
 
-		# The golfer must actually build some experience
-		# before personal history begins affecting utility.
 		if aggressive_attempts >= 3:
 			var experience_factor = (
 				responsiveness_to_experience / 100.0
