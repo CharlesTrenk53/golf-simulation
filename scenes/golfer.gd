@@ -15,9 +15,12 @@ enum ShotType {
 @export_range(0.0, 100.0, 1.0) var putting: float = 70.0
 @export_range(0.0, 100.0, 1.0) var risk_tolerance: float = 50.0
 
-func choose_shot(distance_to_target: float) -> ShotType:
+func choose_shot(
+	distance_to_target: float,
+	hazard_risk: float
+) -> ShotType:
 	if distance_to_target > 40.0:
-		return choose_long_shot()
+		return choose_long_shot(hazard_risk)
 
 	if distance_to_target > 15.0:
 		return ShotType.APPROACH
@@ -28,22 +31,18 @@ func choose_shot(distance_to_target: float) -> ShotType:
 	return ShotType.PUTT
 
 
-func choose_long_shot() -> ShotType:
+func choose_long_shot(hazard_risk: float) -> ShotType:
 	var safe_reward: float = 50.0
 	var safe_risk: float = 20.0
 
 	var aggressive_reward: float = 80.0
-	var aggressive_base_risk: float = 80.0
 
-	# Better driving ability reduces the perceived risk
-	# of taking the aggressive option.
 	var ability_factor = driving / 100.0
+
 	var ability_adjusted_aggressive_risk = (
-		aggressive_base_risk * (1.0 - (ability_factor * 0.6))
+		hazard_risk * (1.0 - (ability_factor * 0.6))
 	)
 
-	# High risk tolerance reduces how heavily the golfer
-	# penalizes risky options.
 	var risk_weight = 1.0 - (risk_tolerance / 100.0)
 
 	var safe_utility = safe_reward - (
@@ -58,11 +57,7 @@ func choose_long_shot() -> ShotType:
 	print("Golfer: ", golfer_name)
 	print("Driving ability: ", driving)
 	print("Risk tolerance: ", risk_tolerance)
-	print("Safe risk: ", safe_risk)
-	print(
-		"Aggressive ability-adjusted risk: ",
-		ability_adjusted_aggressive_risk
-	)
+	print("Hazard risk: ", hazard_risk)
 	print("Safe utility: ", safe_utility)
 	print("Aggressive utility: ", aggressive_utility)
 

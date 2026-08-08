@@ -8,6 +8,7 @@ extends MeshInstance3D
 
 @export var aggressive_target: MeshInstance3D
 @export var layup_target: MeshInstance3D
+@export var water_hazard: MeshInstance3D
 
 @onready var golfer: Node = $"../Golfer"
 @onready var shot_simulator: Node = $"../ShotSimulator"
@@ -64,8 +65,9 @@ func hit_shot() -> void:
 	)
 
 	var chosen_shot_type = golfer.choose_shot(
-		distance_to_aggressive_target
-	)
+	distance_to_aggressive_target,
+	water_hazard.hazard_risk
+)
 
 	var chosen_target: MeshInstance3D
 
