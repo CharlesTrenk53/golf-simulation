@@ -1,13 +1,7 @@
 extends MeshInstance3D
 
-enum ShotType {
-	DRIVE,
-	APPROACH,
-	SHORT_GAME,
-	PUTT
-}
-
-@export var shot_type: ShotType = ShotType.APPROACH
+@export_enum("DRIVE", "APPROACH", "SHORT_GAME", "PUTT")
+var shot_type: int = 1
 
 @export var shot_duration: float = 2.0
 @export var arc_height: float = 6.0
@@ -17,6 +11,7 @@ enum ShotType {
 
 @onready var target: MeshInstance3D = $"../Target"
 @onready var golfer: Node = $"../Golfer"
+@onready var shot_simulator: Node = $"../ShotSimulator"
 
 var start_position: Vector3
 var shot_destination: Vector3
@@ -65,50 +60,10 @@ func hit_shot() -> void:
 	elapsed_time = 0.0
 	shot_complete = false
 
-	var ability = get_shot_ability()
-
-	var accuracy_factor = 1.0 - (ability / 100.0)
-
-	var lateral_error_range = max_lateral_error * accuracy_factor
-	var distance_error_range = max_distance_error * accuracy_factor
-
-	var x_error = randf_range(
-		-lateral_error_range,
-		lateral_error_range
+	shot_destination = shot_simulator.simulate_shot(
+		golfer,
+		shot_type,
+		target.global_position,
+		max_lateral_error,
+		max_distance_error
 	)
-
-	var z_error = randf_range(
-		-distance_error_range,
-		distance_error_range
-	)
-
-	shot_destination = target.global_position + Vector3(
-		x_error,
-		0.0,
-		z_error
-	)
-
-	print("--------------------")
-	print("Golfer: ", golfer.golfer_name)
-	print("Shot type: ", ShotType.keys()[shot_type])
-	print("Ability used: ", ability)
-	print("Lateral error: ", x_error)
-	print("Distance error: ", z_error)
-	print("Shot destination: ", shot_destination)
-
-
-func get_shot_ability() -> float:
-	match shot_type:
-		ShotType.DRIVE:
-			return golfer.driving
-
-		ShotType.APPROACH:
-			return golfer.approach
-
-		ShotType.SHORT_GAME:
-			return golfer.short_game
-
-		ShotType.PUTT:
-			return golfer.putting
-
-	return golfer.approach
