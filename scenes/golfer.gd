@@ -87,7 +87,7 @@ func choose_shot(
 func choose_long_shot(hazard_risk: float) -> ShotType:
 	var safe_reward: float = 50.0
 	var safe_risk: float = 20.0
-	var aggressive_reward: float = 80.0
+	var aggressive_reward: float = 65.0
 
 	var ability_factor = driving / 100.0
 

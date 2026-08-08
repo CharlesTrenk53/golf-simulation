@@ -65,13 +65,13 @@ func hit_shot() -> void:
 	)
 
 	var calculated_hazard_risk = water_hazard.calculate_hazard_risk(
-	golfer
-)
+		golfer
+	)
 
 	var chosen_shot_type = golfer.choose_shot(
-	distance_to_aggressive_target,
-	calculated_hazard_risk
-)
+		distance_to_aggressive_target,
+		calculated_hazard_risk
+	)
 
 	var chosen_target: MeshInstance3D
 
@@ -83,7 +83,9 @@ func hit_shot() -> void:
 	print("====================")
 	print("COURSE DECISION")
 	print("Golfer: ", golfer.golfer_name)
+	print("Driving distance: ", golfer.driving_distance)
 	print("Risk tolerance: ", golfer.risk_tolerance)
+	print("Calculated hazard risk: ", calculated_hazard_risk)
 	print(
 		"Shot selected: ",
 		golfer.ShotType.keys()[chosen_shot_type]
