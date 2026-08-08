@@ -3,13 +3,11 @@ extends MeshInstance3D
 @export var shot_duration: float = 2.0
 @export var arc_height: float = 6.0
 
-# Golfer ability: 0 = terrible, 100 = extremely accurate
-@export_range(0.0, 100.0, 1.0) var accuracy: float = 70.0
-
 @export var max_lateral_error: float = 8.0
 @export var max_distance_error: float = 8.0
 
 @onready var target: MeshInstance3D = $"../Target"
+@onready var golfer: Node = $"../Golfer"
 
 var start_position: Vector3
 var shot_destination: Vector3
@@ -58,7 +56,10 @@ func hit_shot() -> void:
 	elapsed_time = 0.0
 	shot_complete = false
 
-	var accuracy_factor = 1.0 - (accuracy / 100.0)
+	# For now, every shot is treated as an approach shot.
+	# The golfer's Approach ability determines the size of the
+	# possible miss.
+	var accuracy_factor = 1.0 - (golfer.approach / 100.0)
 
 	var lateral_error_range = max_lateral_error * accuracy_factor
 	var distance_error_range = max_distance_error * accuracy_factor
@@ -80,7 +81,8 @@ func hit_shot() -> void:
 	)
 
 	print("--------------------")
-	print("Golfer accuracy: ", accuracy)
+	print("Golfer: ", golfer.golfer_name)
+	print("Approach ability: ", golfer.approach)
 	print("Lateral error: ", x_error)
 	print("Distance error: ", z_error)
 	print("Shot destination: ", shot_destination)
