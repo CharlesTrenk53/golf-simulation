@@ -39,7 +39,7 @@ albedo_color = Color(0.03529412, 0.050980393, 1, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_n048l"]
 material = SubResource("StandardMaterial3D_jrx5g")
-size = Vector3(20, 0.1, 10)
+size = Vector3(20, 1, 10)
 
 [node name="Main" type="Node3D" unique_id=1033694137]
 
@@ -70,12 +70,12 @@ transform = Transform3D(0.8660254, 0.43301272, -0.24999999, 0, 0.49999997, 0.866
 
 [node name="Golfer" type="Node" parent="." unique_id=1383481587]
 script = ExtResource("2_0wfyh")
-golfer_name = "Wild Bill"
-driving = 95.0
+golfer_name = "Careful Carl"
+driving = 30.0
 approach = 20.0
 short_game = 80.0
 putting = 40.0
-risk_tolerance = 90.0
+risk_tolerance = 5.0
 
 [node name="ShotSimulator" type="Node" parent="." unique_id=916358192]
 script = ExtResource("3_sugp2")
