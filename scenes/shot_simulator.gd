@@ -20,8 +20,8 @@ func simulate_shot(
 
 	var ability = get_shot_ability(golfer, shot_type)
 
-	# Only aggressive DRIVE shots need to test whether
-	# the golfer actually clears the water.
+	# Only aggressive DRIVE shots test whether the golfer
+	# successfully clears the water.
 	if shot_type == ShotType.DRIVE and required_carry > 0.0:
 		var carry_result = calculate_carry_result(
 			golfer,
@@ -38,10 +38,12 @@ func simulate_shot(
 			print("SHOT RESULT: WATER")
 			print("Water destination: ", water_destination)
 
+			golfer.record_shot_result("WATER")
+
 			return water_destination
 
-	# If the golfer clears the hazard, or this is not
-	# an aggressive drive, calculate the normal shot.
+	# If the golfer clears the hazard, or the shot is not
+	# an aggressive drive, calculate the normal shot result.
 	var accuracy_factor = 1.0 - (ability / 100.0)
 
 	var lateral_error_range = max_lateral_error * accuracy_factor
@@ -72,6 +74,8 @@ func simulate_shot(
 	print("Distance error: ", z_error)
 	print("Shot destination: ", shot_destination)
 
+	golfer.record_shot_result("SUCCESS")
+
 	return shot_destination
 
 
@@ -82,11 +86,11 @@ func calculate_carry_result(
 
 	var carry_margin = golfer.driving_distance - required_carry
 
-	# Start at 50% when the golfer's normal distance
-	# exactly equals the required carry.
+	# 50% success when normal driving distance exactly
+	# equals the required carry.
 	var success_chance = 50.0 + (carry_margin * 5.0)
 
-	# Driving ability also influences execution.
+	# Driving ability modifies execution quality.
 	var ability_adjustment = (golfer.driving - 50.0) * 0.3
 	success_chance += ability_adjustment
 

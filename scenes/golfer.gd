@@ -23,6 +23,10 @@ var short_game: float
 var putting: float
 var risk_tolerance: float
 
+var shots_attempted: int = 0
+var successful_shots: int = 0
+var water_balls: int = 0
+
 
 func _ready() -> void:
 	apply_profile()
@@ -120,3 +124,27 @@ func choose_long_shot(hazard_risk: float) -> ShotType:
 
 	print("Decision preference: SAFE")
 	return ShotType.APPROACH
+
+
+func record_shot_result(result: String) -> void:
+	shots_attempted += 1
+
+	match result:
+		"SUCCESS":
+			successful_shots += 1
+
+		"WATER":
+			water_balls += 1
+
+	print("------ GOLFER MEMORY ------")
+	print("Golfer: ", golfer_name)
+	print("Shots attempted: ", shots_attempted)
+	print("Successful shots: ", successful_shots)
+	print("Water balls: ", water_balls)
+
+	if shots_attempted > 0:
+		var success_rate = (
+			float(successful_shots) / float(shots_attempted)
+		) * 100.0
+
+		print("Success rate: ", success_rate, "%")
