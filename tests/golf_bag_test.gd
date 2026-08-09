@@ -15,11 +15,15 @@ func _init() -> void:
 	rick.profile = 1
 	rick.apply_profile()
 
-	_check(bag.all_clubs().size() == 8, "bag contains eight clubs")
+	_check(bag.all_clubs().size() == 14, "default bag contains fourteen clubs")
+	_check(bag.all_catalog_clubs().size() > bag.all_clubs().size(), "catalog includes alternatives beyond the active bag")
 	_check(not bag.get_club("DRIVER").is_empty(), "driver exists")
+	_check(not bag.get_club("4_HYBRID").is_empty(), "hybrid exists")
+	_check(not bag.get_club("4_IRON").is_empty(), "long-iron alternative exists")
+	_check(not bag.get_club("7_WOOD").is_empty(), "fairway-wood alternative exists")
 	_check(bag.get_club("PUTTER")["name"] == "Putter", "putter exists")
 	_check(bag.clubs_for_surface("GREEN").size() == 1, "green restricts bag to putter")
-	_check(bag.clubs_for_surface("BUNKER").size() >= 2, "bunker offers wedges")
+	_check(bag.clubs_for_surface("BUNKER").size() >= 4, "bunker offers multiple wedges")
 
 	var driver = bag.get_club("DRIVER")
 	var bill_driver = bag.effective_carry(driver, bill, "TEE", 1.0)
@@ -57,6 +61,19 @@ func _init() -> void:
 	var age_carry_after = bag.effective_carry(driver, physical_a, "TEE", 1.0)
 	_check(abs(age_carry_before - age_carry_after) < 0.001, "age affects distance only through changing physical capacity")
 
+	# Physical sensitivity forms a continuum down the bag. At identical approach
+	# skill, a physical change should matter more to a 5-iron than a 9-iron, and
+	# should not change putter distance at all.
+	physical_a.approach = 70.0
+	physical_b.approach = 70.0
+	var five_iron = bag.get_club("5_IRON")
+	var nine_iron = bag.get_club("9_IRON")
+	var five_pct_gap = abs((bag.effective_carry(five_iron, physical_a, "FAIRWAY", 1.0) / bag.effective_carry(five_iron, physical_b, "FAIRWAY", 1.0)) - 1.0)
+	var nine_pct_gap = abs((bag.effective_carry(nine_iron, physical_a, "FAIRWAY", 1.0) / bag.effective_carry(nine_iron, physical_b, "FAIRWAY", 1.0)) - 1.0)
+	_check(five_pct_gap > nine_pct_gap, "5-iron distance is more physically sensitive than 9-iron distance")
+	_check(float(bag.get_club("4_HYBRID")["forgiveness"]) > float(bag.get_club("4_IRON")["forgiveness"]), "hybrid carries more forgiveness metadata than comparable long iron")
+	_check(float(bag.get_club("4_IRON")["physical_sensitivity"]) > float(bag.get_club("4_HYBRID")["physical_sensitivity"]), "long iron is more physically demanding than comparable hybrid")
+
 	var seven_iron = bag.get_club("7_IRON")
 	_check(
 		bag.effective_carry(seven_iron, rick, "ROUGH", 0.72) < bag.effective_carry(seven_iron, rick, "FAIRWAY", 0.95),
@@ -72,10 +89,10 @@ func _init() -> void:
 	physical_b.free()
 
 	if failures == 0:
-		print("POC-07 CLUB TESTS PASSED")
+		print("POC-08 CLUB TAXONOMY TESTS PASSED")
 		quit(0)
 	else:
-		print("POC-07 CLUB TESTS FAILED: ", failures)
+		print("POC-08 CLUB TAXONOMY TESTS FAILED: ", failures)
 		quit(1)
 
 
