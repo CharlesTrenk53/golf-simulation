@@ -99,20 +99,31 @@ func _update_skill_delta(shot_type: int) -> void:
 	var count = int(row["count"])
 	if count < MIN_SKILL_EVIDENCE:
 		return
-	var recent = _recent_events(shot_type, 80)
-	if recent.size() < MIN_SKILL_EVIDENCE:
+	var long_window = _recent_events(shot_type, 80)
+	if long_window.size() < MIN_SKILL_EVIDENCE:
 		return
-	var avg_score = 0.0
-	for event in recent:
-		avg_score += float(event["score"])
-	avg_score /= recent.size()
-	# 62 is approximately neutral execution. Sustained execution above/below that
-	# mark nudges true skill only by hundredths at a time.
-	var skill_signal = clamp((avg_score - 62.0) / 38.0, -1.0, 1.0)
+	var immediate_window = _recent_events(shot_type, 8)
+	var long_avg = _average_score(long_window)
+	var immediate_avg = _average_score(immediate_window)
+
+	# Long history controls the level of skill, while a small immediate component
+	# controls direction. This lets a genuinely excellent new pattern begin a slow
+	# recovery without erasing the many poor repetitions that created the slump.
+	var long_signal = clamp((long_avg - 62.0) / 38.0, -1.0, 1.0)
+	var immediate_signal = clamp((immediate_avg - 62.0) / 38.0, -1.0, 1.0)
+	var skill_signal = long_signal * 0.65 + immediate_signal * 0.35
 	var current_delta = float(skill_delta[shot_type])
 	var regression = -current_delta * 0.002
 	var step = skill_signal * SKILL_STEP_SCALE + regression
 	skill_delta[shot_type] = clamp(current_delta + step, -MAX_SKILL_DELTA_FROM_BASELINE, MAX_SKILL_DELTA_FROM_BASELINE)
+
+func _average_score(events: Array) -> float:
+	if events.is_empty():
+		return 62.0
+	var total = 0.0
+	for event in events:
+		total += float(event["score"])
+	return total / events.size()
 
 func _recent_events(shot_type: int, limit: int) -> Array:
 	var result: Array = []
