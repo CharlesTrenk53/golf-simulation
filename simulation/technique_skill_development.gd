@@ -4,7 +4,7 @@ extends RefCounted
 # -----------------------------
 # Comfort and confidence can move quickly. Technique moves slowly. Underlying
 # skill moves slowest of all. Established experience makes true skill more
-# resistant to decline and slightly better at self-correcting after a slump.
+# resistant to decline and better at self-correcting back toward an old pattern.
 
 const MIN_TECHNIQUE_EVIDENCE := 18
 const MIN_SKILL_EVIDENCE := 60
@@ -97,8 +97,6 @@ func _update_technique(shot_type: int) -> void:
 	avg_distance /= recent.size()
 	var bias: Dictionary = technique_bias[shot_type]
 	var stability = _experience_stability(int(prior_experience.get(shot_type, 0)) + int(evidence[shot_type]["count"]))
-	# Established golfers still develop temporary faults, but the pattern embeds
-	# more slowly because an older motor pattern pulls them back toward normal.
 	var technique_rate = TECHNIQUE_STEP_SCALE * lerp(1.0, 0.55, stability)
 	bias["lateral"] = lerp(float(bias["lateral"]), avg_lateral, technique_rate)
 	bias["distance"] = lerp(float(bias["distance"]), avg_distance, technique_rate)
@@ -124,16 +122,22 @@ func _update_skill_delta(shot_type: int) -> void:
 	var total_experience = int(prior_experience.get(shot_type, 0)) + count
 	var stability = _experience_stability(total_experience)
 
-	# Experience creates asymmetry: established skill is harder to erode, while a
-	# veteran who starts executing well can self-correct somewhat more efficiently.
-	var experience_modifier = lerp(1.0, 0.32, stability) if skill_signal < 0.0 else lerp(1.0, 1.22, stability)
+	# Established skill is difficult to lose. When execution turns genuinely good,
+	# experience helps restoration toward the established baseline, not acquisition
+	# of brand-new ability. Once delta is non-negative this extra recovery boost is
+	# removed so veterans do not improve unnaturally fast beyond their old level.
+	var experience_modifier: float
+	if skill_signal < 0.0:
+		experience_modifier = lerp(1.0, 0.32, stability)
+	elif current_delta < 0.0:
+		experience_modifier = lerp(1.0, 2.20, stability)
+	else:
+		experience_modifier = 1.0
 	var regression = -current_delta * lerp(0.0015, 0.0035, stability)
 	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier + regression
 	skill_delta[shot_type] = clamp(current_delta + step, -MAX_SKILL_DELTA_FROM_BASELINE, MAX_SKILL_DELTA_FROM_BASELINE)
 
 func _experience_stability(total_experience: int) -> float:
-	# Saturating curve: early experience matters a lot; thousands of repetitions
-	# eventually produce a strong but never perfect anchor.
 	var experience = max(float(total_experience), 0.0)
 	return clamp(experience / (experience + EXPERIENCE_STABILITY_HALF_LIFE), 0.0, 0.92)
 
