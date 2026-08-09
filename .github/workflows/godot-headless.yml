@@ -78,5 +78,8 @@ jobs:
       - name: Trace age-based physical trajectory
         run: ./godot --headless --path . --script res://tests/age_trajectory_diagnostic.gd
 
+      - name: Calibrate age-based physical checkpoints
+        run: ./godot --headless --path . --script res://tests/age_calibration_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
