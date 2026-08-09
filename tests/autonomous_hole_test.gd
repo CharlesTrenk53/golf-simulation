@@ -4,6 +4,7 @@ const GolferScript = preload("res://scenes/golfer.gd")
 const CourseState = preload("res://simulation/course_state.gd")
 const ShotOptionGenerator = preload("res://simulation/shot_option_generator.gd")
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
+const AutonomousDemoScene = preload("res://scenes/autonomous_demo.tscn")
 
 var failures: int = 0
 
@@ -12,6 +13,7 @@ func _init() -> void:
 	_test_course_state()
 	_test_dynamic_options()
 	_test_autonomous_hole()
+	_test_autonomous_demo_scene()
 
 	if failures == 0:
 		print("POC-05 TESTS PASSED")
@@ -68,6 +70,12 @@ func _test_autonomous_hole() -> void:
 	_assert_true(result["strokes"] <= 12, "hole respects stroke limit")
 	_assert_true(result["remaining_distance"] < 120.0, "golfer advances toward hole")
 	golfer.free()
+
+
+func _test_autonomous_demo_scene() -> void:
+	var demo = AutonomousDemoScene.instantiate()
+	_assert_true(demo != null, "autonomous visual demo scene loads")
+	demo.free()
 
 
 func _assert_true(value: bool, label: String) -> void:
