@@ -3,12 +3,14 @@ extends RefCounted
 const CourseState = preload("res://simulation/course_state.gd")
 const ShotOptionGenerator = preload("res://simulation/shot_option_generator.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
+const ShotAssessmentPipeline = preload("res://simulation/shot_assessment_pipeline.gd")
 
 const WATER_BOUNDARY_STEPS := 80
 const LATERAL_RELIEF_DISTANCE := 4.0
 
 var option_generator = ShotOptionGenerator.new()
 var bag = GolfBag.new()
+var assessment_pipeline = ShotAssessmentPipeline.new()
 var shot_history: Array = []
 
 func create_state(start_position: Vector3, hole_position: Vector3, par: int = 4, seed_value: int = 1, course_context = null):
@@ -20,11 +22,13 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	if not state.can_continue(): return {}
 	var surface_before = state.surface_name()
 	var lie_quality_before = state.current_lie_quality
-	var options = option_generator.generate_options(golfer, state, hazards)
-	if options.is_empty(): return {}
+	var generated_options = option_generator.generate_options(golfer, state, hazards)
+	if generated_options.is_empty(): return {}
+	var options = assessment_pipeline.assess_options(golfer, state, generated_options, hazards)
 	var chosen = golfer.choose_best_option(options)
 	var decision_assessment = _assess_decision(golfer, state, chosen, options)
-	var result = _execute_option(golfer, state, chosen, hazards)
+	var commitment = assessment_pipeline.prepare_execution(golfer, chosen, float(decision_assessment["gap"]))
+	var result = _execute_option(golfer, state, chosen, hazards, commitment)
 	result["selected_option"] = chosen
 	result["surface_before"] = surface_before
 	result["lie_quality_before"] = lie_quality_before
@@ -33,6 +37,9 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	result["decision_best_score"] = decision_assessment["best_score"]
 	result["decision_gap"] = decision_assessment["gap"]
 	result["decision_reason"] = decision_assessment["reason"]
+	result["commitment_score"] = commitment["score"]
+	result["commitment_quality"] = commitment["label"]
+	result["assessment"] = chosen.get("assessment", {}).duplicate(true)
 
 	if state.course_context != null:
 		var landing_surface = state.course_context.surface_at(result["landing_position"])
@@ -57,13 +64,11 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	result["execution_score"] = execution_assessment["score"]
 	result["execution_miss_distance"] = execution_assessment["miss_distance"]
 	result["execution_reason"] = execution_assessment["reason"]
+	assessment_pipeline.record_result(chosen, result)
 	shot_history.append(result)
 	golfer.record_shot_result(result["outcome"], chosen["is_aggressive"])
 	return result
 
-# Independent evaluator: intentionally excludes risk_tolerance and confidence.
-# Those traits influence what the golfer chooses; this layer judges the choice
-# against course state, objective success probability, next-shot setup and lie.
 func _assess_decision(golfer: Node, state, chosen: Dictionary, options: Array) -> Dictionary:
 	var chosen_score = _objective_option_score(golfer, state, chosen)
 	var best_score = chosen_score
@@ -84,18 +89,23 @@ func _assess_decision(golfer: Node, state, chosen: Dictionary, options: Array) -
 	return {"quality": quality, "score": chosen_score, "best_score": best_score, "gap": gap, "reason": reason}
 
 func _objective_option_score(golfer: Node, state, option: Dictionary) -> float:
-	var reward = float(option.get("reward", 0.0))
-	var risk = float(option.get("risk", 0.0))
+	var assessment: Dictionary = option.get("assessment", {})
+	var reward = float(assessment.get("base_reward", option.get("reward", 0.0)))
+	var risk = float(assessment.get("base_risk", option.get("risk", 0.0)))
 	var success_chance = float(option.get("model_success_chance", 50.0))
 	var score = reward - risk * 0.55
 	score += (success_chance - 50.0) * 0.18
 	if option.has("next_shot_quality"): score += float(option["next_shot_quality"]) * 0.10
 	if option.get("next_shot_green_reachable", false): score += 7.0
 	if option.get("expected_surface", "") == "FAIRWAY" and state.surface_name() == "ROUGH": score += 6.0
-	var club: Dictionary = option.get("club", {})
-	if not club.is_empty():
-		var ability = float(golfer.get_shot_ability(int(club["shot_type"])))
-		score += (ability - 50.0) * 0.06
+	var capability: Dictionary = assessment.get("capability", {})
+	if not capability.is_empty():
+		score += (float(capability.get("capability_score", 50.0)) - 50.0) * 0.12
+	else:
+		var club: Dictionary = option.get("club", {})
+		if not club.is_empty():
+			var ability = float(golfer.get_shot_ability(int(club["shot_type"])))
+			score += (ability - 50.0) * 0.06
 	return score
 
 func _assess_execution(result: Dictionary) -> Dictionary:
@@ -154,26 +164,40 @@ func play_hole(golfer: Node, start_position: Vector3, hole_position: Vector3, ha
 		if result.is_empty(): break
 	return {"finished": state.finished, "strokes": state.strokes, "par": state.par, "remaining_distance": state.remaining_distance(), "final_position": state.ball_position, "final_surface": state.surface_name(), "history": shot_history.duplicate(true)}
 
-func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array) -> Dictionary:
-	var shot_type: int = option["shot_type"]; var ability = golfer.get_shot_ability(shot_type)
-	var target: Vector3 = option["target_position"]; var start: Vector3 = state.ball_position
-	var intended_distance = start.distance_to(target); var club: Dictionary = option.get("club", {})
-	var dispersion = 6.0 * (1.0 - ability / 100.0) * (1.0 + (1.0 - state.current_lie_quality)); var effective_carry = intended_distance
+func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array, commitment: Dictionary = {}) -> Dictionary:
+	var shot_type: int = option["shot_type"]
+	var ability = golfer.get_shot_ability(shot_type)
+	var target: Vector3 = option["target_position"]
+	var start: Vector3 = state.ball_position
+	var intended_distance = start.distance_to(target)
+	var club: Dictionary = option.get("club", {})
+	var dispersion = 6.0 * (1.0 - ability / 100.0) * (1.0 + (1.0 - state.current_lie_quality))
+	var effective_carry = intended_distance
 	if not club.is_empty():
 		dispersion = bag.effective_dispersion(club, golfer, state.surface_name(), state.current_lie_quality)
 		effective_carry = bag.effective_carry(club, golfer, state.surface_name(), state.current_lie_quality)
+	var assessment: Dictionary = option.get("assessment", {})
+	var performance: Dictionary = assessment.get("performance", {})
+	effective_carry *= float(performance.get("carry_factor", 1.0))
+	dispersion *= float(performance.get("dispersion_factor", 1.0))
+	effective_carry *= float(commitment.get("carry_factor", 1.0))
+	dispersion *= float(commitment.get("dispersion_factor", 1.0))
 	var direction = target - start; direction.y = 0.0
 	if direction.length() <= 0.001: direction = Vector3.FORWARD
 	else: direction = direction.normalized()
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
-	var landing = start + direction * min(intended_distance, effective_carry) + lateral * randf_range(-dispersion, dispersion) + direction * randf_range(-dispersion * 0.7, dispersion * 0.7); landing.y = start.y
+	var directional_bias = float(performance.get("directional_bias", 0.0))
+	var lateral_error = randf_range(-dispersion, dispersion) + directional_bias * 0.15
+	var distance_error = randf_range(-dispersion * 0.7, dispersion * 0.7)
+	var landing = start + direction * min(intended_distance, effective_carry) + lateral * lateral_error + direction * distance_error
+	landing.y = start.y
 	var outcome = "SUCCESS"; var penalty_strokes = 0; var execution_roll = -1.0
 	if option["is_aggressive"]:
 		execution_roll = randf_range(0.0, 100.0)
 		if execution_roll > float(option["model_success_chance"]):
 			var hazard = _closest_intersecting_hazard(start, target, hazards)
 			if not hazard.is_empty(): landing = hazard["position"]; landing.y = start.y; outcome = "WATER"; penalty_strokes = 1
-	return {"shot_number": state.strokes + 1, "option": option["name"], "shot_type": shot_type, "club_id": option.get("club_id", ""), "club_name": option.get("club_name", ""), "club_effective_carry": effective_carry, "club_dispersion": dispersion, "start_position": start, "target_position": target, "landing_position": landing, "intended_distance": intended_distance, "outcome": outcome, "penalty_strokes": penalty_strokes, "execution_roll": execution_roll, "remaining_after_shot": landing.distance_to(state.hole_position)}
+	return {"shot_number": state.strokes + 1, "option": option["name"], "shot_type": shot_type, "club_id": option.get("club_id", ""), "club_name": option.get("club_name", ""), "club_effective_carry": effective_carry, "club_dispersion": dispersion, "start_position": start, "target_position": target, "landing_position": landing, "intended_distance": intended_distance, "outcome": outcome, "penalty_strokes": penalty_strokes, "execution_roll": execution_roll, "remaining_after_shot": landing.distance_to(state.hole_position), "lateral_error": lateral_error, "distance_error": distance_error}
 
 func _closest_intersecting_hazard(start: Vector3, end: Vector3, hazards: Array) -> Dictionary:
 	var best: Dictionary = {}; var best_distance = INF
@@ -190,3 +214,12 @@ func _distance_to_segment(point: Vector3, start: Vector3, end: Vector3) -> float
 	if length_squared <= 0.001: return point.distance_to(start)
 	var t = clamp((point - start).dot(segment) / length_squared, 0.0, 1.0)
 	return point.distance_to(start + segment * t)
+
+func set_physical_condition(values: Dictionary) -> void:
+	assessment_pipeline.set_physical_condition(values)
+
+func set_mental_state(values: Dictionary) -> void:
+	assessment_pipeline.set_mental_state(values)
+
+func set_strategic_context(values: Dictionary) -> void:
+	assessment_pipeline.set_strategic_context(values)
