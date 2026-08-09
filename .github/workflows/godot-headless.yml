@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - poc-05-autonomous-hole
+      - poc-06-course-context
   pull_request:
 
 jobs:
