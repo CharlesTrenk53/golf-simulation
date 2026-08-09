@@ -57,5 +57,8 @@ jobs:
       - name: Diagnose Wild Bill tee decision
         run: ./godot --headless --path . --script res://tests/bill_tee_diagnostic.gd
 
+      - name: Trace long-horizon skill development curves
+        run: ./godot --headless --path . --script res://tests/development_curve_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
