@@ -36,5 +36,8 @@ jobs:
       - name: Run autonomous-hole tests
         run: ./godot --headless --path . --script res://tests/autonomous_hole_test.gd
 
+      - name: Diagnose Wild Bill tee decision
+        run: ./godot --headless --path . --script res://tests/bill_tee_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
