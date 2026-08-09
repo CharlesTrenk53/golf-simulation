@@ -23,7 +23,7 @@ func _init() -> void:
 		_club("7_WOOD", "7 Wood", "WOOD", 50.0, 6.2, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.75, 0.74),
 		_club("2_HYBRID", "2 Hybrid", "HYBRID", 54.0, 6.0, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.80, 0.70),
 		_club("3_HYBRID", "3 Hybrid", "HYBRID", 50.0, 5.8, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.75, 0.74),
-		_club("4_HYBRID", "4 Hybrid", "HYBRID", 47.0, 5.5, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.70, 0.78),
+		_club("4_HYBRID", "4 Hybrid", "HYBRID", 47.0, 5.5, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.68, 0.78),
 		_club("2_IRON", "2 Iron", "IRON", 55.0, 6.8, 1, ["TEE", "FAIRWAY"], 0.98, 0.38),
 		_club("3_IRON", "3 Iron", "IRON", 52.0, 6.3, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.92, 0.43),
 		_club("4_IRON", "4 Iron", "IRON", 49.0, 5.9, 1, ["TEE", "FAIRWAY", "ROUGH"], 0.84, 0.49),
