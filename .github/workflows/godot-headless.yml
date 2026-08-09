@@ -33,6 +33,9 @@ jobs:
       - name: Run golfer memory and comfort tests
         run: ./godot --headless --path . --script res://tests/golfer_memory_comfort_test.gd
 
+      - name: Run golfer comfort integration tests
+        run: ./godot --headless --path . --script res://tests/golfer_comfort_integration_test.gd
+
       - name: Run shot-assessment tests
         run: ./godot --headless --path . --script res://tests/shot_assessment_test.gd
 
