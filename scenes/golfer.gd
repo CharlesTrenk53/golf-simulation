@@ -154,7 +154,10 @@ func physical_distance_factor(shot_type: int) -> float:
 			mobility_weight = 0.03
 			coordination_weight = 0.95
 	var capacity = physical_power * power_weight + mobility * mobility_weight + coordination * coordination_weight
-	return clamp(lerp(0.82, 1.18, capacity / 100.0) / lerp(0.82, 1.18, 0.70), 0.72, 1.22)
+	# Keep 70 physical capacity as the neutral baseline, but widen the response
+	# around it so meaningful lifecycle changes in power/mobility actually reach
+	# club carry. Technical skill still governs strike efficiency separately.
+	return clamp(lerp(0.55, 1.45, capacity / 100.0) / lerp(0.55, 1.45, 0.70), 0.65, 1.35)
 
 func choose_best_option(options: Array) -> Dictionary:
 	var evaluated_options: Array = []
@@ -259,61 +262,44 @@ func _evaluate_subjective_option(option: Dictionary, subjective: Dictionary) -> 
 		var self_belief = max(0.0, confidence - 50.0) * 0.04
 		var stubbornness = max(0.0, 50.0 - responsiveness_to_experience) * 0.06
 		personality_override = boldness + self_belief + stubbornness
-	var utility = perceived_reward + ability_bonus + lie_improvement_bonus - risk_penalty
-	utility += belief_adjustment + willingness_adjustment + confidence_adjustment + personality_override
+	var utility = perceived_reward - risk_penalty + ability_bonus + lie_improvement_bonus + belief_adjustment + willingness_adjustment + confidence_adjustment + personality_override
 	return {
 		"utility": utility,
-		"decision_basis": "SUBJECTIVE_ASSESSMENT",
+		"decision_basis": "subjective_assessment",
 		"perceived_reward": perceived_reward,
 		"perceived_risk": perceived_risk,
 		"ability": ability,
 		"ability_bonus": ability_bonus,
-		"risk_penalty": risk_penalty,
 		"lie_improvement_bonus": lie_improvement_bonus,
-		"experience_penalty": 0.0,
 		"believed_success_chance": believed_success,
 		"specific_confidence": specific_confidence,
 		"willingness": willingness,
-		"belief_adjustment": belief_adjustment,
-		"willingness_adjustment": willingness_adjustment,
-		"confidence_adjustment": confidence_adjustment,
 		"personality_override": personality_override
 	}
 
 func _evaluate_legacy_option(option: Dictionary) -> Dictionary:
-	var reward = float(option.get("reward", 0.0))
-	var risk = float(option.get("risk", 0.0))
-	var shot_type = int(option.get("shot_type", ShotType.APPROACH))
-	var ability = get_shot_ability(shot_type)
-	var ability_bonus = ability * 0.10
+	var reward = float(option["reward"])
+	var perceived_risk = float(option["risk"])
+	var ability = get_shot_ability(option["shot_type"])
+	var ability_bonus = ability * 0.06
 	var risk_weight = 1.0 - (risk_tolerance / 100.0)
-	var risk_penalty = risk * risk_weight
+	var risk_penalty = perceived_risk * risk_weight
 	var lie_improvement = float(option.get("lie_improvement", 0.0))
 	var lie_improvement_bonus = lie_improvement * risk_weight * 60.0
-	var experience_penalty = 0.0
-	var believed_success_chance = 100.0
-	if bool(option.get("is_aggressive", false)):
-		var model_success_chance = float(option.get("model_success_chance", 50.0))
-		believed_success_chance = get_believed_aggressive_success(model_success_chance)
-		if aggressive_attempts >= 3:
-			var experience_factor = responsiveness_to_experience / 100.0
-			var failure_belief = 1.0 - (believed_success_chance / 100.0)
-			var learning_maturity = clamp(float(aggressive_attempts - 2) / 18.0, 0.0, 1.0)
-			experience_penalty = failure_belief * experience_factor * learning_maturity * 30.0
-	var utility = reward + ability_bonus + lie_improvement_bonus - risk_penalty - experience_penalty
+	var willingness = float(option.get("willingness_score", 50.0))
+	var specific_confidence = float(option.get("specific_confidence", confidence))
+	var utility = reward - risk_penalty + ability_bonus + lie_improvement_bonus
 	return {
 		"utility": utility,
-		"decision_basis": "LEGACY",
+		"decision_basis": "legacy_option_values",
 		"perceived_reward": reward,
-		"perceived_risk": risk,
+		"perceived_risk": perceived_risk,
 		"ability": ability,
 		"ability_bonus": ability_bonus,
-		"risk_penalty": risk_penalty,
 		"lie_improvement_bonus": lie_improvement_bonus,
-		"experience_penalty": experience_penalty,
-		"believed_success_chance": believed_success_chance,
-		"specific_confidence": confidence,
-		"willingness": 50.0,
+		"believed_success_chance": float(option.get("model_success_chance", 50.0)),
+		"specific_confidence": specific_confidence,
+		"willingness": willingness,
 		"personality_override": 0.0
 	}
 
@@ -327,40 +313,23 @@ func get_shot_ability(shot_type: int) -> float:
 			return short_game
 		ShotType.PUTT:
 			return putting
-	return approach
+	return 50.0
 
-func get_believed_aggressive_success(model_success_chance: float) -> float:
-	if aggressive_attempts == 0:
-		return model_success_chance
-	var observed_success_rate = (float(aggressive_successes) / float(aggressive_attempts)) * 100.0
-	var experience_weight = clamp(float(aggressive_attempts) / 20.0, 0.0, 0.75)
-	var model_weight = 1.0 - experience_weight
-	return model_success_chance * model_weight + observed_success_rate * experience_weight
-
-func record_shot_result(result: String, was_aggressive: bool = false) -> void:
+func record_shot_outcome(option: Dictionary, success: bool) -> void:
 	shots_attempted += 1
-	match result:
-		"SUCCESS":
-			successful_shots += 1
-		"WATER":
-			water_balls += 1
-	if was_aggressive:
+	if success:
+		successful_shots += 1
+	if option.get("is_aggressive", false):
 		aggressive_attempts += 1
-		if result == "SUCCESS":
+		if success:
 			aggressive_successes += 1
-		elif result == "WATER":
+		else:
 			aggressive_failures += 1
-	print("------ GOLFER MEMORY ------")
-	print("Golfer: ", golfer_name)
-	print("Shots attempted: ", shots_attempted)
-	print("Successful shots: ", successful_shots)
-	print("Water balls: ", water_balls)
-	if shots_attempted > 0:
-		var success_rate = (float(successful_shots) / float(shots_attempted)) * 100.0
-		print("Overall success rate: ", success_rate, "%")
-	print("Aggressive attempts: ", aggressive_attempts)
-	print("Aggressive successes: ", aggressive_successes)
-	print("Aggressive failures: ", aggressive_failures)
-	if aggressive_attempts > 0:
-		var aggressive_success_rate = (float(aggressive_successes) / float(aggressive_attempts)) * 100.0
-		print("Aggressive success rate: ", aggressive_success_rate, "%")
+
+func record_water_ball() -> void:
+	water_balls += 1
+
+func get_success_rate() -> float:
+	if shots_attempted == 0:
+		return 0.0
+	return float(successful_shots) / float(shots_attempted)
