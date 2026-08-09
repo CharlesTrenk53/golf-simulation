@@ -140,7 +140,7 @@ func _print_summary(summary: Dictionary) -> void:
 	print("Score 4: %.1f%%" % _score_percent(summary["score_counts"], 4))
 	print("Score 5+: %.1f%%" % _score_5_plus(summary["score_counts"]))
 	print("-- Decisions --")
-	for option_name in ["ATTACK", "LAYUP", "BAILOUT", "ADVANCE_FROM_ROUGH", "BUNKER_EXIT", "SPLASH_OUT", "SAFE_BUNKER_EXIT", "PITCH", "SAFE_PITCH", "PUTT"]:
+	for option_name in ["ATTACK", "LAYUP", "BAILOUT", "ADVANCE_FROM_ROUGH", "RECOVER_TO_FAIRWAY", "BUNKER_EXIT", "SPLASH_OUT", "SAFE_BUNKER_EXIT", "PITCH", "SAFE_PITCH", "PUTT"]:
 		var count: int = int(options.get(option_name, 0))
 		if count > 0:
 			print("%s: %.1f%% (%d)" % [option_name, _rate(options, option_name, total), count])
