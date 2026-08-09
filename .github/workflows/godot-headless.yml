@@ -75,5 +75,8 @@ jobs:
       - name: Trace learning-profile career divergence
         run: ./godot --headless --path . --script res://tests/learning_profile_career_diagnostic.gd
 
+      - name: Trace age-based physical trajectory
+        run: ./godot --headless --path . --script res://tests/age_trajectory_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
