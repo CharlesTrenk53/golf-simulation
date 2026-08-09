@@ -25,6 +25,7 @@ var skill_delta: Dictionary = {}
 var technique_bias: Dictionary = {}
 var evidence: Dictionary = {}
 var prior_experience: Dictionary = {}
+var learning_aptitude: Dictionary = {}
 var history: Array = []
 
 func initialize_from_golfer(golfer: Node) -> void:
@@ -33,6 +34,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 	technique_bias.clear()
 	evidence.clear()
 	prior_experience.clear()
+	learning_aptitude.clear()
 	history.clear()
 	for shot_type in [0, 1, 2, 3]:
 		baseline_skill[shot_type] = float(golfer.get_shot_ability(shot_type))
@@ -40,6 +42,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 		technique_bias[shot_type] = {"lateral": 0.0, "distance": 0.0, "dispersion": 0.0}
 		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
 		prior_experience[shot_type] = int(golfer.skill_experience_for(shot_type)) if golfer.has_method("skill_experience_for") else 0
+		learning_aptitude[shot_type] = clamp(float(golfer.skill_learning_rate_for(shot_type)), 0.25, 2.0) if golfer.has_method("skill_learning_rate_for") else 1.0
 
 func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float) -> Dictionary:
 	if not evidence.has(shot_type):
@@ -80,6 +83,7 @@ func development_state(shot_type: int) -> Dictionary:
 		"prior_experience": int(prior_experience.get(shot_type, 0)),
 		"total_experience": total_experience,
 		"experience_stability": stability,
+		"learning_aptitude": float(learning_aptitude.get(shot_type, 1.0)),
 		"development_resistance": _development_resistance(delta),
 		"average_execution_quality": avg_quality,
 		"technique_bias": technique_bias.get(shot_type, {}).duplicate(true),
@@ -143,6 +147,13 @@ func _update_skill_delta(shot_type: int) -> void:
 	else:
 		experience_modifier = lerp(1.0, 0.45, stability)
 
+	# Skill-specific aptitude applies only to genuinely new skill acquisition.
+	# Slump deterioration and restoration toward an established baseline remain
+	# governed by evidence and experience so the recovery model stays independent.
+	var aptitude_modifier = 1.0
+	if skill_signal > 0.0 and current_delta >= 0.0:
+		aptitude_modifier = float(learning_aptitude.get(shot_type, 1.0))
+
 	# Moving farther from an established skill becomes progressively harder instead
 	# of stopping at an arbitrary +/-8 point clamp. This produces a soft plateau
 	# while still allowing truly prolonged evidence to keep changing the golfer.
@@ -168,7 +179,7 @@ func _update_skill_delta(shot_type: int) -> void:
 	if evidence_points_toward_baseline:
 		regression = -current_delta * lerp(BASELINE_REGRESSION_MIN, BASELINE_REGRESSION_MAX, stability)
 
-	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * resistance * boundary_modifier + regression
+	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * aptitude_modifier * resistance * boundary_modifier + regression
 	var next_skill = clamp(current_skill + step, 0.0, 100.0)
 	skill_delta[shot_type] = next_skill - base
 
