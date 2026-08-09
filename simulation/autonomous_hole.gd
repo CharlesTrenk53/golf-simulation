@@ -7,103 +7,83 @@ var option_generator = ShotOptionGenerator.new()
 var shot_history: Array = []
 
 
-func create_state(
-	start_position: Vector3,
-	hole_position: Vector3,
-	par: int = 4,
-	seed_value: int = 1,
-	course_context = null
-):
+func create_state(start_position: Vector3, hole_position: Vector3, par: int = 4, seed_value: int = 1, course_context = null):
 	seed(seed_value)
 	shot_history.clear()
 	return CourseState.new(start_position, hole_position, par, course_context)
 
 
-func play_step(
-	golfer: Node,
-	state,
-	hazards: Array = []
-) -> Dictionary:
+func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	if not state.can_continue():
 		return {}
-
 	var surface_before = state.surface_name()
 	var lie_quality_before = state.current_lie_quality
 	var options = option_generator.generate_options(golfer, state, hazards)
 	if options.is_empty():
 		return {}
-
 	var chosen = golfer.choose_best_option(options)
 	var result = _execute_option(golfer, state, chosen, hazards)
 	result["selected_option"] = chosen
 	result["surface_before"] = surface_before
 	result["lie_quality_before"] = lie_quality_before
 
-	# Course geometry is authoritative. If the actual landing point resolves to
-	# WATER, the shot is a water outcome regardless of option type or whether an
-	# aggressive carry check happened to fail.
 	if state.course_context != null:
 		var landing_surface = state.course_context.surface_at(result["landing_position"])
 		if state.course_context.surface_name(landing_surface) == "WATER":
 			result["outcome"] = "WATER"
 			result["penalty_strokes"] = max(int(result["penalty_strokes"]), 1)
 
-	state.advance_to(
-		result["landing_position"],
-		result["outcome"],
-		result["penalty_strokes"]
-	)
+	var next_position: Vector3 = result["landing_position"]
+	if result["outcome"] == "WATER":
+		next_position = _water_relief_position(state, result["start_position"], result["landing_position"])
+		result["relief_position"] = next_position
+	else:
+		result["relief_position"] = result["landing_position"]
+
+	state.advance_to(next_position, result["outcome"], result["penalty_strokes"])
 	result["surface_after"] = state.surface_name()
 	result["lie_quality_after"] = state.current_lie_quality
 	shot_history.append(result)
-
-	golfer.record_shot_result(
-		result["outcome"],
-		chosen["is_aggressive"]
-	)
-
+	golfer.record_shot_result(result["outcome"], chosen["is_aggressive"])
 	return result
 
 
-func play_hole(
-	golfer: Node,
-	start_position: Vector3,
-	hole_position: Vector3,
-	hazards: Array = [],
-	par: int = 4,
-	seed_value: int = 1,
-	course_context = null
-) -> Dictionary:
-	var state = create_state(
-		start_position,
-		hole_position,
-		par,
-		seed_value,
-		course_context
-	)
+func _water_relief_position(state, start: Vector3, water_position: Vector3) -> Vector3:
+	if state.course_context == null:
+		return start
+	# First preference: previous playable position. If that somehow resolves to
+	# water, walk back from the water point toward the prior position until dry.
+	if not _position_is_water(state, start):
+		return start
+	var direction = start - water_position
+	direction.y = 0.0
+	if direction.length() <= 0.001:
+		direction = Vector3.BACK
+	else:
+		direction = direction.normalized()
+	for distance in [4.0, 8.0, 12.0, 16.0, 24.0, 32.0]:
+		var candidate = water_position + direction * distance
+		candidate.y = start.y
+		if not _position_is_water(state, candidate):
+			return candidate
+	return start
 
+
+func _position_is_water(state, position: Vector3) -> bool:
+	var surface = state.course_context.surface_at(position)
+	return state.course_context.surface_name(surface) == "WATER"
+
+
+func play_hole(golfer: Node, start_position: Vector3, hole_position: Vector3, hazards: Array = [], par: int = 4, seed_value: int = 1, course_context = null) -> Dictionary:
+	var state = create_state(start_position, hole_position, par, seed_value, course_context)
 	while state.can_continue():
 		var result = play_step(golfer, state, hazards)
 		if result.is_empty():
 			break
-
-	return {
-		"finished": state.finished,
-		"strokes": state.strokes,
-		"par": state.par,
-		"remaining_distance": state.remaining_distance(),
-		"final_position": state.ball_position,
-		"final_surface": state.surface_name(),
-		"history": shot_history.duplicate(true)
-	}
+	return {"finished": state.finished, "strokes": state.strokes, "par": state.par, "remaining_distance": state.remaining_distance(), "final_position": state.ball_position, "final_surface": state.surface_name(), "history": shot_history.duplicate(true)}
 
 
-func _execute_option(
-	golfer: Node,
-	state,
-	option: Dictionary,
-	hazards: Array
-) -> Dictionary:
+func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array) -> Dictionary:
 	var shot_type: int = option["shot_type"]
 	var ability = golfer.get_shot_ability(shot_type)
 	var target: Vector3 = option["target_position"]
@@ -113,7 +93,6 @@ func _execute_option(
 	var lie_error_multiplier = 1.0 + (1.0 - state.current_lie_quality)
 	var lateral_error = randf_range(-6.0, 6.0) * accuracy_factor * lie_error_multiplier
 	var distance_error = randf_range(-6.0, 6.0) * accuracy_factor * lie_error_multiplier
-
 	var direction = target - start
 	direction.y = 0.0
 	if direction.length() <= 0.001:
@@ -121,14 +100,11 @@ func _execute_option(
 	else:
 		direction = direction.normalized()
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
-
 	var landing = target + lateral * lateral_error + direction * distance_error
 	landing.y = start.y
-
 	var outcome = "SUCCESS"
 	var penalty_strokes = 0
 	var execution_roll = -1.0
-
 	if option["is_aggressive"]:
 		execution_roll = randf_range(0.0, 100.0)
 		if execution_roll > float(option["model_success_chance"]):
@@ -138,30 +114,12 @@ func _execute_option(
 				landing.y = start.y
 				outcome = "WATER"
 				penalty_strokes = 1
-
-	return {
-		"shot_number": state.strokes + 1,
-		"option": option["name"],
-		"shot_type": shot_type,
-		"start_position": start,
-		"target_position": target,
-		"landing_position": landing,
-		"intended_distance": intended_distance,
-		"outcome": outcome,
-		"penalty_strokes": penalty_strokes,
-		"execution_roll": execution_roll,
-		"remaining_after_shot": landing.distance_to(state.hole_position)
-	}
+	return {"shot_number": state.strokes + 1, "option": option["name"], "shot_type": shot_type, "start_position": start, "target_position": target, "landing_position": landing, "intended_distance": intended_distance, "outcome": outcome, "penalty_strokes": penalty_strokes, "execution_roll": execution_roll, "remaining_after_shot": landing.distance_to(state.hole_position)}
 
 
-func _closest_intersecting_hazard(
-	start: Vector3,
-	end: Vector3,
-	hazards: Array
-) -> Dictionary:
+func _closest_intersecting_hazard(start: Vector3, end: Vector3, hazards: Array) -> Dictionary:
 	var best: Dictionary = {}
 	var best_distance = INF
-
 	for hazard in hazards:
 		if not hazard.has("position"):
 			continue
@@ -173,15 +131,10 @@ func _closest_intersecting_hazard(
 			if from_start < best_distance:
 				best_distance = from_start
 				best = hazard
-
 	return best
 
 
-func _distance_to_segment(
-	point: Vector3,
-	start: Vector3,
-	end: Vector3
-) -> float:
+func _distance_to_segment(point: Vector3, start: Vector3, end: Vector3) -> float:
 	var segment = end - start
 	var length_squared = segment.length_squared()
 	if length_squared <= 0.001:
