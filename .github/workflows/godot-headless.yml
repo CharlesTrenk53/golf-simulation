@@ -26,6 +26,9 @@ jobs:
       - name: Import project
         run: ./godot --headless --editor --path . --quit
 
+      - name: Run club-model tests
+        run: ./godot --headless --path . --script res://tests/golf_bag_test.gd
+
       - name: Run autonomous-hole tests
         run: ./godot --headless --path . --script res://tests/autonomous_hole_test.gd
 
