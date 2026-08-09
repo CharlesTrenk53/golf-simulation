@@ -2,11 +2,13 @@ extends RefCounted
 
 const CourseState = preload("res://simulation/course_state.gd")
 const ShotOptionGenerator = preload("res://simulation/shot_option_generator.gd")
+const GolfBag = preload("res://simulation/golf_bag.gd")
 
 const WATER_BOUNDARY_STEPS := 80
 const LATERAL_RELIEF_DISTANCE := 4.0
 
 var option_generator = ShotOptionGenerator.new()
+var bag = GolfBag.new()
 var shot_history: Array = []
 
 
@@ -62,7 +64,6 @@ func _find_water_entry_point(state, start: Vector3, water_position: Vector3) -> 
 		var t = float(step) / float(WATER_BOUNDARY_STEPS)
 		var sample = start.lerp(water_position, t)
 		if _position_is_water(state, sample):
-			# Refine the boundary between the last dry sample and first wet sample.
 			var dry = last_dry
 			var wet = sample
 			for _refine in range(10):
@@ -86,9 +87,6 @@ func _lateral_water_relief_position(state, entry_point: Vector3, previous_positi
 	else:
 		toward_hole = toward_hole.normalized()
 	var lateral = Vector3(-toward_hole.z, 0.0, toward_hole.x)
-
-	# Model red-penalty-area lateral relief: search beside the crossing point,
-	# within an approximate two-club-length radius, and never nearer the hole.
 	var reference_distance = entry_point.distance_to(state.hole_position)
 	for distance in [LATERAL_RELIEF_DISTANCE, 3.0, 2.0, 1.0]:
 		for side in [1.0, -1.0]:
@@ -96,9 +94,6 @@ func _lateral_water_relief_position(state, entry_point: Vector3, previous_positi
 			candidate.y = previous_position.y
 			if not _position_is_water(state, candidate) and candidate.distance_to(state.hole_position) >= reference_distance - 0.01:
 				return candidate
-
-	# If the simple lateral candidates are blocked, search a semicircle behind
-	# the reference point while preserving the no-nearer-the-hole constraint.
 	for back_distance in [1.0, 2.0, 3.0, LATERAL_RELIEF_DISTANCE]:
 		var candidate = entry_point - toward_hole * back_distance
 		candidate.y = previous_position.y
@@ -127,10 +122,13 @@ func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array) ->
 	var target: Vector3 = option["target_position"]
 	var start: Vector3 = state.ball_position
 	var intended_distance = start.distance_to(target)
-	var accuracy_factor = 1.0 - ability / 100.0
-	var lie_error_multiplier = 1.0 + (1.0 - state.current_lie_quality)
-	var lateral_error = randf_range(-6.0, 6.0) * accuracy_factor * lie_error_multiplier
-	var distance_error = randf_range(-6.0, 6.0) * accuracy_factor * lie_error_multiplier
+	var club: Dictionary = option.get("club", {})
+	var dispersion = 6.0 * (1.0 - ability / 100.0) * (1.0 + (1.0 - state.current_lie_quality))
+	var effective_carry = intended_distance
+	if not club.is_empty():
+		dispersion = bag.effective_dispersion(club, golfer, state.surface_name(), state.current_lie_quality)
+		effective_carry = bag.effective_carry(club, golfer, state.surface_name(), state.current_lie_quality)
+
 	var direction = target - start
 	direction.y = 0.0
 	if direction.length() <= 0.001:
@@ -138,8 +136,13 @@ func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array) ->
 	else:
 		direction = direction.normalized()
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
-	var landing = target + lateral * lateral_error + direction * distance_error
+	var lateral_error = randf_range(-dispersion, dispersion)
+	var distance_error = randf_range(-dispersion * 0.7, dispersion * 0.7)
+	var commanded_distance = min(intended_distance, effective_carry)
+	var nominal = start + direction * commanded_distance
+	var landing = nominal + lateral * lateral_error + direction * distance_error
 	landing.y = start.y
+
 	var outcome = "SUCCESS"
 	var penalty_strokes = 0
 	var execution_roll = -1.0
@@ -152,7 +155,24 @@ func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array) ->
 				landing.y = start.y
 				outcome = "WATER"
 				penalty_strokes = 1
-	return {"shot_number": state.strokes + 1, "option": option["name"], "shot_type": shot_type, "start_position": start, "target_position": target, "landing_position": landing, "intended_distance": intended_distance, "outcome": outcome, "penalty_strokes": penalty_strokes, "execution_roll": execution_roll, "remaining_after_shot": landing.distance_to(state.hole_position)}
+
+	return {
+		"shot_number": state.strokes + 1,
+		"option": option["name"],
+		"shot_type": shot_type,
+		"club_id": option.get("club_id", ""),
+		"club_name": option.get("club_name", ""),
+		"club_effective_carry": effective_carry,
+		"club_dispersion": dispersion,
+		"start_position": start,
+		"target_position": target,
+		"landing_position": landing,
+		"intended_distance": intended_distance,
+		"outcome": outcome,
+		"penalty_strokes": penalty_strokes,
+		"execution_roll": execution_roll,
+		"remaining_after_shot": landing.distance_to(state.hole_position)
+	}
 
 
 func _closest_intersecting_hazard(start: Vector3, end: Vector3, hazards: Array) -> Dictionary:
