@@ -81,6 +81,7 @@ func _play_current_golfer() -> Dictionary:
 	var water_count: int = 0
 	while state.can_continue():
 		var before_distance = state.remaining_distance()
+		var score_before = state.strokes
 		var result = simulation.play_step(golfer, state, hazards)
 		if result.is_empty():
 			_update_status("Stopped", "No valid shot options were available.")
@@ -94,7 +95,10 @@ func _play_current_golfer() -> Dictionary:
 		_update_status(title, detail)
 		await _animate_ball(result["start_position"], result["landing_position"])
 		if result["outcome"] == "WATER":
-			_update_status(title, "WATER | Penalty applied | Relief to %s" % result["surface_after"])
+			_update_status(
+				title,
+				"WATER | Shot +1 | Penalty +1 | Score %d → %d | Drop to %s" % [score_before, state.strokes, result["surface_after"]]
+			)
 			await get_tree().create_timer(decision_pause).timeout
 			ball.global_position = result["relief_position"]
 		else:
