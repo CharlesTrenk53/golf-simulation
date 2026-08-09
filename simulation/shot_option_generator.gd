@@ -12,29 +12,31 @@ func generate_options(
 	hazards: Array = []
 ) -> Array:
 	var distance = state.remaining_distance()
+	var surface = state.surface_name()
+	var lie_quality: float = state.current_lie_quality
 
-	if distance <= 8.0:
+	if surface == "GREEN" or distance <= 8.0:
 		return [_putt_option(state)]
 
 	if distance <= 25.0:
 		return [
-			_direct_option("PITCH", SHORT_GAME, state, 68.0, 12.0),
-			_direct_option("SAFE_PITCH", SHORT_GAME, state, 58.0, 5.0)
+			_direct_option("PITCH", SHORT_GAME, state, 68.0 * lie_quality, _lie_risk(12.0, state)),
+			_direct_option("SAFE_PITCH", SHORT_GAME, state, 58.0 * lie_quality, _lie_risk(5.0, state))
 		]
 
 	var options: Array = []
 	var direction = _direction_to_hole(state)
 
-	var layup_distance = min(distance * 0.45, 28.0)
-	var bailout_distance = min(distance * 0.60, 38.0)
-	var attack_distance = min(distance, golfer.driving_distance)
+	var layup_distance = min(distance * 0.45, 28.0) * lie_quality
+	var bailout_distance = min(distance * 0.60, 38.0) * lie_quality
+	var attack_distance = min(distance, golfer.driving_distance * lie_quality)
 
 	options.append(_option(
 		"LAYUP",
 		APPROACH,
 		state.ball_position + direction * layup_distance,
-		45.0,
-		10.0,
+		45.0 * lie_quality,
+		_lie_risk(10.0, state),
 		false,
 		100.0
 	))
@@ -44,22 +46,22 @@ func generate_options(
 		"BAILOUT",
 		APPROACH,
 		state.ball_position + direction * bailout_distance + lateral * 8.0,
-		55.0,
-		30.0,
+		55.0 * lie_quality,
+		_lie_risk(30.0, state),
 		false,
 		100.0
 	))
 
 	var attack_target = state.ball_position + direction * attack_distance
 	var attack_risk = _estimate_attack_risk(golfer, state, attack_target, hazards)
-	var success_chance = _estimate_success_chance(golfer, attack_distance)
+	var success_chance = _estimate_success_chance(golfer, attack_distance, lie_quality)
 
 	options.append(_option(
 		"ATTACK",
 		DRIVE,
 		attack_target,
-		65.0,
-		attack_risk,
+		65.0 * lie_quality,
+		_lie_risk(attack_risk, state),
 		true,
 		success_chance
 	))
@@ -127,12 +129,25 @@ func _direction_to_hole(state) -> Vector3:
 
 func _estimate_success_chance(
 	golfer: Node,
-	attempted_distance: float
+	attempted_distance: float,
+	lie_quality: float = 1.0
 ) -> float:
-	var carry_margin = golfer.driving_distance - attempted_distance
+	var effective_distance = golfer.driving_distance * lie_quality
+	var carry_margin = effective_distance - attempted_distance
 	var chance = 50.0 + carry_margin * 5.0
 	chance += (golfer.driving - 50.0) * 0.3
+	chance -= (1.0 - lie_quality) * 25.0
 	return clamp(chance, 5.0, 95.0)
+
+
+func _lie_risk(base_risk: float, state) -> float:
+	if state.course_context == null:
+		return base_risk
+	return clamp(
+		base_risk + state.course_context.risk_modifier(state.current_surface),
+		0.0,
+		100.0
+	)
 
 
 func _estimate_attack_risk(
@@ -142,7 +157,8 @@ func _estimate_attack_risk(
 	hazards: Array
 ) -> float:
 	var attempted_distance = state.ball_position.distance_to(attack_target)
-	var carry_margin = golfer.driving_distance - attempted_distance
+	var effective_distance = golfer.driving_distance * state.current_lie_quality
+	var carry_margin = effective_distance - attempted_distance
 	var distance_risk = clamp(50.0 - carry_margin * 4.0, 5.0, 95.0)
 	var hazard_risk = 0.0
 
