@@ -3,6 +3,7 @@ extends SceneTree
 const ShotSituation = preload("res://simulation/shot_situation.gd")
 const ShotRequirements = preload("res://simulation/shot_requirements.gd")
 const GolferAssessment = preload("res://simulation/golfer_assessment.gd")
+const GolferStateContext = preload("res://simulation/golfer_state_context.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 
@@ -35,6 +36,32 @@ func _init() -> void:
 	var rick_driver = assessment.assess_club(rick, situation, requirements, driver)
 	_expect(float(bill_driver["capability_score"]) > float(rick_driver["capability_score"]), "same club-shot requirement can fit golfers differently")
 	_expect(float(bill_driver["expected_carry"]) > float(rick_driver["expected_carry"]), "golfer ability changes expected club performance")
+
+	var fresh = GolferStateContext.new()
+	var tired = GolferStateContext.new()
+	tired.set_physical_condition({"fatigue": 85.0, "energy": 35.0, "balance": 70.0, "hydration": 60.0, "holes_played": 17})
+	_expect(tired.physical_readiness() < fresh.physical_readiness(), "fatigue and low energy reduce current physical readiness")
+	var fresh_bill_driver = assessment.assess_club(bill, situation, requirements, driver, fresh)
+	var tired_bill_driver = assessment.assess_club(bill, situation, requirements, driver, tired)
+	_expect(float(tired_bill_driver["expected_carry"]) < float(fresh_bill_driver["expected_carry"]), "current physical condition can reduce effective carry")
+
+	var focused = GolferStateContext.new()
+	var rattled = GolferStateContext.new()
+	rattled.set_mental_state({"calm": 20.0, "nervous": 70.0, "frustration": 75.0, "focus": 35.0, "distraction": 60.0, "pressure": 80.0})
+	_expect(rattled.mental_execution_readiness() < focused.mental_execution_readiness(), "nerves frustration distraction and pressure reduce mental readiness")
+	var rattled_driver = assessment.assess_club(bill, situation, requirements, driver, rattled)
+	_expect(float(rattled_driver["expected_dispersion"]) > float(fresh_bill_driver["expected_dispersion"]), "poor mental state can widen expected dispersion")
+
+	var chasing = GolferStateContext.new()
+	chasing.set_strategic_context({"hole_number": 18, "holes_remaining": 0, "chasing": true, "score_differential_to_target": -3})
+	var protecting = GolferStateContext.new()
+	protecting.set_strategic_context({"hole_number": 18, "holes_remaining": 0, "protecting_lead": true, "score_differential_to_target": 3})
+	_expect(chasing.aggression_pressure() > 0.0, "late chasing situation increases strategic aggression pressure")
+	_expect(protecting.aggression_pressure() < 0.0, "protecting a lead reduces strategic aggression pressure")
+	var attack_option = {"name": "ATTACK", "risk": 60.0, "is_aggressive": true}
+	var chase_willingness = assessment.assess_willingness(bill, fresh_bill_driver, attack_option, chasing)
+	var protect_willingness = assessment.assess_willingness(bill, fresh_bill_driver, attack_option, protecting)
+	_expect(float(chase_willingness["willingness_score"]) > float(protect_willingness["willingness_score"]), "same golfer becomes more willing to attack when strategic context demands it")
 
 	bill.free(); rick.free()
 	if failures == 0:
