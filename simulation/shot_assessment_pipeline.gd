@@ -6,6 +6,7 @@ const GolferAssessment = preload("res://simulation/golfer_assessment.gd")
 const GolferStateContext = preload("res://simulation/golfer_state_context.gd")
 const RecentPerformanceContext = preload("res://simulation/recent_performance_context.gd")
 const GolferMemoryComfort = preload("res://simulation/golfer_memory_comfort.gd")
+const TechniqueSkillDevelopment = preload("res://simulation/technique_skill_development.gd")
 const ShotCommitment = preload("res://simulation/shot_commitment.gd")
 const FutureStateEstimator = preload("res://simulation/future_state_estimator.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
@@ -17,12 +18,14 @@ var future_state_model = FutureStateEstimator.new()
 var state_context = GolferStateContext.new()
 var recent_performance = RecentPerformanceContext.new()
 var memory_comfort = GolferMemoryComfort.new()
+var skill_development = TechniqueSkillDevelopment.new()
 var bag = GolfBag.new()
 var initialized_for_golfer := false
 
 func initialize(golfer: Node) -> void:
 	recent_performance.initialize_from_golfer(golfer)
 	memory_comfort.initialize_from_golfer(golfer, bag.all_clubs())
+	skill_development.initialize_from_golfer(golfer)
 	initialized_for_golfer = true
 
 func assess_options(golfer: Node, state, options: Array, hazards: Array = []) -> Array:
@@ -31,19 +34,19 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 	var assessed: Array = []
 	for source_option in options:
 		var option: Dictionary = source_option.duplicate(true)
-		var situation = ShotSituation.new(
-			state.ball_position,
-			option.get("target_position", state.hole_position),
-			state.surface_name(),
-			state.current_lie_quality,
-			hazards
-		)
+		var situation = ShotSituation.new(state.ball_position, option.get("target_position", state.hole_position), state.surface_name(), state.current_lie_quality, hazards)
 		var perception = assessment_model.perceive(golfer, situation)
 		var requirements = requirements_model.derive(situation)
 		var club: Dictionary = option.get("club", {})
 		var capability = assessment_model.assess_club(golfer, situation, requirements, club, state_context)
+		var shot_type = int(option.get("shot_type", 1))
+		var development = skill_development.development_state(shot_type)
+		capability["skill_development"] = development
 
 		var performance = recent_performance.performance_modifier_for(club) if not club.is_empty() else {"carry_factor": 1.0, "dispersion_factor": 1.0, "directional_bias": 0.0}
+		var technique: Dictionary = development.get("technique_bias", {})
+		performance["dispersion_factor"] = float(performance.get("dispersion_factor", 1.0)) * (1.0 + float(technique.get("dispersion", 0.0)) * 0.20)
+		performance["directional_bias"] = float(performance.get("directional_bias", 0.0)) + float(technique.get("lateral", 0.0)) * 0.25
 		capability["expected_carry"] = float(capability.get("expected_carry", 0.0)) * float(performance["carry_factor"])
 		capability["expected_dispersion"] = float(capability.get("expected_dispersion", 0.0)) * float(performance["dispersion_factor"])
 
@@ -82,24 +85,11 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		option["risk"] = assessment_risk
 		option["shot_form"] = shot_form
 		option["assessment"] = {
-			"world_distance": situation.effective_playing_distance(),
-			"perceived_distance": perceived_distance,
-			"judgment_skill": perception.get("judgment_skill", 50.0),
-			"requirements": requirements,
-			"capability": capability,
-			"specific_confidence": confidence,
-			"recent_confidence": recent_confidence,
-			"comfort": comfort,
-			"experience_response_factor": response_factor,
-			"comfort_believed_success_chance": comfort_believed_success,
-			"shot_form": shot_form,
-			"miss_consequences": miss,
-			"willingness": willingness,
-			"performance": performance,
-			"base_reward": base_reward,
-			"base_risk": base_risk,
-			"assessed_reward": assessment_reward,
-			"assessed_risk": assessment_risk
+			"world_distance": situation.effective_playing_distance(), "perceived_distance": perceived_distance, "judgment_skill": perception.get("judgment_skill", 50.0),
+			"requirements": requirements, "capability": capability, "specific_confidence": confidence, "recent_confidence": recent_confidence, "comfort": comfort,
+			"experience_response_factor": response_factor, "comfort_believed_success_chance": comfort_believed_success, "shot_form": shot_form,
+			"miss_consequences": miss, "willingness": willingness, "performance": performance, "skill_development": development,
+			"base_reward": base_reward, "base_risk": base_risk, "assessed_reward": assessment_reward, "assessed_risk": assessment_risk
 		}
 		var future_state = future_state_model.estimate(golfer, state, option)
 		option["assessment"]["future_state"] = future_state
@@ -112,27 +102,18 @@ func prepare_execution(golfer: Node, chosen: Dictionary, decision_gap: float = 0
 	var assessment: Dictionary = chosen.get("assessment", {})
 	var capability: Dictionary = assessment.get("capability", {})
 	var specific_confidence = float(assessment.get("specific_confidence", golfer.confidence))
-	var mental_state = {
-		"focus": state_context.focus,
-		"nervous": state_context.nervous,
-		"fear": 0.0,
-		"frustrated": state_context.frustration
-	}
+	var mental_state = {"focus": state_context.focus, "nervous": state_context.nervous, "fear": 0.0, "frustrated": state_context.frustration}
 	return commitment_model.assess_commitment(golfer, capability, specific_confidence, mental_state, decision_gap)
 
 func record_result(chosen: Dictionary, result: Dictionary) -> void:
 	var club: Dictionary = chosen.get("club", {})
-	if club.is_empty():
-		return
+	if club.is_empty(): return
 	var target: Vector3 = result.get("target_position", Vector3.ZERO)
 	var landing: Vector3 = result.get("landing_position", target)
 	var start: Vector3 = result.get("start_position", Vector3.ZERO)
-	var direction = target - start
-	direction.y = 0.0
-	if direction.length() <= 0.001:
-		direction = Vector3.FORWARD
-	else:
-		direction = direction.normalized()
+	var direction = target - start; direction.y = 0.0
+	if direction.length() <= 0.001: direction = Vector3.FORWARD
+	else: direction = direction.normalized()
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
 	var error = landing - target
 	var lateral_error = error.dot(lateral)
@@ -143,20 +124,18 @@ func record_result(chosen: Dictionary, result: Dictionary) -> void:
 	var shot_form = String(chosen.get("shot_form", chosen.get("assessment", {}).get("shot_form", "NORMAL")))
 	recent_performance.record_shot(club, outcome, execution_quality, lateral_error, distance_error)
 	memory_comfort.record_experience(club, shot_form, execution_quality, outcome, execution_score)
+	if execution_score >= 0.0:
+		skill_development.record_execution(int(club.get("shot_type", chosen.get("shot_type", 1))), execution_score, lateral_error, distance_error)
 
 func start_new_round() -> void:
 	memory_comfort.start_new_round()
 
 func _experience_response_factor(golfer: Node) -> float:
-	# Responsiveness controls how much remembered experience changes present belief.
-	# Even stubborn golfers react a little; highly responsive golfers react strongly.
 	return lerp(0.35, 1.0, clamp(float(golfer.responsiveness_to_experience) / 100.0, 0.0, 1.0))
 
 func set_physical_condition(values: Dictionary) -> void:
 	state_context.set_physical_condition(values)
-
 func set_mental_state(values: Dictionary) -> void:
 	state_context.set_mental_state(values)
-
 func set_strategic_context(values: Dictionary) -> void:
 	state_context.set_strategic_context(values)
