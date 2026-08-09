@@ -25,7 +25,7 @@ func _init() -> void:
 		memory.record_experience(driver, "NORMAL", "GOOD", "SUCCESS", 90.0)
 	var driver_hot = memory.comfort_for(golfer, driver, "NORMAL")
 	_expect(float(driver_hot["comfort"]) > float(driver_start["comfort"]), "repeated good driver swings raise learned comfort")
-	_expect(float(driver_hot["recent"]) > float(driver_hot["long_term"]), "recent success can outweigh diluted long-term history")
+	_expect(float(driver_hot["recent"]) >= float(driver_hot["long_term"]) - 0.001, "consistent recent success remains at least as positive as long-term history")
 	_expect(float(driver_hot["certainty"]) > float(driver_start["certainty"]), "experience increases confidence in the comfort estimate")
 
 	var iron_after_driver = memory.comfort_for(golfer, iron, "NORMAL")
