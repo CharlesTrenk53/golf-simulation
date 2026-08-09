@@ -15,14 +15,15 @@ func _init() -> void:
 	_test_dynamic_options()
 	_test_course_context()
 	_test_lie_aware_options()
+	_test_fairway_recovery_management()
 	_test_autonomous_hole()
 	_test_autonomous_demo_scene()
 
 	if failures == 0:
-		print("POC-06B TESTS PASSED")
+		print("POC-07 COURSE MANAGEMENT TESTS PASSED")
 		quit(0)
 	else:
-		push_error("POC-06B TESTS FAILED: %d" % failures)
+		push_error("POC-07 COURSE MANAGEMENT TESTS FAILED: %d" % failures)
 		quit(1)
 
 
@@ -47,7 +48,6 @@ func _test_dynamic_options() -> void:
 	])
 	_assert_true(options.size() == 3, "long legacy situation creates three choices")
 	_assert_true(options[2]["risk"] >= 90.0, "hazard affects attack risk")
-
 	state.ball_position = Vector3(0, 0, 6)
 	options = generator.generate_options(golfer, state)
 	_assert_true(options.size() == 1, "near-hole situation collapses to putt")
@@ -72,6 +72,13 @@ func _has_option(options: Array, name: String) -> bool:
 	return false
 
 
+func _get_option(options: Array, name: String) -> Dictionary:
+	for option in options:
+		if option["name"] == name:
+			return option
+	return {}
+
+
 func _test_course_context() -> void:
 	var context = _build_context()
 	_assert_true(context.surface_name(context.surface_at(Vector3(0, 0, 100))) == "TEE", "tee surface resolves")
@@ -81,7 +88,6 @@ func _test_course_context() -> void:
 	_assert_true(context.surface_name(context.surface_at(Vector3(0, 0, 45))) == "WATER", "water surface resolves")
 	_assert_true(context.surface_name(context.surface_at(Vector3(18, 0, 20))) == "BUNKER", "bunker surface resolves")
 	_assert_true(context.lie_quality(CourseContext.Surface.BUNKER) < context.lie_quality(CourseContext.Surface.ROUGH), "bunker lie is worse than rough")
-
 	var rough_state = CourseState.new(Vector3(20, 0, 70), Vector3.ZERO, 4, context)
 	_assert_true(rough_state.surface_name() == "ROUGH", "state tracks rough lie")
 	_assert_near(rough_state.current_lie_quality, 0.72, 0.001, "rough reduces lie quality")
@@ -95,28 +101,50 @@ func _test_lie_aware_options() -> void:
 	golfer.profile = golfer.GolferProfile.WILD_BILL
 	golfer.apply_profile()
 	var generator = ShotOptionGenerator.new()
-
 	var fairway_state = CourseState.new(Vector3(0, 0, 70), Vector3.ZERO, 4, context)
 	var rough_state = CourseState.new(Vector3(20, 0, 70), Vector3.ZERO, 4, context)
 	var fairway_options = generator.generate_options(golfer, fairway_state)
 	var rough_options = generator.generate_options(golfer, rough_state)
-
 	_assert_true(_has_option(fairway_options, "ATTACK"), "fairway permits attack")
 	_assert_true(not _has_option(rough_options, "ATTACK"), "rough removes driver attack")
 	_assert_true(_has_option(rough_options, "ADVANCE_FROM_ROUGH"), "rough generates recovery advance")
+	_assert_true(_has_option(rough_options, "RECOVER_TO_FAIRWAY"), "rough generates fairway recovery")
 	_assert_true(rough_options[0]["reward"] < fairway_options[0]["reward"], "rough lowers option reward")
 	_assert_true(rough_options[0]["risk"] > fairway_options[0]["risk"], "rough raises option risk")
-
 	var bunker_state = CourseState.new(Vector3(18, 0, 20), Vector3.ZERO, 4, context)
 	var bunker_options = generator.generate_options(golfer, bunker_state)
 	_assert_true(bunker_state.surface_name() == "BUNKER", "state tracks bunker lie")
 	_assert_true(not _has_option(bunker_options, "ATTACK"), "bunker removes attack")
 	_assert_true(_has_option(bunker_options, "SPLASH_OUT") or _has_option(bunker_options, "BUNKER_EXIT"), "bunker generates escape option")
-
 	var green_state = CourseState.new(Vector3(0, 0, 7), Vector3.ZERO, 4, context)
 	var green_options = generator.generate_options(golfer, green_state)
 	_assert_true(green_options.size() == 1 and green_options[0]["name"] == "PUTT", "green lie forces putting context")
 	golfer.free()
+
+
+func _test_fairway_recovery_management() -> void:
+	var context = _build_context()
+	var generator = ShotOptionGenerator.new()
+	var rough_state = CourseState.new(Vector3(20, 0, 70), Vector3.ZERO, 4, context)
+	var carl = GolferScript.new()
+	carl.profile = carl.GolferProfile.CAREFUL_CARL
+	carl.apply_profile()
+	carl.decision_variability = 0.0
+	var rick = GolferScript.new()
+	rick.profile = rick.GolferProfile.RECKLESS_RICK
+	rick.apply_profile()
+	rick.decision_variability = 0.0
+	var carl_options = generator.generate_options(carl, rough_state)
+	var recovery = _get_option(carl_options, "RECOVER_TO_FAIRWAY")
+	_assert_true(not recovery.is_empty(), "fairway recovery option exists")
+	_assert_true(context.surface_name(context.surface_at(recovery["target_position"])) == "FAIRWAY", "fairway recovery targets fairway")
+	var carl_eval = carl.evaluate_option(recovery)
+	var rick_eval = rick.evaluate_option(recovery)
+	_assert_true(carl_eval["lie_improvement_bonus"] > rick_eval["lie_improvement_bonus"], "careful golfer values improved lie more")
+	var carl_choice = carl.choose_best_option(carl_options)
+	_assert_true(carl_choice["name"] == "RECOVER_TO_FAIRWAY", "Careful Carl can choose sideways fairway recovery")
+	carl.free()
+	rick.free()
 
 
 func _test_autonomous_hole() -> void:
@@ -124,17 +152,8 @@ func _test_autonomous_hole() -> void:
 	golfer.profile = golfer.GolferProfile.WILD_BILL
 	golfer.apply_profile()
 	golfer.decision_variability = 0.0
-
 	var simulation = AutonomousHole.new()
-	var result = simulation.play_hole(
-		golfer,
-		Vector3(0, 0, 120),
-		Vector3.ZERO,
-		[],
-		4,
-		42
-	)
-
+	var result = simulation.play_hole(golfer, Vector3(0, 0, 120), Vector3.ZERO, [], 4, 42)
 	_assert_true(result["history"].size() > 1, "hole requires repeated decisions")
 	_assert_true(result["strokes"] <= 12, "hole respects stroke limit")
 	_assert_true(result["remaining_distance"] < 120.0, "golfer advances toward hole")
