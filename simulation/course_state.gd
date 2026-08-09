@@ -9,7 +9,7 @@ var finished: bool = false
 var last_outcome: String = ""
 var course_context = null
 var current_surface: int = 1
-var current_lie_quality: float = 0.95
+var current_lie_quality: float = 1.0
 
 
 func _init(
@@ -55,7 +55,7 @@ func surface_name() -> String:
 func _refresh_lie() -> void:
 	if course_context == null:
 		current_surface = 1
-		current_lie_quality = 0.95
+		current_lie_quality = 1.0
 		return
 	current_surface = course_context.surface_at(ball_position)
 	current_lie_quality = course_context.lie_quality(current_surface)
