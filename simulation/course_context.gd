@@ -4,6 +4,7 @@ enum Surface {
 	TEE,
 	FAIRWAY,
 	ROUGH,
+	BUNKER,
 	GREEN,
 	WATER
 }
@@ -47,6 +48,8 @@ func lie_quality(surface: Surface) -> float:
 			return 0.95
 		Surface.ROUGH:
 			return 0.72
+		Surface.BUNKER:
+			return 0.58
 		Surface.GREEN:
 			return 1.00
 		Surface.WATER:
@@ -62,6 +65,8 @@ func risk_modifier(surface: Surface) -> float:
 			return 0.0
 		Surface.ROUGH:
 			return 15.0
+		Surface.BUNKER:
+			return 28.0
 		Surface.GREEN:
 			return -5.0
 		Surface.WATER:
