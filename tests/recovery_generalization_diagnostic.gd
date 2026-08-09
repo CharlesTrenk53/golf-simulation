@@ -36,16 +36,7 @@ func _init() -> void:
 				for duration in slump_durations:
 					for replicate in range(1, REPLICATES + 1):
 						scenario_index += 1
-						_run_scenario(
-							start_skill,
-							prior_experience,
-							String(slump_level["name"]),
-							float(slump_level["mean"]),
-							String(duration["name"]),
-							int(duration["shots"]),
-							replicate,
-							50000 + scenario_index * 17
-						)
+						_run_scenario(start_skill, prior_experience, String(slump_level["name"]), float(slump_level["mean"]), String(duration["name"]), int(duration["shots"]), replicate, 50000 + scenario_index * 17)
 
 	print("POC-08 RECOVERY GENERALIZATION DIAGNOSTIC COMPLETE")
 	quit(0)
@@ -56,33 +47,33 @@ func _run_scenario(start_skill: float, prior_experience: int, severity_name: Str
 	model.initialize_from_golfer(golfer)
 	rng.seed = seed_value
 
-	var slump_sum := 0.0
+	var slump_sum: float = 0.0
 	for _shot in range(slump_shots):
-		var score = _sample_execution(slump_mean)
+		var score: float = _sample_execution(slump_mean)
 		slump_sum += score
 		_record(model, score)
 
 	var post_slump_state: Dictionary = model.development_state(SHOT_TYPE)
-	var baseline = float(post_slump_state["baseline_skill"])
-	var post_slump_skill = float(post_slump_state["effective_skill"])
-	var skill_loss = max(0.0, baseline - post_slump_skill)
-	var pct_loss = 0.0 if baseline <= 0.001 else skill_loss / baseline * 100.0
-	var target_50 = post_slump_skill + skill_loss * 0.50
-	var target_90 = post_slump_skill + skill_loss * 0.90
+	var baseline: float = float(post_slump_state["baseline_skill"])
+	var post_slump_skill: float = float(post_slump_state["effective_skill"])
+	var skill_loss: float = max(0.0, baseline - post_slump_skill)
+	var pct_loss: float = 0.0 if baseline <= 0.001 else skill_loss / baseline * 100.0
+	var target_50: float = post_slump_skill + skill_loss * 0.50
+	var target_90: float = post_slump_skill + skill_loss * 0.90
 
-	var recovery_50 := -1
-	var recovery_90 := -1
-	var recovery_baseline := -1
-	var skill_after_1200 := post_slump_skill
-	var skill_after_2400 := post_slump_skill
-	var skill_after_3600 := post_slump_skill
-	var max_recovery_skill := post_slump_skill
+	var recovery_50: int = -1
+	var recovery_90: int = -1
+	var recovery_baseline: int = -1
+	var skill_after_1200: float = post_slump_skill
+	var skill_after_2400: float = post_slump_skill
+	var skill_after_3600: float = post_slump_skill
+	var max_recovery_skill: float = post_slump_skill
 
 	for recovery_shot in range(1, MAX_RECOVERY_SHOTS + 1):
-		var score = _sample_execution(RECOVERY_MEAN)
+		var score: float = _sample_execution(RECOVERY_MEAN)
 		_record(model, score)
 		var state: Dictionary = model.development_state(SHOT_TYPE)
-		var current_skill = float(state["effective_skill"])
+		var current_skill: float = float(state["effective_skill"])
 		max_recovery_skill = max(max_recovery_skill, current_skill)
 
 		if skill_loss > 0.0001:
@@ -104,31 +95,9 @@ func _run_scenario(start_skill: float, prior_experience: int, severity_name: Str
 		elif recovery_shot == 3600:
 			skill_after_3600 = current_skill
 
-	var overshoot = max(0.0, max_recovery_skill - baseline)
-	var realized_slump_mean = slump_sum / float(slump_shots)
-	print("GENERALIZATIONCSV,%.1f,%d,%s,%s,%d,%.3f,%.3f,%d,%.1f,%.6f,%.6f,%.6f,%.3f,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f" % [
-		baseline,
-		int(post_slump_state["prior_experience"]),
-		severity_name,
-		duration_name,
-		replicate,
-		slump_mean,
-		realized_slump_mean,
-		slump_shots,
-		float(slump_shots) / float(DRIVER_SHOTS_PER_ROUND),
-		post_slump_skill,
-		skill_loss,
-		pct_loss,
-		RECOVERY_MEAN,
-		recovery_50,
-		recovery_90,
-		recovery_baseline,
-		skill_after_1200,
-		skill_after_2400,
-		skill_after_3600,
-		max_recovery_skill,
-		overshoot
-	])
+	var overshoot: float = max(0.0, max_recovery_skill - baseline)
+	var realized_slump_mean: float = slump_sum / float(slump_shots)
+	print("GENERALIZATIONCSV,%.1f,%d,%s,%s,%d,%.3f,%.3f,%d,%.1f,%.6f,%.6f,%.6f,%.3f,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f" % [baseline, int(post_slump_state["prior_experience"]), severity_name, duration_name, replicate, slump_mean, realized_slump_mean, slump_shots, float(slump_shots) / float(DRIVER_SHOTS_PER_ROUND), post_slump_skill, skill_loss, pct_loss, RECOVERY_MEAN, recovery_50, recovery_90, recovery_baseline, skill_after_1200, skill_after_2400, skill_after_3600, max_recovery_skill, overshoot])
 	golfer.free()
 
 func _golfer(start_skill: float, prior_driver_experience: int):
@@ -144,7 +113,7 @@ func _sample_execution(mean: float) -> float:
 	return clamp(rng.randfn(mean, EXECUTION_SD), 0.0, 100.0)
 
 func _record(model, score: float) -> void:
-	var severity = (62.0 - score) / 37.0
-	var lateral = clamp(severity * 4.0 + rng.randfn(0.0, 1.2), -4.0, 8.0)
-	var distance = clamp(severity * -3.0 + rng.randfn(0.0, 0.8), -7.0, 3.0)
+	var severity: float = (62.0 - score) / 37.0
+	var lateral: float = clamp(severity * 4.0 + rng.randfn(0.0, 1.2), -4.0, 8.0)
+	var distance: float = clamp(severity * -3.0 + rng.randfn(0.0, 0.8), -7.0, 3.0)
 	model.record_execution(SHOT_TYPE, score, lateral, distance)
