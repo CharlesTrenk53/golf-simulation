@@ -30,7 +30,6 @@ var profiles: Array = [
 	{"profile": 2, "label": "Careful Carl"}
 ]
 
-
 func _ready() -> void:
 	start_position = ball.global_position
 	hazards = [{"name": "Water", "position": water_hazard.global_position, "radius": 10.0, "risk": 90.0}]
@@ -40,7 +39,6 @@ func _ready() -> void:
 	await get_tree().create_timer(0.8).timeout
 	await _run_comparison()
 
-
 func _build_course_context():
 	var context = CourseContext.new()
 	context.add_zone("Fairway", CourseContext.Surface.FAIRWAY, Vector3(0, 0, 5), Vector2(11, 45))
@@ -49,7 +47,6 @@ func _build_course_context():
 	context.add_zone("Front Bunker", CourseContext.Surface.BUNKER, Vector3(11, 0, -39), Vector2(6, 7))
 	context.add_zone("Water", CourseContext.Surface.WATER, water_hazard.global_position, Vector2(16, 6))
 	return context
-
 
 func _run_comparison() -> void:
 	for profile_data in profiles:
@@ -64,7 +61,6 @@ func _run_comparison() -> void:
 		await get_tree().create_timer(golfer_pause).timeout
 	_update_status("COMPARISON COMPLETE", "All three golfers selected strategy and clubs autonomously.")
 
-
 func _reset_golfer(profile_value: int) -> void:
 	golfer.profile = profile_value
 	golfer.apply_profile()
@@ -74,7 +70,9 @@ func _reset_golfer(profile_value: int) -> void:
 	golfer.aggressive_attempts = 0
 	golfer.aggressive_successes = 0
 	golfer.aggressive_failures = 0
-
+	# The same scene node is reused for all three profiles. Reinitialize every
+	# golfer-specific assessment/memory baseline when its identity changes.
+	simulation.assessment_pipeline.initialize(golfer)
 
 func _play_current_golfer() -> Dictionary:
 	var shot_sequence: Array[String] = []
@@ -109,7 +107,6 @@ func _play_current_golfer() -> Dictionary:
 	_update_status("%s: %s" % [golfer.golfer_name, finish_text], "Score %d | Water %d | %s" % [state.strokes, water_count, " → ".join(shot_sequence)])
 	return {"name": golfer.golfer_name, "finished": state.finished, "strokes": state.strokes, "water": water_count, "shots": shot_sequence.duplicate()}
 
-
 func _animate_ball(start: Vector3, finish: Vector3) -> void:
 	var tween = create_tween()
 	tween.set_trans(Tween.TRANS_SINE)
@@ -117,20 +114,17 @@ func _animate_ball(start: Vector3, finish: Vector3) -> void:
 	tween.tween_method(_set_ball_progress.bind(start, finish), 0.0, 1.0, shot_duration)
 	await tween.finished
 
-
 func _set_ball_progress(progress: float, start: Vector3, finish: Vector3) -> void:
 	var position = start.lerp(finish, progress)
 	position.y += 4.0 * arc_height * progress * (1.0 - progress)
 	ball.global_position = position
 
-
 func _update_status(title: String, detail: String) -> void:
 	status_label.text = title
 	detail_label.text = detail
 
-
 func _update_comparison() -> void:
-	var lines: Array[String] = ["POC-07 — CLUB-AWARE AUTONOMOUS COMPARISON"]
+	var lines: Array[String] = ["POC-08 — SUBJECTIVE SHOT-ASSESSMENT COMPARISON"]
 	if results.is_empty():
 		lines.append("Waiting for results...")
 	else:
