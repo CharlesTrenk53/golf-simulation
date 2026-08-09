@@ -52,18 +52,20 @@ func clubs_for_surface(surface: String) -> Array[Dictionary]:
 
 func effective_carry(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
 	var base_carry: float = club["carry_distance"]
-	var ability: float = golfer.get_shot_ability(int(club["shot_type"]))
-	var ability_factor = lerp(0.80, 1.08, ability / 100.0)
+	var shot_type = int(club["shot_type"])
+	# Technical skill now has only a modest carry effect: centered, efficient
+	# contact matters, but raw distance comes primarily from physical capacity.
+	var ability: float = golfer.get_shot_ability(shot_type)
+	var strike_factor = lerp(0.94, 1.04, ability / 100.0)
+	var physical_factor = golfer.physical_distance_factor(shot_type) if golfer.has_method("physical_distance_factor") else 1.0
 	var lie_factor = clamp(lie_quality, 0.45, 1.0)
 
-	# Tee/fairway woods retain their normal distance; rough and bunker punish
-	# carry more strongly and therefore change which club is actually sensible.
 	if surface == "ROUGH":
 		lie_factor *= 0.90
 	elif surface == "BUNKER":
 		lie_factor *= 0.78
 
-	return base_carry * ability_factor * lie_factor
+	return base_carry * strike_factor * physical_factor * lie_factor
 
 
 func effective_dispersion(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
