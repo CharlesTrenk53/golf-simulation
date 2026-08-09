@@ -44,7 +44,7 @@ func _init() -> void:
 	print("career,seed,age,rounds,annual_shots,cumulative_shots,form,execution_mean,physical_capacity,power,mobility,coordination,endurance,driver_carry,technical_composite,performance_index,drive_skill,approach_skill,short_game_skill,putt_skill,age_plasticity,drive_experience,approach_experience,short_game_experience,putt_experience")
 
 	for career_index in range(CAREER_COUNT):
-		var seed_value := 88001 + career_index
+		var seed_value: int = 88001 + career_index
 		_run_career(career_index + 1, seed_value)
 
 	print("POC-08 FULL CAREER LIFETIME DIAGNOSTIC COMPLETE")
@@ -57,8 +57,8 @@ func _run_career(career_number: int, seed_value: int) -> void:
 	development.initialize_from_golfer(golfer)
 	rng.seed = seed_value
 
-	var cumulative_shots := 0
-	var career_form := 0.0
+	var cumulative_shots: int = 0
+	var career_form: float = 0.0
 
 	for age in range(START_AGE, END_AGE + 1):
 		golfer.age = age
@@ -68,24 +68,24 @@ func _run_career(career_number: int, seed_value: int) -> void:
 		# annual noise. It changes the evidence produced that year, not innate aptitude.
 		career_form = FORM_PERSISTENCE * career_form + rng.randfn(0.0, FORM_INNOVATION_SD)
 
-		var exposure := _annual_exposure(age)
-		var rounds := int(exposure["rounds"])
-		var annual_shots := 0
-		var execution_sum := 0.0
+		var exposure: Dictionary = _annual_exposure(age)
+		var rounds: int = int(exposure["rounds"])
+		var annual_shots: int = 0
+		var execution_sum: float = 0.0
 
 		for shot_type in SHOT_TYPES:
-			var shot_count := int(exposure["shots"][shot_type])
-			var physical_execution_modifier := _physical_execution_modifier(golfer, shot_type)
-			var target_mean := EXECUTION_NEUTRAL + LEARNING_SIGNAL + career_form + physical_execution_modifier
+			var shot_count: int = int(exposure["shots"][shot_type])
+			var physical_execution_modifier: float = _physical_execution_modifier(golfer, shot_type)
+			var target_mean: float = EXECUTION_NEUTRAL + LEARNING_SIGNAL + career_form + physical_execution_modifier
 
 			for _shot in range(shot_count):
-				var score := clamp(rng.randfn(target_mean, EXECUTION_SD), 0.0, 100.0)
+				var score: float = clampf(rng.randfn(target_mean, EXECUTION_SD), 0.0, 100.0)
 				execution_sum += score
 				annual_shots += 1
 				_record_execution(development, shot_type, score)
 
 		cumulative_shots += annual_shots
-		_emit_year(career_number, seed_value, golfer, development, age, rounds, annual_shots, cumulative_shots, career_form, execution_sum / max(annual_shots, 1))
+		_emit_year(career_number, seed_value, golfer, development, age, rounds, annual_shots, cumulative_shots, career_form, execution_sum / float(maxi(annual_shots, 1)))
 
 		if age < END_AGE:
 			lifecycle.advance_year(golfer)
@@ -150,12 +150,12 @@ func _annual_exposure(age: int) -> Dictionary:
 
 	# Opportunity varies year to year but does not collapse to unrealistic zero-use
 	# seasons in this first integrated test. Life events/injury belong in later POCs.
-	var rounds := max(12, int(round(base_rounds * clamp(rng.randfn(1.0, 0.12), 0.65, 1.35))))
-	var shots := {}
+	var rounds: int = maxi(12, int(round(base_rounds * clampf(rng.randfn(1.0, 0.12), 0.65, 1.35))))
+	var shots: Dictionary = {}
 	for shot_type in SHOT_TYPES:
-		var on_course := rounds * int(SHOTS_PER_ROUND[shot_type])
-		var practice := int(round(on_course * practice_multiplier * float(PRACTICE_MIX[shot_type])))
-		shots[shot_type] = max(60, on_course + practice)
+		var on_course: int = rounds * int(SHOTS_PER_ROUND[shot_type])
+		var practice: int = int(round(on_course * practice_multiplier * float(PRACTICE_MIX[shot_type])))
+		shots[shot_type] = maxi(60, on_course + practice)
 
 	return {"rounds": rounds, "shots": shots}
 
@@ -163,8 +163,8 @@ func _physical_execution_modifier(golfer, shot_type: int) -> float:
 	# Physical decline is already expressed strongly through carry. Keep its effect
 	# on execution evidence deliberately small so aging does not secretly become a
 	# second direct technical-skill penalty. Long shots are affected most.
-	var factor := golfer.physical_distance_factor(shot_type)
-	var sensitivity := 0.0
+	var factor: float = golfer.physical_distance_factor(shot_type)
+	var sensitivity: float = 0.0
 	match shot_type:
 		0:
 			sensitivity = 2.0
@@ -179,28 +179,28 @@ func _physical_execution_modifier(golfer, shot_type: int) -> float:
 func _record_execution(development, shot_type: int, score: float) -> void:
 	# Preserve the same score-to-error relationship used by the prior stochastic
 	# career diagnostic so this test adds integration rather than a new error model.
-	var severity := (EXECUTION_NEUTRAL - score) / 37.0
-	var lateral := clamp(severity * 4.0 + rng.randfn(0.0, 1.2), -4.0, 8.0)
-	var distance := clamp(severity * -3.0 + rng.randfn(0.0, 0.8), -7.0, 3.0)
+	var severity: float = (EXECUTION_NEUTRAL - score) / 37.0
+	var lateral: float = clampf(severity * 4.0 + rng.randfn(0.0, 1.2), -4.0, 8.0)
+	var distance: float = clampf(severity * -3.0 + rng.randfn(0.0, 0.8), -7.0, 3.0)
 	development.record_execution(shot_type, score, lateral, distance)
 
 func _emit_year(career_number: int, seed_value: int, golfer, development, age: int, rounds: int, annual_shots: int, cumulative_shots: int, career_form: float, execution_mean: float) -> void:
-	var states := {}
-	var technical_sum := 0.0
+	var states: Dictionary = {}
+	var technical_sum: float = 0.0
 	for shot_type in SHOT_TYPES:
 		var state: Dictionary = development.development_state(shot_type)
 		states[shot_type] = state
 		technical_sum += float(state["effective_skill"])
 
-	var technical_composite := technical_sum / float(SHOT_TYPES.size())
-	var physical_capacity := (golfer.physical_power + golfer.mobility + golfer.coordination + golfer.endurance) / 4.0
-	var driver_carry := _effective_driver_carry(golfer, float(states[0]["effective_skill"]))
+	var technical_composite: float = technical_sum / float(SHOT_TYPES.size())
+	var physical_capacity: float = (golfer.physical_power + golfer.mobility + golfer.coordination + golfer.endurance) / 4.0
+	var driver_carry: float = _effective_driver_carry(golfer, float(states[0]["effective_skill"]))
 
 	# Reporting-only index. It does not feed back into development. Technique is the
 	# majority component, while carry and endurance let late-life physical decline
 	# show up in one inspectable summary measure without erasing accumulated skill.
-	var normalized_carry := clamp(driver_carry / 70.0 * 50.0, 0.0, 100.0)
-	var performance_index := technical_composite * 0.72 + normalized_carry * 0.20 + golfer.endurance * 0.08
+	var normalized_carry: float = clampf(driver_carry / 70.0 * 50.0, 0.0, 100.0)
+	var performance_index: float = technical_composite * 0.72 + normalized_carry * 0.20 + golfer.endurance * 0.08
 
 	print("LIFETIMECSV,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d,%d" % [
 		career_number,
@@ -233,6 +233,6 @@ func _emit_year(career_number: int, seed_value: int, golfer, development, age: i
 func _effective_driver_carry(golfer, effective_driving_skill: float) -> float:
 	# Mirrors GolfBag.effective_carry for the Driver, but uses the development
 	# model's effective skill rather than the golfer's immutable starting ability.
-	var base_carry := 70.0
-	var strike_factor := lerp(0.94, 1.04, clamp(effective_driving_skill, 0.0, 100.0) / 100.0)
+	var base_carry: float = 70.0
+	var strike_factor: float = lerpf(0.94, 1.04, clampf(effective_driving_skill, 0.0, 100.0) / 100.0)
 	return base_carry * strike_factor * golfer.physical_distance_factor(0)
