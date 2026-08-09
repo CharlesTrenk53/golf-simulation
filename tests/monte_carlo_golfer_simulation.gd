@@ -18,13 +18,13 @@ var profiles: Array = [
 
 func _init() -> void:
 	print("============================================================")
-	print("POC-07 FOUR-TIER DECISION QUALITY MONTE CARLO")
+	print("POC-08 DECISION DIAGNOSTIC MONTE CARLO")
 	print("Runs per golfer: ", RUNS_PER_GOLFER)
 	print("Same course context; seeds 1 through ", RUNS_PER_GOLFER)
 	print("============================================================")
 	for profile_data in profiles:
 		_print_summary(_run_profile(profile_data["profile"], profile_data["name"]))
-	print("POC-07 MONTE CARLO COMPLETE")
+	print("POC-08 MONTE CARLO COMPLETE")
 	quit(0)
 
 func _build_course_context():
@@ -36,11 +36,18 @@ func _build_course_context():
 	context.add_zone("Water", CourseContext.Surface.WATER, Vector3(0, 0, 5), Vector2(16, 6))
 	return context
 
+func _increment_nested(counts: Dictionary, outer_key, inner_key) -> void:
+	if not counts.has(outer_key): counts[outer_key] = {}
+	var inner: Dictionary = counts[outer_key]
+	inner[inner_key] = int(inner.get(inner_key, 0)) + 1
+
 func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 	var strokes: Array[int] = []
 	var finished_count := 0; var total_water := 0; var total_shots := 0
 	var option_counts := {}; var club_counts := {}; var surface_counts := {}; var score_counts := {}
 	var decision_quality_counts := {}; var execution_quality_counts := {}; var decision_execution_counts := {}
+	var option_quality_counts := {}; var shot_number_quality_counts := {}; var shot_option_quality_counts := {}
+	var option_gap_sum := {}; var option_gap_count := {}; var shot_gap_sum := {}; var shot_gap_count := {}
 	var decision_gap_total := 0.0; var decision_gap_max := 0.0
 	for run_number in range(1, RUNS_PER_GOLFER + 1):
 		var golfer = QuietGolfer.new(); golfer.profile = profile_value; golfer.apply_profile()
@@ -52,6 +59,7 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 		for shot in result["history"]:
 			total_shots += 1
 			var option_name: String = shot["option"]; option_counts[option_name] = int(option_counts.get(option_name, 0)) + 1
+			var shot_number: int = int(shot.get("shot_number", 0))
 			var club_name: String = shot.get("club_name", "UNASSIGNED"); if club_name.is_empty(): club_name = "UNASSIGNED"
 			club_counts[club_name] = int(club_counts.get(club_name, 0)) + 1
 			var surface_name: String = shot["surface_after"]; surface_counts[surface_name] = int(surface_counts.get(surface_name, 0)) + 1
@@ -59,7 +67,15 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 			var execution_quality: String = shot.get("execution_quality", "UNKNOWN")
 			decision_quality_counts[decision_quality] = int(decision_quality_counts.get(decision_quality, 0)) + 1
 			execution_quality_counts[execution_quality] = int(execution_quality_counts.get(execution_quality, 0)) + 1
+			_increment_nested(option_quality_counts, option_name, decision_quality)
+			_increment_nested(shot_number_quality_counts, shot_number, decision_quality)
+			var shot_option_key = "%d:%s" % [shot_number, option_name]
+			_increment_nested(shot_option_quality_counts, shot_option_key, decision_quality)
 			var gap = float(shot.get("decision_gap", 0.0)); decision_gap_total += gap; decision_gap_max = max(decision_gap_max, gap)
+			option_gap_sum[option_name] = float(option_gap_sum.get(option_name, 0.0)) + gap
+			option_gap_count[option_name] = int(option_gap_count.get(option_name, 0)) + 1
+			shot_gap_sum[shot_number] = float(shot_gap_sum.get(shot_number, 0.0)) + gap
+			shot_gap_count[shot_number] = int(shot_gap_count.get(shot_number, 0)) + 1
 			var decision_bucket = "GOOD_DECISION" if decision_quality == "OPTIMAL" or decision_quality == "SENSIBLE" else "WEAK_DECISION"
 			var execution_bucket = "GOOD_OR_ACCEPTABLE" if execution_quality == "GOOD" or execution_quality == "ACCEPTABLE" else "POOR"
 			var combo_key = decision_bucket + " + " + execution_bucket
@@ -67,7 +83,7 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 		score_counts[score] = int(score_counts.get(score, 0)) + 1
 		golfer.free()
 	strokes.sort()
-	return {"name": profile_name, "mean": _mean(strokes), "median": _percentile(strokes, 0.50), "p95": _percentile(strokes, 0.95), "best": strokes.front(), "worst": strokes.back(), "finish_rate": float(finished_count) / RUNS_PER_GOLFER * 100.0, "water_per_hole": float(total_water) / RUNS_PER_GOLFER, "total_shots": total_shots, "option_counts": option_counts, "club_counts": club_counts, "surface_counts": surface_counts, "score_counts": score_counts, "decision_quality_counts": decision_quality_counts, "execution_quality_counts": execution_quality_counts, "decision_execution_counts": decision_execution_counts, "mean_decision_gap": decision_gap_total / max(total_shots, 1), "max_decision_gap": decision_gap_max}
+	return {"name": profile_name, "mean": _mean(strokes), "median": _percentile(strokes, 0.50), "p95": _percentile(strokes, 0.95), "best": strokes.front(), "worst": strokes.back(), "finish_rate": float(finished_count) / RUNS_PER_GOLFER * 100.0, "water_per_hole": float(total_water) / RUNS_PER_GOLFER, "total_shots": total_shots, "option_counts": option_counts, "club_counts": club_counts, "surface_counts": surface_counts, "score_counts": score_counts, "decision_quality_counts": decision_quality_counts, "execution_quality_counts": execution_quality_counts, "decision_execution_counts": decision_execution_counts, "option_quality_counts": option_quality_counts, "shot_number_quality_counts": shot_number_quality_counts, "shot_option_quality_counts": shot_option_quality_counts, "option_gap_sum": option_gap_sum, "option_gap_count": option_gap_count, "shot_gap_sum": shot_gap_sum, "shot_gap_count": shot_gap_count, "mean_decision_gap": decision_gap_total / max(total_shots, 1), "max_decision_gap": decision_gap_max}
 
 func _mean(values: Array[int]) -> float:
 	var total := 0
@@ -90,6 +106,11 @@ func _score_5_plus(score_counts: Dictionary) -> float:
 		if int(score) >= 5: count += int(score_counts[score])
 	return float(count) / RUNS_PER_GOLFER * 100.0
 
+func _print_quality_row(label: String, counts: Dictionary, mean_gap: float) -> void:
+	var total := 0
+	for value in counts.values(): total += int(value)
+	print("%s | n=%d | OPT %.1f%% | SEN %.1f%% | Q %.1f%% | POOR %.1f%% | gap %.2f" % [label, total, _rate(counts, "OPTIMAL", total), _rate(counts, "SENSIBLE", total), _rate(counts, "QUESTIONABLE", total), _rate(counts, "POOR", total), mean_gap])
+
 func _print_summary(summary: Dictionary) -> void:
 	var options: Dictionary = summary["option_counts"]; var clubs: Dictionary = summary["club_counts"]; var surfaces: Dictionary = summary["surface_counts"]
 	var decisions: Dictionary = summary["decision_quality_counts"]; var executions: Dictionary = summary["execution_quality_counts"]; var combos: Dictionary = summary["decision_execution_counts"]
@@ -108,9 +129,26 @@ func _print_summary(summary: Dictionary) -> void:
 	print("-- Landing surfaces --")
 	for surface_name in ["TEE", "FAIRWAY", "ROUGH", "BUNKER", "GREEN", "WATER"]:
 		var count: int = int(surfaces.get(surface_name, 0)); if count > 0: print("%s: %.1f%% (%d)" % [surface_name, _rate(surfaces, surface_name, total), count])
-	print("-- Decision quality (objective evaluator) --")
+	print("-- Decision quality --")
 	for label in ["OPTIMAL", "SENSIBLE", "QUESTIONABLE", "POOR", "UNKNOWN"]:
 		var count: int = int(decisions.get(label, 0)); if count > 0: print("%s: %.1f%% (%d)" % [label, _rate(decisions, label, total), count])
+	print("-- Decision quality by option --")
+	for option_name in summary["option_quality_counts"].keys():
+		var mean_gap = float(summary["option_gap_sum"].get(option_name, 0.0)) / max(int(summary["option_gap_count"].get(option_name, 0)), 1)
+		_print_quality_row(String(option_name), summary["option_quality_counts"][option_name], mean_gap)
+	print("-- Decision quality by shot number --")
+	var shot_numbers = summary["shot_number_quality_counts"].keys(); shot_numbers.sort()
+	for shot_number in shot_numbers:
+		var mean_gap = float(summary["shot_gap_sum"].get(shot_number, 0.0)) / max(int(summary["shot_gap_count"].get(shot_number, 0)), 1)
+		_print_quality_row("Shot %d" % int(shot_number), summary["shot_number_quality_counts"][shot_number], mean_gap)
+	print("-- Weak decision hotspots by shot + option --")
+	var hotspot_keys = summary["shot_option_quality_counts"].keys(); hotspot_keys.sort()
+	for key in hotspot_keys:
+		var counts: Dictionary = summary["shot_option_quality_counts"][key]
+		var weak = int(counts.get("QUESTIONABLE", 0)) + int(counts.get("POOR", 0))
+		var n := 0; for value in counts.values(): n += int(value)
+		if weak > 0 and float(weak) / max(n, 1) >= 0.10:
+			_print_quality_row(String(key), counts, 0.0)
 	print("-- Execution quality --")
 	for label in ["GOOD", "ACCEPTABLE", "POOR", "UNKNOWN"]:
 		var count: int = int(executions.get(label, 0)); if count > 0: print("%s: %.1f%% (%d)" % [label, _rate(executions, label, total), count])
