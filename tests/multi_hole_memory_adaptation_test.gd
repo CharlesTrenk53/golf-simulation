@@ -89,11 +89,25 @@ func _golfer(profile: int) -> Node:
 func _tee_attack_assessment(simulation, golfer: Node) -> Dictionary:
 	var state = CourseState.new(START, HOLE, 4, null)
 	var options = simulation.option_generator.generate_options(golfer, state, [])
-	var assessed = simulation.assessment_pipeline.assess_options(golfer, state, options, [])
-	for option in assessed:
-		if String(option.get("name", "")) == "ATTACK" and String(option.get("club_id", "")) == "DRIVER":
-			return option
-	push_error("Could not locate Driver ATTACK option")
+	var attack: Dictionary = {}
+	for option in options:
+		if String(option.get("name", "")) == "ATTACK":
+			attack = option.duplicate(true)
+			break
+	if attack.is_empty():
+		failures += 1
+		push_error("Could not locate ATTACK option")
+		return {}
+
+	# This test is specifically about Driver memory. Rick and Carl's normal club
+	# selector prefers a 5 Iron at this synthetic distance, so explicitly bind the
+	# ATTACK probe to Driver instead of silently assessing the wrong club.
+	var driver = GolfBag.new().get_club("DRIVER")
+	attack["club"] = driver
+	attack["club_id"] = driver["id"]
+	attack["club_name"] = driver["name"]
+	attack["shot_type"] = driver["shot_type"]
+	var assessed = simulation.assessment_pipeline.assess_options(golfer, state, [attack], [])
 	return assessed[0]
 
 func _is_nonincreasing(values: Array) -> bool:
