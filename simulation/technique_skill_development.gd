@@ -61,7 +61,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 		baseline_skill[shot_type] = float(golfer.get_shot_ability(shot_type))
 		skill_delta[shot_type] = 0.0
 		technique_bias[shot_type] = {"lateral": 0.0, "distance": 0.0, "dispersion": 0.0}
-		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
+		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "persistent_quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
 		prior_experience[shot_type] = int(golfer.skill_experience_for(shot_type)) if golfer.has_method("skill_experience_for") else 0
 		learning_aptitude[shot_type] = clamp(float(golfer.skill_learning_rate_for(shot_type)), 0.25, 2.0) if golfer.has_method("skill_learning_rate_for") else 1.0
 		shot_history[shot_type] = []
@@ -83,17 +83,22 @@ func age_learning_plasticity(age: float = -1.0) -> float:
 			return lerp(younger_factor, older_factor, weight)
 	return float(AGE_PLASTICITY_POINTS[AGE_PLASTICITY_POINTS.size() - 1][1])
 
-func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float) -> Dictionary:
+func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float, persistent_execution_score: float = -1.0) -> Dictionary:
 	if not evidence.has(shot_type):
 		return {}
 	var score = clamp(execution_score, 0.0, 100.0)
+	# When the caller can identify a transient performance component (for example,
+	# explicit hot/cold form), persistent skill evidence may be supplied separately.
+	# Existing callers omit it and preserve the original score-as-evidence behavior.
+	var persistent_score = score if persistent_execution_score < 0.0 else clamp(persistent_execution_score, 0.0, 100.0)
 	var row: Dictionary = evidence[shot_type]
 	row["count"] = int(row["count"]) + 1
 	row["quality_sum"] = float(row["quality_sum"]) + score
+	row["persistent_quality_sum"] = float(row.get("persistent_quality_sum", 0.0)) + persistent_score
 	row["lateral_sum"] = float(row["lateral_sum"]) + lateral_error
 	row["distance_sum"] = float(row["distance_sum"]) + distance_error
 	evidence[shot_type] = row
-	var event := {"shot_type": shot_type, "score": score, "lateral": lateral_error, "distance": distance_error}
+	var event := {"shot_type": shot_type, "score": score, "persistent_score": persistent_score, "lateral": lateral_error, "distance": distance_error}
 	history.append(event)
 	while history.size() > MAX_TRACKED_EVENTS:
 		history.pop_front()
@@ -120,9 +125,10 @@ func effective_skill(golfer: Node, shot_type: int) -> float:
 func development_state(shot_type: int) -> Dictionary:
 	var base = float(baseline_skill.get(shot_type, 50.0))
 	var delta = float(skill_delta.get(shot_type, 0.0))
-	var row: Dictionary = evidence.get(shot_type, {"count": 0, "quality_sum": 0.0})
+	var row: Dictionary = evidence.get(shot_type, {"count": 0, "quality_sum": 0.0, "persistent_quality_sum": 0.0})
 	var count = int(row.get("count", 0))
 	var avg_quality = float(row.get("quality_sum", 0.0)) / max(count, 1)
+	var avg_persistent_quality = float(row.get("persistent_quality_sum", row.get("quality_sum", 0.0))) / max(count, 1)
 	var total_experience = int(prior_experience.get(shot_type, 0)) + count
 	var stability = _experience_stability(total_experience)
 	return {
@@ -138,6 +144,7 @@ func development_state(shot_type: int) -> Dictionary:
 		"age_learning_plasticity": age_learning_plasticity(),
 		"development_resistance": _development_resistance(delta),
 		"average_execution_quality": avg_quality,
+		"average_persistent_execution_quality": avg_persistent_quality,
 		"technique_bias": technique_bias.get(shot_type, {}).duplicate(true),
 		"coaching_candidate": delta <= COACHING_TRIGGER_DELTA,
 		"coaching_trigger_delta": COACHING_TRIGGER_DELTA
@@ -175,8 +182,11 @@ func _update_skill_delta(shot_type: int) -> void:
 	if long_window.size() < MIN_SKILL_EVIDENCE:
 		return
 	var immediate_window = _recent_events(shot_type, 8)
-	var long_avg = _average_score(long_window)
-	var immediate_avg = _average_score(immediate_window)
+	# True skill responds to the persistent-learning channel. The observed score
+	# remains available to technique/current-performance systems, but known transient
+	# form no longer has to masquerade as acquired or lost underlying ability.
+	var long_avg = _average_persistent_score(long_window)
+	var immediate_avg = _average_persistent_score(immediate_window)
 	var long_signal = clamp((long_avg - 62.0) / 38.0, -1.0, 1.0)
 	var immediate_signal = clamp((immediate_avg - 62.0) / 38.0, -1.0, 1.0)
 	var skill_signal = long_signal * 0.65 + immediate_signal * 0.35
@@ -249,6 +259,14 @@ func _average_score(events: Array) -> float:
 	var total = 0.0
 	for event in events:
 		total += float(event["score"])
+	return total / events.size()
+
+func _average_persistent_score(events: Array) -> float:
+	if events.is_empty():
+		return 62.0
+	var total = 0.0
+	for event in events:
+		total += float(event.get("persistent_score", event["score"]))
 	return total / events.size()
 
 func _recent_events(shot_type: int, limit: int) -> Array:
