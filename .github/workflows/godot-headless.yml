@@ -45,6 +45,9 @@ jobs:
       - name: Run shot-assessment tests
         run: ./godot --headless --path . --script res://tests/shot_assessment_test.gd
 
+      - name: Run integrated shot-assessment pipeline tests
+        run: ./godot --headless --path . --script res://tests/shot_assessment_pipeline_test.gd
+
       - name: Run autonomous-hole tests
         run: ./godot --headless --path . --script res://tests/autonomous_hole_test.gd
 
