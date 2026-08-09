@@ -4,16 +4,18 @@ extends RefCounted
 # -----------------------------
 # Comfort and confidence can move quickly. Technique moves slowly. Underlying
 # skill moves slowest of all. Established experience makes true skill more
-# resistant to decline and better at self-correcting back toward an old pattern.
+# resistant to decline, slower to acquire genuinely new ability, and better at
+# self-correcting back toward an established pattern.
 
 const MIN_TECHNIQUE_EVIDENCE := 18
 const MIN_SKILL_EVIDENCE := 60
 const MAX_TRACKED_EVENTS := 240
 const SKILL_STEP_SCALE := 0.0042
 const TECHNIQUE_STEP_SCALE := 0.10
-const MAX_SKILL_DELTA_FROM_BASELINE := 8.0
 const COACHING_TRIGGER_DELTA := -2.5
 const EXPERIENCE_STABILITY_HALF_LIFE := 1800.0
+const DEVELOPMENT_RESISTANCE_SCALE := 6.0
+const DEVELOPMENT_RESISTANCE_POWER := 1.35
 
 var baseline_skill: Dictionary = {}
 var skill_delta: Dictionary = {}
@@ -75,6 +77,7 @@ func development_state(shot_type: int) -> Dictionary:
 		"prior_experience": int(prior_experience.get(shot_type, 0)),
 		"total_experience": total_experience,
 		"experience_stability": stability,
+		"development_resistance": _development_resistance(delta),
 		"average_execution_quality": avg_quality,
 		"technique_bias": technique_bias.get(shot_type, {}).duplicate(true),
 		"coaching_candidate": delta <= COACHING_TRIGGER_DELTA,
@@ -119,20 +122,35 @@ func _update_skill_delta(shot_type: int) -> void:
 	var immediate_signal = clamp((immediate_avg - 62.0) / 38.0, -1.0, 1.0)
 	var skill_signal = long_signal * 0.65 + immediate_signal * 0.35
 	var current_delta = float(skill_delta[shot_type])
+	var base = float(baseline_skill[shot_type])
+	var current_skill = clamp(base + current_delta, 0.0, 100.0)
 	var total_experience = int(prior_experience.get(shot_type, 0)) + count
 	var stability = _experience_stability(total_experience)
 
-	# Established skill is difficult to lose. When execution turns genuinely good,
-	# experience helps restoration toward the established baseline, not acquisition
-	# of brand-new ability. Once delta is non-negative this extra recovery boost is
-	# removed so veterans do not improve unnaturally fast beyond their old level.
+	# Experience has three distinct roles:
+	# 1) it protects established ability from deterioration;
+	# 2) it speeds restoration toward a previously established baseline;
+	# 3) it makes acquisition of genuinely new above-baseline skill slower.
 	var experience_modifier: float
 	if skill_signal < 0.0:
 		experience_modifier = lerp(1.0, 0.32, stability)
 	elif current_delta < 0.0:
 		experience_modifier = lerp(1.0, 2.20, stability)
 	else:
-		experience_modifier = 1.0
+		experience_modifier = lerp(1.0, 0.45, stability)
+
+	# Moving farther from an established skill becomes progressively harder instead
+	# of stopping at an arbitrary +/-8 point clamp. This produces a soft plateau
+	# while still allowing truly prolonged evidence to keep changing the golfer.
+	var resistance = _development_resistance(current_delta)
+
+	# The 0-100 skill scale is the only absolute bound. Movement naturally slows
+	# near either end because there is less physical/technical headroom remaining.
+	var boundary_modifier = 1.0
+	if skill_signal > 0.0:
+		boundary_modifier = sqrt(clamp((100.0 - current_skill) / 100.0, 0.0, 1.0))
+	elif skill_signal < 0.0:
+		boundary_modifier = sqrt(clamp(current_skill / 100.0, 0.0, 1.0))
 
 	# Baseline regression is a recovery aid, not an automatic healing force.
 	# It applies only when current evidence points back toward the established
@@ -147,8 +165,13 @@ func _update_skill_delta(shot_type: int) -> void:
 	if evidence_points_toward_baseline:
 		regression = -current_delta * lerp(0.0015, 0.0035, stability)
 
-	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier + regression
-	skill_delta[shot_type] = clamp(current_delta + step, -MAX_SKILL_DELTA_FROM_BASELINE, MAX_SKILL_DELTA_FROM_BASELINE)
+	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * resistance * boundary_modifier + regression
+	var next_skill = clamp(current_skill + step, 0.0, 100.0)
+	skill_delta[shot_type] = next_skill - base
+
+func _development_resistance(delta: float) -> float:
+	var distance = abs(delta) / DEVELOPMENT_RESISTANCE_SCALE
+	return 1.0 / pow(1.0 + distance, DEVELOPMENT_RESISTANCE_POWER)
 
 func _experience_stability(total_experience: int) -> float:
 	var experience = max(float(total_experience), 0.0)
