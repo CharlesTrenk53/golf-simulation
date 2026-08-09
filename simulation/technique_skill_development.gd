@@ -108,10 +108,10 @@ func _update_skill_delta(shot_type: int) -> void:
 	avg_score /= recent.size()
 	# 62 is approximately neutral execution. Sustained execution above/below that
 	# mark nudges true skill only by hundredths at a time.
-	var signal = clamp((avg_score - 62.0) / 38.0, -1.0, 1.0)
+	var skill_signal = clamp((avg_score - 62.0) / 38.0, -1.0, 1.0)
 	var current_delta = float(skill_delta[shot_type])
 	var regression = -current_delta * 0.002
-	var step = signal * SKILL_STEP_SCALE + regression
+	var step = skill_signal * SKILL_STEP_SCALE + regression
 	skill_delta[shot_type] = clamp(current_delta + step, -MAX_SKILL_DELTA_FROM_BASELINE, MAX_SKILL_DELTA_FROM_BASELINE)
 
 func _recent_events(shot_type: int, limit: int) -> Array:
