@@ -67,6 +67,27 @@ func _init() -> void:
 	_expect(veteran_recovery_fraction > novice_recovery_fraction, "established golfer self-corrects a larger fraction of lost skill once execution improves")
 	_expect(float(novice_recovery["skill_delta"]) < -0.05, "short recovery streak cannot instantly erase a long slump")
 
+	# Regression guard for mixed-round usage. Each shot family must retain enough of
+	# its own recent evidence to develop even when higher-frequency shot types are
+	# interleaved between repetitions. A shared 240-event history previously starved
+	# drive and short-game windows below the 60-event skill threshold.
+	var mixed = QuietGolfer.new()
+	mixed.profile = 1
+	mixed.apply_profile()
+	var mixed_model = TechniqueSkillDevelopment.new()
+	mixed_model.initialize_from_golfer(mixed)
+	for _cycle in range(100):
+		mixed_model.record_execution(0, 90.0, 0.0, 0.0)
+		for _shot in range(2):
+			mixed_model.record_execution(1, 90.0, 0.0, 0.0)
+		mixed_model.record_execution(2, 90.0, 0.0, 0.0)
+		for _shot in range(4):
+			mixed_model.record_execution(3, 90.0, 0.0, 0.0)
+	_expect(float(mixed_model.development_state(0)["skill_delta"]) > 0.0, "interleaved drive evidence can produce skill development")
+	_expect(float(mixed_model.development_state(1)["skill_delta"]) > 0.0, "interleaved approach evidence can produce skill development")
+	_expect(float(mixed_model.development_state(2)["skill_delta"]) > 0.0, "interleaved short-game evidence can produce skill development")
+	_expect(float(mixed_model.development_state(3)["skill_delta"]) > 0.0, "interleaved putting evidence can produce skill development")
+
 	print("============================================================")
 	print("POC-08 EXPERIENCE-STABILIZED SKILL DEVELOPMENT")
 	print("Novice stability: %.3f | slump delta: %.3f | recovery delta: %.3f | repaired %.1f%%" % [float(novice_base["experience_stability"]), float(novice_slump["skill_delta"]), float(novice_recovery["skill_delta"]), novice_recovery_fraction * 100.0])
@@ -74,6 +95,7 @@ func _init() -> void:
 	print("============================================================")
 	novice.free()
 	veteran.free()
+	mixed.free()
 	if failures == 0:
 		print("POC-08 TECHNIQUE & SKILL DEVELOPMENT TESTS PASSED")
 		quit(0)
