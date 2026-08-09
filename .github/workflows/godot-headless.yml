@@ -84,5 +84,8 @@ jobs:
       - name: Calibrate iron distance aging
         run: ./godot --headless --path . --script res://tests/iron_age_calibration_diagnostic.gd
 
+      - name: Calibrate full-bag distance aging
+        run: ./godot --headless --path . --script res://tests/bag_age_calibration_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
