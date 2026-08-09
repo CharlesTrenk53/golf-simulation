@@ -25,6 +25,19 @@ var risk_tolerance: float
 var responsiveness_to_experience: float
 var confidence: float
 
+# Long-horizon golfer development. Experience is stored separately from current
+# skill so a well-established motor pattern is harder to permanently move.
+var career_shot_experience: Dictionary = {}
+
+# Physical capacity is intentionally separate from technical golf skill. Age is
+# recorded now for future aging logic; it does not directly subtract distance.
+# Instead, future aging/injury systems can gradually alter these capacities.
+var age: int = 35
+var physical_power: float = 70.0
+var mobility: float = 70.0
+var coordination: float = 70.0
+var endurance: float = 70.0
+
 var decision_variability: float
 var exploration_margin: float = 5.0
 
@@ -66,6 +79,12 @@ func apply_profile() -> void:
 			confidence = 90.0
 			responsiveness_to_experience = 50.0
 			decision_variability = 20.0
+			age = 35
+			physical_power = 70.0
+			mobility = 72.0
+			coordination = 82.0
+			endurance = 72.0
+			career_shot_experience = {ShotType.DRIVE: 4200, ShotType.APPROACH: 7000, ShotType.SHORT_GAME: 5200, ShotType.PUTT: 7800}
 		GolferProfile.RECKLESS_RICK:
 			golfer_name = "Reckless Rick"
 			driving = 30.0
@@ -77,6 +96,12 @@ func apply_profile() -> void:
 			confidence = 95.0
 			responsiveness_to_experience = 15.0
 			decision_variability = 65.0
+			age = 31
+			physical_power = 48.0
+			mobility = 68.0
+			coordination = 55.0
+			endurance = 70.0
+			career_shot_experience = {ShotType.DRIVE: 1200, ShotType.APPROACH: 2600, ShotType.SHORT_GAME: 1800, ShotType.PUTT: 3000}
 		GolferProfile.CAREFUL_CARL:
 			golfer_name = "Careful Carl"
 			driving = 30.0
@@ -88,6 +113,45 @@ func apply_profile() -> void:
 			confidence = 60.0
 			responsiveness_to_experience = 85.0
 			decision_variability = 5.0
+			age = 43
+			physical_power = 48.0
+			mobility = 62.0
+			coordination = 74.0
+			endurance = 66.0
+			career_shot_experience = {ShotType.DRIVE: 3200, ShotType.APPROACH: 5800, ShotType.SHORT_GAME: 5000, ShotType.PUTT: 6500}
+
+
+func skill_experience_for(shot_type: int) -> int:
+	return int(career_shot_experience.get(shot_type, 0))
+
+
+func physical_distance_factor(shot_type: int) -> float:
+	# Power is most important on full shots. Mobility contributes to usable speed,
+	# while coordination helps turn physical capacity into centered contact.
+	# Putting is deliberately almost independent of power.
+	var power_weight = 0.0
+	var mobility_weight = 0.0
+	var coordination_weight = 0.0
+	match shot_type:
+		ShotType.DRIVE:
+			power_weight = 0.62
+			mobility_weight = 0.23
+			coordination_weight = 0.15
+		ShotType.APPROACH:
+			power_weight = 0.45
+			mobility_weight = 0.25
+			coordination_weight = 0.30
+		ShotType.SHORT_GAME:
+			power_weight = 0.12
+			mobility_weight = 0.18
+			coordination_weight = 0.70
+		ShotType.PUTT:
+			power_weight = 0.02
+			mobility_weight = 0.03
+			coordination_weight = 0.95
+	var capacity = physical_power * power_weight + mobility * mobility_weight + coordination * coordination_weight
+	# 70 is the neutral physical profile for the existing POC club distances.
+	return clamp(lerp(0.82, 1.18, capacity / 100.0) / lerp(0.82, 1.18, 0.70), 0.72, 1.22)
 
 
 func choose_best_option(options: Array) -> Dictionary:
