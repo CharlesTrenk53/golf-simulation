@@ -27,10 +27,15 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	if options.is_empty():
 		return {}
 	var chosen = golfer.choose_best_option(options)
+	var decision_assessment = _assess_decision(golfer, state, chosen, options)
 	var result = _execute_option(golfer, state, chosen, hazards)
 	result["selected_option"] = chosen
 	result["surface_before"] = surface_before
 	result["lie_quality_before"] = lie_quality_before
+	result["decision_quality"] = decision_assessment["quality"]
+	result["decision_score"] = decision_assessment["score"]
+	result["decision_best_score"] = decision_assessment["best_score"]
+	result["decision_reason"] = decision_assessment["reason"]
 
 	if state.course_context != null:
 		var landing_surface = state.course_context.surface_at(result["landing_position"])
@@ -51,9 +56,72 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	state.advance_to(next_position, result["outcome"], result["penalty_strokes"])
 	result["surface_after"] = state.surface_name()
 	result["lie_quality_after"] = state.current_lie_quality
+	var execution_assessment = _assess_execution(result)
+	result["execution_quality"] = execution_assessment["quality"]
+	result["execution_score"] = execution_assessment["score"]
+	result["execution_miss_distance"] = execution_assessment["miss_distance"]
+	result["execution_reason"] = execution_assessment["reason"]
 	shot_history.append(result)
 	golfer.record_shot_result(result["outcome"], chosen["is_aggressive"])
 	return result
+
+
+func _assess_decision(golfer: Node, state, chosen: Dictionary, options: Array) -> Dictionary:
+	var chosen_score = _strategic_option_score(golfer, state, chosen)
+	var best_score = chosen_score
+	for option in options:
+		best_score = max(best_score, _strategic_option_score(golfer, state, option))
+	var gap = best_score - chosen_score
+	var quality = "SENSIBLE"
+	if gap > 18.0:
+		quality = "POOR"
+	elif gap > 8.0:
+		quality = "QUESTIONABLE"
+	var reason = "Within %.1f points of the best strategic option" % gap
+	if chosen.get("name", "") == "RECOVER_TO_FAIRWAY":
+		if not chosen.get("advance_sets_up_green", true):
+			reason = "Recovery improves the lie when advancing from rough does not set up a realistic green shot"
+		else:
+			reason = "Recovery trades distance for a cleaner next-shot setup"
+	return {"quality": quality, "score": chosen_score, "best_score": best_score, "reason": reason}
+
+
+func _strategic_option_score(golfer: Node, state, option: Dictionary) -> float:
+	var reward = float(option.get("reward", 0.0))
+	var risk = float(option.get("risk", 0.0))
+	var risk_weight = 1.0 - float(golfer.risk_tolerance) / 100.0
+	var score = reward - risk * risk_weight
+	var success_chance = float(option.get("model_success_chance", 50.0))
+	score += (success_chance - 50.0) * 0.12
+	if option.has("next_shot_quality"):
+		score += float(option["next_shot_quality"]) * 0.08
+	if option.get("next_shot_green_reachable", false):
+		score += 5.0
+	if option.get("expected_surface", "") == "FAIRWAY" and state.surface_name() == "ROUGH":
+		score += 4.0
+	return score
+
+
+func _assess_execution(result: Dictionary) -> Dictionary:
+	var target: Vector3 = result["target_position"]
+	var landing: Vector3 = result["landing_position"]
+	var miss_distance = target.distance_to(landing)
+	var dispersion = max(float(result.get("club_dispersion", 1.0)), 0.25)
+	var normalized_miss = miss_distance / dispersion
+	var score = clamp(100.0 - normalized_miss * 35.0, 0.0, 100.0)
+	var quality = "GOOD"
+	var reason = "Ball finished close to the intended target relative to expected dispersion"
+	if result["outcome"] == "WATER":
+		quality = "POOR"
+		score = min(score, 20.0)
+		reason = "Execution produced a penalty-area outcome"
+	elif normalized_miss > 1.25:
+		quality = "POOR"
+		reason = "Miss was large relative to the selected club's expected dispersion"
+	elif normalized_miss > 0.65:
+		quality = "ACCEPTABLE"
+		reason = "Miss was noticeable but within a plausible execution range"
+	return {"quality": quality, "score": score, "miss_distance": miss_distance, "reason": reason}
 
 
 func _find_water_entry_point(state, start: Vector3, water_position: Vector3) -> Vector3:
