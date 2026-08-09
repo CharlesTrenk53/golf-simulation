@@ -60,5 +60,8 @@ jobs:
       - name: Trace long-horizon skill development curves
         run: ./godot --headless --path . --script res://tests/development_curve_diagnostic.gd
 
+      - name: Trace stochastic career development
+        run: ./godot --headless --path . --script res://tests/career_stochastic_development_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
