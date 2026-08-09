@@ -10,6 +10,7 @@ extends RefCounted
 const MIN_TECHNIQUE_EVIDENCE := 18
 const MIN_SKILL_EVIDENCE := 60
 const MAX_TRACKED_EVENTS := 240
+const MAX_TRACKED_EVENTS_PER_SHOT := 240
 const SKILL_STEP_SCALE := 0.0042
 const TECHNIQUE_STEP_SCALE := 0.10
 const COACHING_TRIGGER_DELTA := -2.5
@@ -27,6 +28,7 @@ var evidence: Dictionary = {}
 var prior_experience: Dictionary = {}
 var learning_aptitude: Dictionary = {}
 var history: Array = []
+var shot_history: Dictionary = {}
 
 func initialize_from_golfer(golfer: Node) -> void:
 	baseline_skill.clear()
@@ -36,6 +38,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 	prior_experience.clear()
 	learning_aptitude.clear()
 	history.clear()
+	shot_history.clear()
 	for shot_type in [0, 1, 2, 3]:
 		baseline_skill[shot_type] = float(golfer.get_shot_ability(shot_type))
 		skill_delta[shot_type] = 0.0
@@ -43,6 +46,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
 		prior_experience[shot_type] = int(golfer.skill_experience_for(shot_type)) if golfer.has_method("skill_experience_for") else 0
 		learning_aptitude[shot_type] = clamp(float(golfer.skill_learning_rate_for(shot_type)), 0.25, 2.0) if golfer.has_method("skill_learning_rate_for") else 1.0
+		shot_history[shot_type] = []
 
 func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float) -> Dictionary:
 	if not evidence.has(shot_type):
@@ -54,9 +58,20 @@ func record_execution(shot_type: int, execution_score: float, lateral_error: flo
 	row["lateral_sum"] = float(row["lateral_sum"]) + lateral_error
 	row["distance_sum"] = float(row["distance_sum"]) + distance_error
 	evidence[shot_type] = row
-	history.append({"shot_type": shot_type, "score": score, "lateral": lateral_error, "distance": distance_error})
+	var event := {"shot_type": shot_type, "score": score, "lateral": lateral_error, "distance": distance_error}
+	history.append(event)
 	while history.size() > MAX_TRACKED_EVENTS:
 		history.pop_front()
+
+	# Development windows must be retained independently for each shot family.
+	# A shared global history causes lower-frequency shots (especially drives and
+	# short-game shots) to be displaced by higher-frequency putting/approach events
+	# before they can accumulate the minimum evidence required for true skill change.
+	var shot_events: Array = shot_history[shot_type]
+	shot_events.append(event)
+	while shot_events.size() > MAX_TRACKED_EVENTS_PER_SHOT:
+		shot_events.pop_front()
+	shot_history[shot_type] = shot_events
 
 	_update_technique(shot_type)
 	_update_skill_delta(shot_type)
@@ -201,11 +216,9 @@ func _average_score(events: Array) -> float:
 
 func _recent_events(shot_type: int, limit: int) -> Array:
 	var result: Array = []
-	for i in range(history.size() - 1, -1, -1):
-		var event: Dictionary = history[i]
-		if int(event["shot_type"]) != shot_type:
-			continue
-		result.push_front(event)
+	var shot_events: Array = shot_history.get(shot_type, [])
+	for i in range(shot_events.size() - 1, -1, -1):
+		result.push_front(shot_events[i])
 		if result.size() >= limit:
 			break
 	return result
