@@ -19,10 +19,10 @@ func _init() -> void:
 	_test_autonomous_demo_scene()
 
 	if failures == 0:
-		print("POC-06A TESTS PASSED")
+		print("POC-06B TESTS PASSED")
 		quit(0)
 	else:
-		push_error("POC-06A TESTS FAILED: %d" % failures)
+		push_error("POC-06B TESTS FAILED: %d" % failures)
 		quit(1)
 
 
@@ -45,7 +45,7 @@ func _test_dynamic_options() -> void:
 	var options = generator.generate_options(golfer, state, [
 		{"position": Vector3(0, 0, 55), "radius": 8.0, "risk": 90.0}
 	])
-	_assert_true(options.size() == 3, "long situation creates three choices")
+	_assert_true(options.size() == 3, "long legacy situation creates three choices")
 	_assert_true(options[2]["risk"] >= 90.0, "hazard affects attack risk")
 
 	state.ball_position = Vector3(0, 0, 6)
@@ -61,7 +61,15 @@ func _build_context() -> RefCounted:
 	context.add_zone("Tee", CourseContext.Surface.TEE, Vector3(0, 0, 100), Vector2(8, 5))
 	context.add_zone("Green", CourseContext.Surface.GREEN, Vector3(0, 0, 0), Vector2(14, 10))
 	context.add_zone("Water", CourseContext.Surface.WATER, Vector3(0, 0, 45), Vector2(16, 6))
+	context.add_zone("Bunker", CourseContext.Surface.BUNKER, Vector3(18, 0, 20), Vector2(5, 5))
 	return context
+
+
+func _has_option(options: Array, name: String) -> bool:
+	for option in options:
+		if option["name"] == name:
+			return true
+	return false
 
 
 func _test_course_context() -> void:
@@ -71,6 +79,8 @@ func _test_course_context() -> void:
 	_assert_true(context.surface_name(context.surface_at(Vector3(20, 0, 70))) == "ROUGH", "outside fairway resolves to rough")
 	_assert_true(context.surface_name(context.surface_at(Vector3(0, 0, 3))) == "GREEN", "green surface resolves")
 	_assert_true(context.surface_name(context.surface_at(Vector3(0, 0, 45))) == "WATER", "water surface resolves")
+	_assert_true(context.surface_name(context.surface_at(Vector3(18, 0, 20))) == "BUNKER", "bunker surface resolves")
+	_assert_true(context.lie_quality(CourseContext.Surface.BUNKER) < context.lie_quality(CourseContext.Surface.ROUGH), "bunker lie is worse than rough")
 
 	var rough_state = CourseState.new(Vector3(20, 0, 70), Vector3.ZERO, 4, context)
 	_assert_true(rough_state.surface_name() == "ROUGH", "state tracks rough lie")
@@ -91,9 +101,17 @@ func _test_lie_aware_options() -> void:
 	var fairway_options = generator.generate_options(golfer, fairway_state)
 	var rough_options = generator.generate_options(golfer, rough_state)
 
+	_assert_true(_has_option(fairway_options, "ATTACK"), "fairway permits attack")
+	_assert_true(not _has_option(rough_options, "ATTACK"), "rough removes driver attack")
+	_assert_true(_has_option(rough_options, "ADVANCE_FROM_ROUGH"), "rough generates recovery advance")
 	_assert_true(rough_options[0]["reward"] < fairway_options[0]["reward"], "rough lowers option reward")
 	_assert_true(rough_options[0]["risk"] > fairway_options[0]["risk"], "rough raises option risk")
-	_assert_true(rough_options[2]["model_success_chance"] < fairway_options[2]["model_success_chance"], "rough lowers attack success")
+
+	var bunker_state = CourseState.new(Vector3(18, 0, 20), Vector3.ZERO, 4, context)
+	var bunker_options = generator.generate_options(golfer, bunker_state)
+	_assert_true(bunker_state.surface_name() == "BUNKER", "state tracks bunker lie")
+	_assert_true(not _has_option(bunker_options, "ATTACK"), "bunker removes attack")
+	_assert_true(_has_option(bunker_options, "SPLASH_OUT") or _has_option(bunker_options, "BUNKER_EXIT"), "bunker generates escape option")
 
 	var green_state = CourseState.new(Vector3(0, 0, 7), Vector3.ZERO, 4, context)
 	var green_options = generator.generate_options(golfer, green_state)
