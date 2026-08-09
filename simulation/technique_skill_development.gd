@@ -133,7 +133,20 @@ func _update_skill_delta(shot_type: int) -> void:
 		experience_modifier = lerp(1.0, 2.20, stability)
 	else:
 		experience_modifier = 1.0
-	var regression = -current_delta * lerp(0.0015, 0.0035, stability)
+
+	# Baseline regression is a recovery aid, not an automatic healing force.
+	# It applies only when current evidence points back toward the established
+	# baseline. Continued poor execution cannot make a below-baseline golfer
+	# recover, and continued excellent execution cannot pull an improving golfer
+	# downward merely because the old baseline was lower.
+	var regression = 0.0
+	var evidence_points_toward_baseline = (
+		(current_delta < 0.0 and skill_signal > 0.0)
+		or (current_delta > 0.0 and skill_signal < 0.0)
+	)
+	if evidence_points_toward_baseline:
+		regression = -current_delta * lerp(0.0015, 0.0035, stability)
+
 	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier + regression
 	skill_delta[shot_type] = clamp(current_delta + step, -MAX_SKILL_DELTA_FROM_BASELINE, MAX_SKILL_DELTA_FROM_BASELINE)
 
