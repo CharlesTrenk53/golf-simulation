@@ -49,32 +49,59 @@ func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
 	elif surface == "ROUGH":
 		var recovery_distance = min(distance * 0.50, 32.0) * lie_quality
 		var recovery_target = _find_playable_target(state, state.ball_position + direction * recovery_distance, direction, lateral)
-		options.append(_option_with_club("ADVANCE_FROM_ROUGH", golfer, APPROACH, state, recovery_target, 50.0 * lie_quality, _lie_risk(18.0, state), false, _safe_success_chance(80.0, lie_quality)))
+		var rough_advance = _option_with_club("ADVANCE_FROM_ROUGH", golfer, APPROACH, state, recovery_target, 50.0 * lie_quality, _lie_risk(18.0, state), false, _safe_success_chance(80.0, lie_quality))
+		var advance_remaining = recovery_target.distance_to(state.hole_position)
+		var rough_setup = _next_shot_setup(golfer, "ROUGH", lie_quality, advance_remaining)
+		rough_advance["next_shot_green_reachable"] = rough_setup["reachable"]
+		rough_advance["next_shot_quality"] = rough_setup["quality"]
+		options.append(rough_advance)
 
 		var fairway_target = _find_fairway_recovery_target(state, direction)
 		if fairway_target != state.ball_position:
-			var fairway_recovery = _option_with_club(
-				"RECOVER_TO_FAIRWAY",
-				golfer,
-				APPROACH,
-				state,
-				fairway_target,
-				32.0,
-				_lie_risk(12.0, state),
-				false,
-				_safe_success_chance(90.0, lie_quality)
-			)
+			var fairway_remaining = fairway_target.distance_to(state.hole_position)
+			var fairway_setup = _next_shot_setup(golfer, "FAIRWAY", 0.95, fairway_remaining)
+			var recovery_reward = 30.0
+			if not rough_setup["reachable"]:
+				recovery_reward += 12.0
+			recovery_reward += max(0.0, fairway_setup["quality"] - rough_setup["quality"]) * 0.20
+			var fairway_recovery = _option_with_club("RECOVER_TO_FAIRWAY", golfer, APPROACH, state, fairway_target, recovery_reward, _lie_risk(12.0, state), false, _safe_success_chance(90.0, lie_quality))
 			fairway_recovery["lie_improvement"] = max(0.0, 1.0 - lie_quality)
 			fairway_recovery["expected_surface"] = "FAIRWAY"
+			fairway_recovery["advance_sets_up_green"] = rough_setup["reachable"]
+			fairway_recovery["next_shot_green_reachable"] = fairway_setup["reachable"]
+			fairway_recovery["next_shot_quality"] = fairway_setup["quality"]
 			options.append(fairway_recovery)
 
 	return options
 
 
+func _next_shot_setup(golfer: Node, surface: String, lie_quality: float, remaining_distance: float) -> Dictionary:
+	var best_quality = 0.0
+	var reachable = false
+	for club in bag.clubs_for_surface(surface):
+		if int(club["shot_type"]) == PUTT:
+			continue
+		var carry = bag.effective_carry(club, golfer, surface, lie_quality)
+		var ability = golfer.get_shot_ability(int(club["shot_type"]))
+		var confidence = float(golfer.get("confidence")) if golfer.get("confidence") != null else 50.0
+		var confidence_blend = ability * 0.65 + confidence * 0.35
+		var reach_margin = carry - remaining_distance
+		var reach_quality = clamp(50.0 + reach_margin * 4.0, 0.0, 100.0)
+		var lie_adjustment = 0.0
+		if surface == "ROUGH":
+			lie_adjustment = -12.0
+		elif surface == "FAIRWAY":
+			lie_adjustment = 6.0
+		var quality = clamp(confidence_blend * 0.55 + reach_quality * 0.45 + lie_adjustment, 0.0, 100.0)
+		best_quality = max(best_quality, quality)
+		if carry >= remaining_distance and quality >= 45.0:
+			reachable = true
+	return {"reachable": reachable, "quality": best_quality}
+
+
 func _find_fairway_recovery_target(state, direction: Vector3) -> Vector3:
 	if state.course_context == null:
 		return state.ball_position
-
 	var best_target = state.ball_position
 	var best_distance = INF
 	for zone in state.course_context.zones:
@@ -84,15 +111,10 @@ func _find_fairway_recovery_target(state, direction: Vector3) -> Vector3:
 		var half_size: Vector2 = zone["half_size"]
 		var preferred = state.ball_position + direction * 8.0
 		var margin = 2.0
-		var candidate = Vector3(
-			clamp(preferred.x, center.x - half_size.x + margin, center.x + half_size.x - margin),
-			state.ball_position.y,
-			clamp(preferred.z, center.z - half_size.y + margin, center.z + half_size.y - margin)
-		)
+		var candidate = Vector3(clamp(preferred.x, center.x - half_size.x + margin, center.x + half_size.x - margin), state.ball_position.y, clamp(preferred.z, center.z - half_size.y + margin, center.z + half_size.y - margin))
 		if _is_water(state, candidate):
 			continue
-		var candidate_surface = state.course_context.surface_name(state.course_context.surface_at(candidate))
-		if candidate_surface != "FAIRWAY":
+		if state.course_context.surface_name(state.course_context.surface_at(candidate)) != "FAIRWAY":
 			continue
 		var candidate_distance = state.ball_position.distance_to(candidate)
 		if candidate_distance < best_distance:
@@ -135,10 +157,7 @@ func _is_water(state, position: Vector3) -> bool:
 func _bunker_options(golfer: Node, state, distance: float) -> Array:
 	var lie_quality: float = state.current_lie_quality
 	if distance <= 28.0:
-		return [
-			_clubbed_direct_option("SPLASH_OUT", golfer, SHORT_GAME, state, 54.0 * lie_quality, _lie_risk(14.0, state)),
-			_clubbed_direct_option("SAFE_BUNKER_EXIT", golfer, SHORT_GAME, state, 45.0 * lie_quality, _lie_risk(5.0, state))
-		]
+		return [_clubbed_direct_option("SPLASH_OUT", golfer, SHORT_GAME, state, 54.0 * lie_quality, _lie_risk(14.0, state)), _clubbed_direct_option("SAFE_BUNKER_EXIT", golfer, SHORT_GAME, state, 45.0 * lie_quality, _lie_risk(5.0, state))]
 	var direction = _direction_to_hole(state)
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
 	var exit_distance = min(distance * 0.25, 18.0)
@@ -154,18 +173,7 @@ func _option(name: String, shot_type: int, target_position: Vector3, reward: flo
 	var resolved_shot_type = shot_type
 	if not club.is_empty():
 		resolved_shot_type = int(club.get("shot_type", shot_type))
-	return {
-		"name": name,
-		"shot_type": resolved_shot_type,
-		"target_position": target_position,
-		"reward": reward,
-		"risk": risk,
-		"is_aggressive": is_aggressive,
-		"model_success_chance": model_success_chance,
-		"club": club,
-		"club_id": club.get("id", ""),
-		"club_name": club.get("name", "")
-	}
+	return {"name": name, "shot_type": resolved_shot_type, "target_position": target_position, "reward": reward, "risk": risk, "is_aggressive": is_aggressive, "model_success_chance": model_success_chance, "club": club, "club_id": club.get("id", ""), "club_name": club.get("name", "")}
 
 
 func _direction_to_hole(state) -> Vector3:
