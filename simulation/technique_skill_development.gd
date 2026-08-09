@@ -21,6 +21,22 @@ const BASELINE_RECOVERY_EXPERIENCE_MAX := 1.75
 const BASELINE_REGRESSION_MIN := 0.0008
 const BASELINE_REGRESSION_MAX := 0.0018
 
+# Age plasticity is deliberately separate from physical aging. It modifies only
+# acquisition of genuinely new above-baseline skill. It does not accelerate a
+# slump, worsen deterioration, or slow restoration toward established ability.
+const AGE_PLASTICITY_POINTS := [
+	[16.0, 1.25],
+	[20.0, 1.15],
+	[25.0, 1.05],
+	[30.0, 1.00],
+	[35.0, 0.95],
+	[40.0, 0.90],
+	[50.0, 0.80],
+	[60.0, 0.70],
+	[70.0, 0.60],
+	[76.0, 0.55]
+]
+
 var baseline_skill: Dictionary = {}
 var skill_delta: Dictionary = {}
 var technique_bias: Dictionary = {}
@@ -29,6 +45,7 @@ var prior_experience: Dictionary = {}
 var learning_aptitude: Dictionary = {}
 var history: Array = []
 var shot_history: Dictionary = {}
+var current_age: float = 30.0
 
 func initialize_from_golfer(golfer: Node) -> void:
 	baseline_skill.clear()
@@ -39,6 +56,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 	learning_aptitude.clear()
 	history.clear()
 	shot_history.clear()
+	current_age = float(golfer.age) if "age" in golfer else 30.0
 	for shot_type in [0, 1, 2, 3]:
 		baseline_skill[shot_type] = float(golfer.get_shot_ability(shot_type))
 		skill_delta[shot_type] = 0.0
@@ -47,6 +65,23 @@ func initialize_from_golfer(golfer: Node) -> void:
 		prior_experience[shot_type] = int(golfer.skill_experience_for(shot_type)) if golfer.has_method("skill_experience_for") else 0
 		learning_aptitude[shot_type] = clamp(float(golfer.skill_learning_rate_for(shot_type)), 0.25, 2.0) if golfer.has_method("skill_learning_rate_for") else 1.0
 		shot_history[shot_type] = []
+
+func set_current_age(age: float) -> void:
+	current_age = max(age, 0.0)
+
+func age_learning_plasticity(age: float = -1.0) -> float:
+	var resolved_age = current_age if age < 0.0 else age
+	if resolved_age <= float(AGE_PLASTICITY_POINTS[0][0]):
+		return float(AGE_PLASTICITY_POINTS[0][1])
+	for i in range(1, AGE_PLASTICITY_POINTS.size()):
+		var younger_age = float(AGE_PLASTICITY_POINTS[i - 1][0])
+		var younger_factor = float(AGE_PLASTICITY_POINTS[i - 1][1])
+		var older_age = float(AGE_PLASTICITY_POINTS[i][0])
+		var older_factor = float(AGE_PLASTICITY_POINTS[i][1])
+		if resolved_age <= older_age:
+			var weight = inverse_lerp(younger_age, older_age, resolved_age)
+			return lerp(younger_factor, older_factor, weight)
+	return float(AGE_PLASTICITY_POINTS[AGE_PLASTICITY_POINTS.size() - 1][1])
 
 func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float) -> Dictionary:
 	if not evidence.has(shot_type):
@@ -99,6 +134,8 @@ func development_state(shot_type: int) -> Dictionary:
 		"total_experience": total_experience,
 		"experience_stability": stability,
 		"learning_aptitude": float(learning_aptitude.get(shot_type, 1.0)),
+		"current_age": current_age,
+		"age_learning_plasticity": age_learning_plasticity(),
 		"development_resistance": _development_resistance(delta),
 		"average_execution_quality": avg_quality,
 		"technique_bias": technique_bias.get(shot_type, {}).duplicate(true),
@@ -162,12 +199,12 @@ func _update_skill_delta(shot_type: int) -> void:
 	else:
 		experience_modifier = lerp(1.0, 0.45, stability)
 
-	# Skill-specific aptitude applies only to genuinely new skill acquisition.
-	# Slump deterioration and restoration toward an established baseline remain
-	# governed by evidence and experience so the recovery model stays independent.
+	# Skill-specific aptitude and age-based plasticity apply only to genuinely new
+	# skill acquisition. Slump deterioration and restoration toward an established
+	# baseline remain governed by evidence and experience, keeping recovery separate.
 	var aptitude_modifier = 1.0
 	if skill_signal > 0.0 and current_delta >= 0.0:
-		aptitude_modifier = float(learning_aptitude.get(shot_type, 1.0))
+		aptitude_modifier = float(learning_aptitude.get(shot_type, 1.0)) * age_learning_plasticity()
 
 	# Moving farther from an established skill becomes progressively harder instead
 	# of stopping at an arbitrary +/-8 point clamp. This produces a soft plateau
