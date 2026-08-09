@@ -45,6 +45,9 @@ jobs:
       - name: Run skill-specific learning aptitude tests
         run: ./godot --headless --path . --script res://tests/skill_learning_aptitude_test.gd
 
+      - name: Run golfer lifecycle tests
+        run: ./godot --headless --path . --script res://tests/golfer_lifecycle_test.gd
+
       - name: Run shot-assessment tests
         run: ./godot --headless --path . --script res://tests/shot_assessment_test.gd
 
