@@ -29,6 +29,11 @@ var confidence: float
 # skill so a well-established motor pattern is harder to permanently move.
 var career_shot_experience: Dictionary = {}
 
+# Skill-specific learning aptitude is separate from current skill and experience.
+# A value of 1.0 is average acquisition speed for genuinely new skill; this does
+# not directly change slump deterioration or restoration of established ability.
+var skill_learning_rates: Dictionary = {}
+
 # Physical capacity is intentionally separate from technical golf skill. Age is
 # recorded now for future aging logic; it does not directly subtract distance.
 # Instead, future aging/injury systems can gradually alter these capacities.
@@ -83,6 +88,7 @@ func apply_profile() -> void:
 			coordination = 82.0
 			endurance = 72.0
 			career_shot_experience = {ShotType.DRIVE: 4200, ShotType.APPROACH: 7000, ShotType.SHORT_GAME: 5200, ShotType.PUTT: 7800}
+			skill_learning_rates = {ShotType.DRIVE: 0.90, ShotType.APPROACH: 1.05, ShotType.SHORT_GAME: 0.95, ShotType.PUTT: 0.85}
 		GolferProfile.RECKLESS_RICK:
 			golfer_name = "Reckless Rick"
 			driving = 30.0
@@ -100,6 +106,7 @@ func apply_profile() -> void:
 			coordination = 55.0
 			endurance = 70.0
 			career_shot_experience = {ShotType.DRIVE: 1200, ShotType.APPROACH: 2600, ShotType.SHORT_GAME: 1800, ShotType.PUTT: 3000}
+			skill_learning_rates = {ShotType.DRIVE: 0.80, ShotType.APPROACH: 0.95, ShotType.SHORT_GAME: 1.10, ShotType.PUTT: 1.00}
 		GolferProfile.CAREFUL_CARL:
 			golfer_name = "Careful Carl"
 			driving = 30.0
@@ -117,9 +124,13 @@ func apply_profile() -> void:
 			coordination = 74.0
 			endurance = 66.0
 			career_shot_experience = {ShotType.DRIVE: 3200, ShotType.APPROACH: 5800, ShotType.SHORT_GAME: 5000, ShotType.PUTT: 6500}
+			skill_learning_rates = {ShotType.DRIVE: 0.75, ShotType.APPROACH: 1.00, ShotType.SHORT_GAME: 1.15, ShotType.PUTT: 1.10}
 
 func skill_experience_for(shot_type: int) -> int:
 	return int(career_shot_experience.get(shot_type, 0))
+
+func skill_learning_rate_for(shot_type: int) -> float:
+	return clamp(float(skill_learning_rates.get(shot_type, 1.0)), 0.25, 2.0)
 
 func physical_distance_factor(shot_type: int) -> float:
 	var power_weight = 0.0
