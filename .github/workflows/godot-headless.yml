@@ -39,6 +39,9 @@ jobs:
       - name: Run multi-hole memory adaptation tests
         run: ./godot --headless --path . --script res://tests/multi_hole_memory_adaptation_test.gd
 
+      - name: Run technique and skill development tests
+        run: ./godot --headless --path . --script res://tests/technique_skill_development_test.gd
+
       - name: Run shot-assessment tests
         run: ./godot --headless --path . --script res://tests/shot_assessment_test.gd
 
