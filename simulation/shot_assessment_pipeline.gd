@@ -5,8 +5,10 @@ const ShotRequirements = preload("res://simulation/shot_requirements.gd")
 const GolferAssessment = preload("res://simulation/golfer_assessment.gd")
 const GolferStateContext = preload("res://simulation/golfer_state_context.gd")
 const RecentPerformanceContext = preload("res://simulation/recent_performance_context.gd")
+const GolferMemoryComfort = preload("res://simulation/golfer_memory_comfort.gd")
 const ShotCommitment = preload("res://simulation/shot_commitment.gd")
 const FutureStateEstimator = preload("res://simulation/future_state_estimator.gd")
+const GolfBag = preload("res://simulation/golf_bag.gd")
 
 var requirements_model = ShotRequirements.new()
 var assessment_model = GolferAssessment.new()
@@ -14,10 +16,13 @@ var commitment_model = ShotCommitment.new()
 var future_state_model = FutureStateEstimator.new()
 var state_context = GolferStateContext.new()
 var recent_performance = RecentPerformanceContext.new()
+var memory_comfort = GolferMemoryComfort.new()
+var bag = GolfBag.new()
 var initialized_for_golfer := false
 
 func initialize(golfer: Node) -> void:
 	recent_performance.initialize_from_golfer(golfer)
+	memory_comfort.initialize_from_golfer(golfer, bag.all_clubs())
 	initialized_for_golfer = true
 
 func assess_options(golfer: Node, state, options: Array, hazards: Array = []) -> Array:
@@ -41,9 +46,25 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		var performance = recent_performance.performance_modifier_for(club) if not club.is_empty() else {"carry_factor": 1.0, "dispersion_factor": 1.0, "directional_bias": 0.0}
 		capability["expected_carry"] = float(capability.get("expected_carry", 0.0)) * float(performance["carry_factor"])
 		capability["expected_dispersion"] = float(capability.get("expected_dispersion", 0.0)) * float(performance["dispersion_factor"])
-		var confidence = recent_performance.confidence_for(golfer, club, situation.surface, state_context.pressure) if not club.is_empty() else float(golfer.confidence)
+
+		var shot_form = String(option.get("shot_form", "NORMAL")).to_upper()
+		var comfort = memory_comfort.comfort_for(golfer, club, shot_form) if not club.is_empty() else {"comfort": float(golfer.confidence), "certainty": 35.0, "baseline": float(golfer.confidence), "long_term": float(golfer.confidence), "recent": float(golfer.confidence), "current_round": float(golfer.confidence)}
+		var recent_confidence = recent_performance.confidence_for(golfer, club, situation.surface, state_context.pressure) if not club.is_empty() else float(golfer.confidence)
+		var comfort_certainty = float(comfort.get("certainty", 35.0))
+		var comfort_influence = lerp(0.15, 0.45, comfort_certainty / 100.0)
+		var confidence = recent_confidence * (1.0 - comfort_influence) + float(comfort.get("comfort", recent_confidence)) * comfort_influence
+
 		var miss = commitment_model.assess_miss_consequences(situation, option.get("target_position", state.hole_position), max(float(capability.get("expected_dispersion", 2.0)), 2.0))
 		var willingness = assessment_model.assess_willingness(golfer, capability, option, state_context)
+		var raw_willingness = float(willingness.get("willingness_score", 50.0))
+		var comfort_adjustment = (float(comfort.get("comfort", 50.0)) - 50.0) * 0.20
+		willingness["pre_comfort_willingness"] = raw_willingness
+		willingness["comfort_adjustment"] = comfort_adjustment
+		willingness["willingness_score"] = clamp(raw_willingness + comfort_adjustment, 0.0, 100.0)
+
+		var model_success = float(option.get("model_success_chance", 50.0))
+		var comfort_believed_success = clamp(model_success + (float(comfort.get("comfort", 50.0)) - 50.0) * 0.12, 0.0, 100.0)
+		option["comfort_believed_success_chance"] = comfort_believed_success
 
 		var base_reward = float(option.get("reward", 0.0))
 		var base_risk = float(option.get("risk", 0.0))
@@ -57,6 +78,7 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		var assessment_risk = base_risk + miss_cost * 0.16 + distance_error * 1.5 + max(0.0, 50.0 - capability_score) * 0.22
 		option["reward"] = assessment_reward
 		option["risk"] = assessment_risk
+		option["shot_form"] = shot_form
 		option["assessment"] = {
 			"world_distance": situation.effective_playing_distance(),
 			"perceived_distance": perceived_distance,
@@ -64,6 +86,10 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 			"requirements": requirements,
 			"capability": capability,
 			"specific_confidence": confidence,
+			"recent_confidence": recent_confidence,
+			"comfort": comfort,
+			"comfort_believed_success_chance": comfort_believed_success,
+			"shot_form": shot_form,
 			"miss_consequences": miss,
 			"willingness": willingness,
 			"performance": performance,
@@ -108,7 +134,15 @@ func record_result(chosen: Dictionary, result: Dictionary) -> void:
 	var error = landing - target
 	var lateral_error = error.dot(lateral)
 	var distance_error = error.dot(direction)
-	recent_performance.record_shot(club, String(result.get("outcome", "SUCCESS")), String(result.get("execution_quality", "ACCEPTABLE")), lateral_error, distance_error)
+	var outcome = String(result.get("outcome", "SUCCESS"))
+	var execution_quality = String(result.get("execution_quality", "ACCEPTABLE"))
+	var execution_score = float(result.get("execution_score", -1.0))
+	var shot_form = String(chosen.get("shot_form", chosen.get("assessment", {}).get("shot_form", "NORMAL")))
+	recent_performance.record_shot(club, outcome, execution_quality, lateral_error, distance_error)
+	memory_comfort.record_experience(club, shot_form, execution_quality, outcome, execution_score)
+
+func start_new_round() -> void:
+	memory_comfort.start_new_round()
 
 func set_physical_condition(values: Dictionary) -> void:
 	state_context.set_physical_condition(values)
