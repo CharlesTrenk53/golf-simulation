@@ -51,19 +51,21 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		var comfort = memory_comfort.comfort_for(golfer, club, shot_form) if not club.is_empty() else {"comfort": float(golfer.confidence), "certainty": 35.0, "baseline": float(golfer.confidence), "long_term": float(golfer.confidence), "recent": float(golfer.confidence), "current_round": float(golfer.confidence)}
 		var recent_confidence = recent_performance.confidence_for(golfer, club, situation.surface, state_context.pressure) if not club.is_empty() else float(golfer.confidence)
 		var comfort_certainty = float(comfort.get("certainty", 35.0))
-		var comfort_influence = lerp(0.15, 0.45, comfort_certainty / 100.0)
+		var response_factor = _experience_response_factor(golfer)
+		var comfort_influence = lerp(0.15, 0.45, comfort_certainty / 100.0) * response_factor
 		var confidence = recent_confidence * (1.0 - comfort_influence) + float(comfort.get("comfort", recent_confidence)) * comfort_influence
 
 		var miss = commitment_model.assess_miss_consequences(situation, option.get("target_position", state.hole_position), max(float(capability.get("expected_dispersion", 2.0)), 2.0))
 		var willingness = assessment_model.assess_willingness(golfer, capability, option, state_context)
 		var raw_willingness = float(willingness.get("willingness_score", 50.0))
-		var comfort_adjustment = (float(comfort.get("comfort", 50.0)) - 50.0) * 0.20
+		var comfort_adjustment = (float(comfort.get("comfort", 50.0)) - 50.0) * 0.20 * response_factor
 		willingness["pre_comfort_willingness"] = raw_willingness
 		willingness["comfort_adjustment"] = comfort_adjustment
+		willingness["experience_response_factor"] = response_factor
 		willingness["willingness_score"] = clamp(raw_willingness + comfort_adjustment, 0.0, 100.0)
 
 		var model_success = float(option.get("model_success_chance", 50.0))
-		var comfort_believed_success = clamp(model_success + (float(comfort.get("comfort", 50.0)) - 50.0) * 0.12, 0.0, 100.0)
+		var comfort_believed_success = clamp(model_success + (float(comfort.get("comfort", 50.0)) - 50.0) * 0.12 * response_factor, 0.0, 100.0)
 		option["comfort_believed_success_chance"] = comfort_believed_success
 
 		var base_reward = float(option.get("reward", 0.0))
@@ -88,6 +90,7 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 			"specific_confidence": confidence,
 			"recent_confidence": recent_confidence,
 			"comfort": comfort,
+			"experience_response_factor": response_factor,
 			"comfort_believed_success_chance": comfort_believed_success,
 			"shot_form": shot_form,
 			"miss_consequences": miss,
@@ -143,6 +146,11 @@ func record_result(chosen: Dictionary, result: Dictionary) -> void:
 
 func start_new_round() -> void:
 	memory_comfort.start_new_round()
+
+func _experience_response_factor(golfer: Node) -> float:
+	# Responsiveness controls how much remembered experience changes present belief.
+	# Even stubborn golfers react a little; highly responsive golfers react strongly.
+	return lerp(0.35, 1.0, clamp(float(golfer.responsiveness_to_experience) / 100.0, 0.0, 1.0))
 
 func set_physical_condition(values: Dictionary) -> void:
 	state_context.set_physical_condition(values)
