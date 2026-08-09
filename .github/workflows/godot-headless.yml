@@ -7,6 +7,7 @@ on:
       - poc-05-autonomous-hole
       - poc-06-course-context
       - poc-07-shot-club-selection
+      - poc-08-shot-assessment
   pull_request:
 
 jobs:
@@ -28,6 +29,9 @@ jobs:
 
       - name: Run club-model tests
         run: ./godot --headless --path . --script res://tests/golf_bag_test.gd
+
+      - name: Run shot-assessment tests
+        run: ./godot --headless --path . --script res://tests/shot_assessment_test.gd
 
       - name: Run autonomous-hole tests
         run: ./godot --headless --path . --script res://tests/autonomous_hole_test.gd
