@@ -93,17 +93,17 @@ func _play_current_golfer() -> Dictionary:
 		if result["outcome"] == "WATER":
 			water_count += 1
 		var title = "%s — Stroke %d: %s" % [golfer.golfer_name, result["shot_number"], selected["name"]]
-		var detail = "%s | %s lie | %.1f remaining | Carry %.1f | Dispersion %.1f" % [club_name, result["surface_before"], before_distance, result["club_effective_carry"], result["club_dispersion"]]
+		var detail = "%s | %s lie | %.1f remaining | Decision %s | Carry %.1f | Dispersion %.1f" % [club_name, result["surface_before"], before_distance, result["decision_quality"], result["club_effective_carry"], result["club_dispersion"]]
 		if selected.has("next_shot_quality"):
 			var reachable_text = "YES" if selected.get("next_shot_green_reachable", false) else "NO"
-			detail += " | Next-shot quality %.1f | Green next: %s | Confidence %.0f" % [selected["next_shot_quality"], reachable_text, golfer.confidence]
+			detail += " | Next-shot %.1f | Green next: %s | Confidence %.0f" % [selected["next_shot_quality"], reachable_text, golfer.confidence]
 		_update_status(title, detail)
 		await _animate_ball(result["start_position"], result["landing_position"])
 		if result["outcome"] == "WATER":
-			_update_status(title, "%s | WATER | Shot +1 | Penalty +1 | Score %d → %d | Drop to %s" % [club_name, score_before, state.strokes, result["surface_after"]])
+			_update_status(title, "%s | Decision %s → Execution %s | WATER | Shot +1 | Penalty +1 | Score %d → %d | Drop to %s" % [club_name, result["decision_quality"], result["execution_quality"], score_before, state.strokes, result["surface_after"]])
 			await get_tree().create_timer(decision_pause).timeout
 		ball.global_position = result["relief_position"]
-		_update_status(title, "%s | %s | Now %s | %.1f from hole | Score %d" % [club_name, result["outcome"], result["surface_after"], state.remaining_distance(), state.strokes])
+		_update_status(title, "%s | Decision %s → Execution %s | %s | Now %s | %.1f from hole | Score %d" % [club_name, result["decision_quality"], result["execution_quality"], result["outcome"], result["surface_after"], state.remaining_distance(), state.strokes])
 		await get_tree().create_timer(decision_pause).timeout
 	var finish_text = "Finished" if state.finished else "Stroke limit"
 	_update_status("%s: %s" % [golfer.golfer_name, finish_text], "Score %d | Water %d | %s" % [state.strokes, water_count, " → ".join(shot_sequence)])
