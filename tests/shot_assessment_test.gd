@@ -4,6 +4,8 @@ const ShotSituation = preload("res://simulation/shot_situation.gd")
 const ShotRequirements = preload("res://simulation/shot_requirements.gd")
 const GolferAssessment = preload("res://simulation/golfer_assessment.gd")
 const GolferStateContext = preload("res://simulation/golfer_state_context.gd")
+const RecentPerformanceContext = preload("res://simulation/recent_performance_context.gd")
+const ShotCommitment = preload("res://simulation/shot_commitment.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 
@@ -62,6 +64,33 @@ func _init() -> void:
 	var chase_willingness = assessment.assess_willingness(bill, fresh_bill_driver, attack_option, chasing)
 	var protect_willingness = assessment.assess_willingness(bill, fresh_bill_driver, attack_option, protecting)
 	_expect(float(chase_willingness["willingness_score"]) > float(protect_willingness["willingness_score"]), "same golfer becomes more willing to attack when strategic context demands it")
+
+	# Recent performance changes expectations gradually without altering base ability.
+	var performance = RecentPerformanceContext.new()
+	performance.initialize_from_golfer(bill)
+	var baseline_confidence = performance.confidence_for(bill, driver, "FAIRWAY", 20.0)
+	for _i in range(3):
+		performance.record_shot(driver, "WATER", "POOR", -5.0, -4.0)
+	var slumping_confidence = performance.confidence_for(bill, driver, "FAIRWAY", 20.0)
+	var slump_modifier = performance.performance_modifier_for(driver)
+	_expect(slumping_confidence < baseline_confidence, "repeated poor driver outcomes reduce club-specific confidence")
+	_expect(float(slump_modifier["dispersion_factor"]) > 1.0, "recent poor driving can widen expected dispersion")
+	_expect(float(slump_modifier["directional_bias"]) < 0.0, "recent misses can create a remembered left-right tendency")
+
+	# Miss consequence analysis distinguishes where a miss goes rather than binary failure.
+	var commitment_model = ShotCommitment.new()
+	var miss_map = commitment_model.assess_miss_consequences(situation, situation.target_position, float(fresh_bill_driver["expected_dispersion"]))
+	_expect(miss_map.has("short") == false and miss_map.has("costs"), "miss consequence layer returns directional cost map")
+	_expect(float(miss_map["worst_cost"]) >= float(miss_map["safest_cost"]), "miss consequences identify safer and worse miss directions")
+
+	# Commitment can differ even after a shot has been selected, changing execution quality.
+	var calm_mental = {"focus": 85.0, "nervous": 10.0, "fear": 5.0, "frustrated": 5.0}
+	var doubtful_mental = {"focus": 30.0, "nervous": 80.0, "fear": 70.0, "frustrated": 60.0}
+	var committed = commitment_model.assess_commitment(bill, fresh_bill_driver, 90.0, calm_mental, 0.0)
+	var doubtful = commitment_model.assess_commitment(bill, fresh_bill_driver, 35.0, doubtful_mental, 12.0)
+	_expect(float(committed["score"]) > float(doubtful["score"]), "specific confidence and mental state alter commitment after decision")
+	_expect(float(doubtful["dispersion_factor"]) > float(committed["dispersion_factor"]), "low commitment can worsen execution dispersion")
+	_expect(float(doubtful["carry_factor"]) < float(committed["carry_factor"]), "low commitment can reduce effective carry")
 
 	bill.free(); rick.free()
 	if failures == 0:
