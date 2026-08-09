@@ -1,0 +1,126 @@
+extends RefCounted
+
+# Technique & Skill Development
+# -----------------------------
+# Comfort and confidence can move quickly. Technique moves slowly. Underlying
+# skill moves slowest of all. This model records sustained execution evidence,
+# detects repeated miss patterns, and produces tiny skill deltas only after a
+# meaningful sample has accumulated.
+
+const MIN_TECHNIQUE_EVIDENCE := 18
+const MIN_SKILL_EVIDENCE := 60
+const MAX_TRACKED_EVENTS := 240
+const SKILL_STEP_SCALE := 0.015
+const TECHNIQUE_STEP_SCALE := 0.10
+const MAX_SKILL_DELTA_FROM_BASELINE := 8.0
+const COACHING_TRIGGER_DELTA := -2.5
+
+var baseline_skill: Dictionary = {}
+var skill_delta: Dictionary = {}
+var technique_bias: Dictionary = {}
+var evidence: Dictionary = {}
+var history: Array = []
+
+func initialize_from_golfer(golfer: Node) -> void:
+	baseline_skill.clear()
+	skill_delta.clear()
+	technique_bias.clear()
+	evidence.clear()
+	history.clear()
+	for shot_type in [0, 1, 2, 3]:
+		baseline_skill[shot_type] = float(golfer.get_shot_ability(shot_type))
+		skill_delta[shot_type] = 0.0
+		technique_bias[shot_type] = {"lateral": 0.0, "distance": 0.0, "dispersion": 0.0}
+		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
+
+func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float) -> Dictionary:
+	if not evidence.has(shot_type):
+		return {}
+	var score = clamp(execution_score, 0.0, 100.0)
+	var row: Dictionary = evidence[shot_type]
+	row["count"] = int(row["count"]) + 1
+	row["quality_sum"] = float(row["quality_sum"]) + score
+	row["lateral_sum"] = float(row["lateral_sum"]) + lateral_error
+	row["distance_sum"] = float(row["distance_sum"]) + distance_error
+	evidence[shot_type] = row
+	history.append({"shot_type": shot_type, "score": score, "lateral": lateral_error, "distance": distance_error})
+	while history.size() > MAX_TRACKED_EVENTS:
+		history.pop_front()
+
+	_update_technique(shot_type)
+	_update_skill_delta(shot_type)
+	return development_state(shot_type)
+
+func effective_skill(golfer: Node, shot_type: int) -> float:
+	var current = float(golfer.get_shot_ability(shot_type))
+	var delta = float(skill_delta.get(shot_type, 0.0))
+	return clamp(current + delta, 0.0, 100.0)
+
+func development_state(shot_type: int) -> Dictionary:
+	var base = float(baseline_skill.get(shot_type, 50.0))
+	var delta = float(skill_delta.get(shot_type, 0.0))
+	var row: Dictionary = evidence.get(shot_type, {"count": 0, "quality_sum": 0.0})
+	var count = int(row.get("count", 0))
+	var avg_quality = float(row.get("quality_sum", 0.0)) / max(count, 1)
+	return {
+		"baseline_skill": base,
+		"skill_delta": delta,
+		"effective_skill": clamp(base + delta, 0.0, 100.0),
+		"evidence_count": count,
+		"average_execution_quality": avg_quality,
+		"technique_bias": technique_bias.get(shot_type, {}).duplicate(true),
+		"coaching_candidate": delta <= COACHING_TRIGGER_DELTA,
+		"coaching_trigger_delta": COACHING_TRIGGER_DELTA
+	}
+
+func _update_technique(shot_type: int) -> void:
+	var recent = _recent_events(shot_type, 24)
+	if recent.size() < MIN_TECHNIQUE_EVIDENCE:
+		return
+	var avg_score = 0.0
+	var avg_lateral = 0.0
+	var avg_distance = 0.0
+	for event in recent:
+		avg_score += float(event["score"])
+		avg_lateral += float(event["lateral"])
+		avg_distance += float(event["distance"])
+	avg_score /= recent.size()
+	avg_lateral /= recent.size()
+	avg_distance /= recent.size()
+	var bias: Dictionary = technique_bias[shot_type]
+	bias["lateral"] = lerp(float(bias["lateral"]), avg_lateral, TECHNIQUE_STEP_SCALE)
+	bias["distance"] = lerp(float(bias["distance"]), avg_distance, TECHNIQUE_STEP_SCALE)
+	var quality_penalty = clamp((55.0 - avg_score) / 55.0, 0.0, 1.0)
+	bias["dispersion"] = lerp(float(bias["dispersion"]), quality_penalty, TECHNIQUE_STEP_SCALE)
+	technique_bias[shot_type] = bias
+
+func _update_skill_delta(shot_type: int) -> void:
+	var row: Dictionary = evidence[shot_type]
+	var count = int(row["count"])
+	if count < MIN_SKILL_EVIDENCE:
+		return
+	var recent = _recent_events(shot_type, 80)
+	if recent.size() < MIN_SKILL_EVIDENCE:
+		return
+	var avg_score = 0.0
+	for event in recent:
+		avg_score += float(event["score"])
+	avg_score /= recent.size()
+	# 62 is approximately neutral execution. Sustained execution above/below that
+	# mark nudges true skill only by hundredths at a time.
+	var signal = clamp((avg_score - 62.0) / 38.0, -1.0, 1.0)
+	var current_delta = float(skill_delta[shot_type])
+	var regression = -current_delta * 0.002
+	var step = signal * SKILL_STEP_SCALE + regression
+	skill_delta[shot_type] = clamp(current_delta + step, -MAX_SKILL_DELTA_FROM_BASELINE, MAX_SKILL_DELTA_FROM_BASELINE)
+
+func _recent_events(shot_type: int, limit: int) -> Array:
+	var result: Array = []
+	for i in range(history.size() - 1, -1, -1):
+		var event: Dictionary = history[i]
+		if int(event["shot_type"]) != shot_type:
+			continue
+		result.push_front(event)
+		if result.size() >= limit:
+			break
+	return result
