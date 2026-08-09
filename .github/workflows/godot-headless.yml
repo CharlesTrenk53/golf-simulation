@@ -42,6 +42,9 @@ jobs:
       - name: Run technique and skill development tests
         run: ./godot --headless --path . --script res://tests/technique_skill_development_test.gd
 
+      - name: Run age-retention tests
+        run: ./godot --headless --path . --script res://tests/age_retention_test.gd
+
       - name: Run transient form and persistent skill separation tests
         run: ./godot --headless --path . --script res://tests/transient_form_skill_separation_test.gd
 

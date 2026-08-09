@@ -68,6 +68,7 @@ func _run_career(career_number: int, seed_value: int) -> void:
 		cumulative_shots += annual_shots
 		_emit_year(career_number, seed_value, golfer, development, age, rounds, annual_shots, cumulative_shots, career_form, execution_sum / float(maxi(annual_shots, 1)), persistent_execution_sum / float(maxi(annual_shots, 1)))
 		if age < END_AGE:
+			development.advance_year()
 			lifecycle.advance_year(golfer)
 	golfer.free()
 

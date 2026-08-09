@@ -37,6 +37,14 @@ const AGE_PLASTICITY_POINTS := [
 	[76.0, 0.55]
 ]
 
+const AGE_RETENTION_POINTS := [
+	[55.0, 0.0000],
+	[60.0, 0.0010],
+	[65.0, 0.0025],
+	[70.0, 0.0045],
+	[76.0, 0.0065]
+]
+
 var baseline_skill: Dictionary = {}
 var skill_delta: Dictionary = {}
 var technique_bias: Dictionary = {}
@@ -69,6 +77,21 @@ func initialize_from_golfer(golfer: Node) -> void:
 func set_current_age(age: float) -> void:
 	current_age = max(age, 0.0)
 
+func advance_year() -> void:
+	# Technical retention is a time-based annual effect, deliberately separate
+	# from per-shot learning. Age-related retention pressure applies only to
+	# acquired above-baseline skill; it does not punish additional practice by
+	# making deterioration occur once per shot.
+	var retention_rate = age_retention_rate()
+	if retention_rate <= 0.0:
+		return
+
+	for shot_type in [0, 1, 2, 3]:
+		var current_delta = float(skill_delta.get(shot_type, 0.0))
+		if current_delta <= 0.0:
+			continue
+		skill_delta[shot_type] = current_delta * (1.0 - retention_rate)
+
 func age_learning_plasticity(age: float = -1.0) -> float:
 	var resolved_age = current_age if age < 0.0 else age
 	if resolved_age <= float(AGE_PLASTICITY_POINTS[0][0]):
@@ -82,6 +105,20 @@ func age_learning_plasticity(age: float = -1.0) -> float:
 			var weight = inverse_lerp(younger_age, older_age, resolved_age)
 			return lerp(younger_factor, older_factor, weight)
 	return float(AGE_PLASTICITY_POINTS[AGE_PLASTICITY_POINTS.size() - 1][1])
+
+func age_retention_rate(age: float = -1.0) -> float:
+	var resolved_age = current_age if age < 0.0 else age
+	if resolved_age <= float(AGE_RETENTION_POINTS[0][0]):
+		return float(AGE_RETENTION_POINTS[0][1])
+	for i in range(1, AGE_RETENTION_POINTS.size()):
+		var younger_age = float(AGE_RETENTION_POINTS[i - 1][0])
+		var younger_rate = float(AGE_RETENTION_POINTS[i - 1][1])
+		var older_age = float(AGE_RETENTION_POINTS[i][0])
+		var older_rate = float(AGE_RETENTION_POINTS[i][1])
+		if resolved_age <= older_age:
+			var weight = inverse_lerp(younger_age, older_age, resolved_age)
+			return lerp(younger_rate, older_rate, weight)
+	return float(AGE_RETENTION_POINTS[AGE_RETENTION_POINTS.size() - 1][1])
 
 func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float, persistent_execution_score: float = -1.0) -> Dictionary:
 	if not evidence.has(shot_type):
@@ -235,8 +272,7 @@ func _update_skill_delta(shot_type: int) -> void:
 	# Faster rebound still belongs to technique, confidence, and comfort layers.
 	var regression = 0.0
 	var evidence_points_toward_baseline = (
-		(current_delta < 0.0 and skill_signal > 0.0)
-		or (current_delta > 0.0 and skill_signal < 0.0)
+		current_delta < 0.0 and skill_signal > 0.0
 	)
 	if evidence_points_toward_baseline:
 		regression = -current_delta * lerp(BASELINE_REGRESSION_MIN, BASELINE_REGRESSION_MAX, stability)
