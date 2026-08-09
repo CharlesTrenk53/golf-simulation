@@ -51,7 +51,54 @@ func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
 		var recovery_target = _find_playable_target(state, state.ball_position + direction * recovery_distance, direction, lateral)
 		options.append(_option_with_club("ADVANCE_FROM_ROUGH", golfer, APPROACH, state, recovery_target, 50.0 * lie_quality, _lie_risk(18.0, state), false, _safe_success_chance(80.0, lie_quality)))
 
+		var fairway_target = _find_fairway_recovery_target(state, direction)
+		if fairway_target != state.ball_position:
+			var fairway_recovery = _option_with_club(
+				"RECOVER_TO_FAIRWAY",
+				golfer,
+				APPROACH,
+				state,
+				fairway_target,
+				32.0,
+				_lie_risk(12.0, state),
+				false,
+				_safe_success_chance(90.0, lie_quality)
+			)
+			fairway_recovery["lie_improvement"] = max(0.0, 1.0 - lie_quality)
+			fairway_recovery["expected_surface"] = "FAIRWAY"
+			options.append(fairway_recovery)
+
 	return options
+
+
+func _find_fairway_recovery_target(state, direction: Vector3) -> Vector3:
+	if state.course_context == null:
+		return state.ball_position
+
+	var best_target = state.ball_position
+	var best_distance = INF
+	for zone in state.course_context.zones:
+		if state.course_context.surface_name(zone["surface"]) != "FAIRWAY":
+			continue
+		var center: Vector3 = zone["center"]
+		var half_size: Vector2 = zone["half_size"]
+		var preferred = state.ball_position + direction * 8.0
+		var margin = 2.0
+		var candidate = Vector3(
+			clamp(preferred.x, center.x - half_size.x + margin, center.x + half_size.x - margin),
+			state.ball_position.y,
+			clamp(preferred.z, center.z - half_size.y + margin, center.z + half_size.y - margin)
+		)
+		if _is_water(state, candidate):
+			continue
+		var candidate_surface = state.course_context.surface_name(state.course_context.surface_at(candidate))
+		if candidate_surface != "FAIRWAY":
+			continue
+		var candidate_distance = state.ball_position.distance_to(candidate)
+		if candidate_distance < best_distance:
+			best_distance = candidate_distance
+			best_target = candidate
+	return best_target
 
 
 func _option_with_club(name: String, golfer: Node, shot_type: int, state, target: Vector3, reward: float, risk: float, is_aggressive: bool, success_chance: float) -> Dictionary:
