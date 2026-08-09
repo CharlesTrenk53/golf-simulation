@@ -63,5 +63,8 @@ jobs:
       - name: Trace stochastic career development
         run: ./godot --headless --path . --script res://tests/career_stochastic_development_diagnostic.gd
 
+      - name: Validate recovery across slump severities and durations
+        run: ./godot --headless --path . --script res://tests/recovery_generalization_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
