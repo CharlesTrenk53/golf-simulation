@@ -86,8 +86,8 @@ shadow_enabled = true
 [node name="Panel" type="PanelContainer" parent="UI"]
 offset_left = 24.0
 offset_top = 24.0
-offset_right = 640.0
-offset_bottom = 130.0
+offset_right = 650.0
+offset_bottom = 145.0
 
 [node name="VBox" type="VBoxContainer" parent="UI/Panel"]
 layout_mode = 2
@@ -95,13 +95,24 @@ layout_mode = 2
 [node name="Title" type="Label" parent="UI/Panel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "POC-05D — AUTONOMOUS HOLE"
+text = "POC-05E — AUTONOMOUS GOLFER COMPARISON"
 
 [node name="Status" type="Label" parent="UI/Panel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "Preparing simulation..."
+text = "Preparing comparison..."
 
 [node name="Detail" type="Label" parent="UI/Panel/VBox"]
 layout_mode = 2
-text = "The golfer will play without keyboard input."
+text = "Wild Bill, Reckless Rick, and Careful Carl will play automatically."
+
+[node name="ComparisonPanel" type="PanelContainer" parent="UI"]
+offset_left = 24.0
+offset_top = 165.0
+offset_right = 650.0
+offset_bottom = 365.0
+
+[node name="Comparison" type="Label" parent="UI/ComparisonPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "POC-05E — SAME HOLE COMPARISON\nWaiting for results..."
