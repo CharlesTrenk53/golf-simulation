@@ -1,8 +1,8 @@
 extends RefCounted
 
-# POC-08 next assessment block.
-# These values describe the golfer right now and the competitive situation.
-# They are intentionally separate from stable ability and personality.
+# POC-08 assessment context.
+# These values describe the golfer right now and the competitive/social
+# situation. They are intentionally separate from stable ability/personality.
 
 var fatigue: float = 0.0
 var injury: float = 0.0
@@ -31,6 +31,16 @@ var protecting_lead: bool = false
 var chasing: bool = false
 var match_play: bool = false
 var opponent_advantage: int = 0
+
+# Playing-group context. These describe the *current social environment*, not a
+# permanent personality trait. A future relationship model can populate them.
+var group_comfort: float = 50.0
+var group_support: float = 0.0
+var group_intimidation: float = 0.0
+var group_competitiveness: float = 0.0
+var group_trust: float = 50.0
+var social_pressure: float = 0.0
+var comparison_pressure: float = 0.0
 
 func set_physical_condition(values: Dictionary) -> void:
 	fatigue = clamp(float(values.get("fatigue", fatigue)), 0.0, 100.0)
@@ -63,19 +73,36 @@ func set_strategic_context(values: Dictionary) -> void:
 	match_play = bool(values.get("match_play", match_play))
 	opponent_advantage = int(values.get("opponent_advantage", opponent_advantage))
 
+func set_social_context(values: Dictionary) -> void:
+	group_comfort = clamp(float(values.get("group_comfort", group_comfort)), 0.0, 100.0)
+	group_support = clamp(float(values.get("group_support", group_support)), 0.0, 100.0)
+	group_intimidation = clamp(float(values.get("group_intimidation", group_intimidation)), 0.0, 100.0)
+	group_competitiveness = clamp(float(values.get("group_competitiveness", group_competitiveness)), 0.0, 100.0)
+	group_trust = clamp(float(values.get("group_trust", group_trust)), 0.0, 100.0)
+	social_pressure = clamp(float(values.get("social_pressure", social_pressure)), 0.0, 100.0)
+	comparison_pressure = clamp(float(values.get("comparison_pressure", comparison_pressure)), 0.0, 100.0)
+
 func physical_readiness() -> float:
 	var penalty = fatigue * 0.22 + injury * 0.30 + soreness * 0.12 + heat_cold_stress * 0.10
 	var support = energy * 0.10 + balance * 0.10 + hydration * 0.06
 	return clamp(64.0 + support - penalty, 0.0, 100.0)
 
+func social_execution_readiness() -> float:
+	var positive = group_comfort * 0.18 + group_support * 0.16 + group_trust * 0.10
+	var negative = group_intimidation * 0.20 + social_pressure * 0.18 + comparison_pressure * 0.12
+	return clamp(52.0 + positive - negative, 0.0, 100.0)
+
 func mental_execution_readiness() -> float:
 	var positive = calm * 0.18 + focus * 0.32 + excitement * 0.04
 	var negative = nervous * 0.14 + frustration * 0.12 + anger * 0.10 + distraction * 0.22 + pressure * 0.08
-	return clamp(50.0 + positive - negative, 0.0, 100.0)
+	var base = clamp(50.0 + positive - negative, 0.0, 100.0)
+	# Social context is deliberately a modest modifier. It can influence execution
+	# without overwhelming the golfer's own mental state.
+	return clamp(base + (social_execution_readiness() - 50.0) * 0.18, 0.0, 100.0)
 
 func aggression_pressure() -> float:
 	# Positive values make attacking strategically more valuable; negative values
-	# favor protecting position. This is strategy, not personality.
+	# favor protecting position. This is strategy/context, not personality.
 	var modifier = 0.0
 	if chasing:
 		modifier += 18.0
@@ -89,12 +116,17 @@ func aggression_pressure() -> float:
 		modifier -= min(score_differential_to_target * 3.0, 15.0)
 	if match_play:
 		modifier += clamp(float(opponent_advantage) * 5.0, -15.0, 15.0)
+	# Competitive/comparison pressure can make attacking more attractive, but this
+	# remains smaller than explicit score/match-play context.
+	modifier += (group_competitiveness - 50.0) * 0.10
+	modifier += comparison_pressure * 0.06
 	return clamp(modifier, -35.0, 35.0)
 
 func snapshot() -> Dictionary:
 	return {
 		"physical_readiness": physical_readiness(),
 		"mental_execution_readiness": mental_execution_readiness(),
+		"social_execution_readiness": social_execution_readiness(),
 		"aggression_pressure": aggression_pressure(),
 		"fatigue": fatigue,
 		"injury": injury,
@@ -106,5 +138,11 @@ func snapshot() -> Dictionary:
 		"hole_number": hole_number,
 		"holes_remaining": holes_remaining,
 		"protecting_lead": protecting_lead,
-		"chasing": chasing
+		"chasing": chasing,
+		"group_comfort": group_comfort,
+		"group_support": group_support,
+		"group_intimidation": group_intimidation,
+		"group_competitiveness": group_competitiveness,
+		"social_pressure": social_pressure,
+		"comparison_pressure": comparison_pressure
 	}
