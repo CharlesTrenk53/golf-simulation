@@ -23,6 +23,7 @@ var short_game: float
 var putting: float
 var risk_tolerance: float
 var responsiveness_to_experience: float
+var confidence: float
 
 var decision_variability: float
 var exploration_margin: float = 5.0
@@ -47,6 +48,7 @@ func _ready() -> void:
 	print("Short game: ", short_game)
 	print("Putting: ", putting)
 	print("Risk tolerance: ", risk_tolerance)
+	print("Confidence: ", confidence)
 	print("Responsiveness to experience: ", responsiveness_to_experience)
 	print("Decision variability: ", decision_variability)
 
@@ -61,6 +63,7 @@ func apply_profile() -> void:
 			short_game = 70.0
 			putting = 70.0
 			risk_tolerance = 90.0
+			confidence = 90.0
 			responsiveness_to_experience = 50.0
 			decision_variability = 20.0
 		GolferProfile.RECKLESS_RICK:
@@ -71,6 +74,7 @@ func apply_profile() -> void:
 			short_game = 70.0
 			putting = 70.0
 			risk_tolerance = 90.0
+			confidence = 95.0
 			responsiveness_to_experience = 15.0
 			decision_variability = 65.0
 		GolferProfile.CAREFUL_CARL:
@@ -81,6 +85,7 @@ func apply_profile() -> void:
 			short_game = 70.0
 			putting = 70.0
 			risk_tolerance = 10.0
+			confidence = 60.0
 			responsiveness_to_experience = 85.0
 			decision_variability = 5.0
 
@@ -102,6 +107,9 @@ func choose_best_option(options: Array) -> Dictionary:
 		if evaluation["lie_improvement_bonus"] > 0.0:
 			print("Lie improvement bonus: ", evaluation["lie_improvement_bonus"])
 			print("Expected next lie: ", option.get("expected_surface", "PLAYABLE"))
+		if option.has("next_shot_quality"):
+			print("Next-shot quality: ", option["next_shot_quality"])
+			print("Next shot green reachable: ", option.get("next_shot_green_reachable", false))
 		if option["is_aggressive"]:
 			print("Model success chance: ", option["model_success_chance"])
 			print("Believed success chance: ", evaluation["believed_success_chance"])
@@ -172,15 +180,7 @@ func evaluate_option(option: Dictionary) -> Dictionary:
 			var learning_maturity = clamp(float(aggressive_attempts - 2) / 18.0, 0.0, 1.0)
 			experience_penalty = failure_belief * experience_factor * learning_maturity * 30.0
 	var utility = reward + ability_bonus + lie_improvement_bonus - risk_penalty - experience_penalty
-	return {
-		"utility": utility,
-		"ability": ability,
-		"ability_bonus": ability_bonus,
-		"risk_penalty": risk_penalty,
-		"lie_improvement_bonus": lie_improvement_bonus,
-		"experience_penalty": experience_penalty,
-		"believed_success_chance": believed_success_chance
-	}
+	return {"utility": utility, "ability": ability, "ability_bonus": ability_bonus, "risk_penalty": risk_penalty, "lie_improvement_bonus": lie_improvement_bonus, "experience_penalty": experience_penalty, "believed_success_chance": believed_success_chance}
 
 
 func get_shot_ability(shot_type: int) -> float:
