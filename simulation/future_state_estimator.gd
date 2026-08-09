@@ -59,11 +59,15 @@ func _strokes_from_state(golfer: Node, distance: float, surface: String) -> floa
 		strokes = 1.0 + (100.0 - short_ability) / 170.0 + (100.0 - putting_ability) / 220.0
 	elif distance <= 25.0:
 		strokes = 1.55 + (100.0 - short_ability) / 105.0 + (100.0 - putting_ability) / 250.0
-	elif distance <= comfortable:
-		strokes = 1.75 + (100.0 - approach_ability) / 95.0 + distance / max(comfortable, 1.0) * 0.55
 	else:
-		var full_shots = ceil(distance / max(comfortable, 1.0))
-		strokes = full_shots + 0.85 + (100.0 - approach_ability) / 120.0
+		# Use a continuous distance burden instead of ceil(distance / comfortable).
+		# The previous stair-step made 36.9 and 72.8 units both count as two full
+		# shots for Bill. This smooth curve preserves the intuitive ordering that
+		# every extra unit of distance increases expected strokes gradually.
+		var distance_ratio = distance / max(comfortable, 1.0)
+		var approach_penalty = (100.0 - approach_ability) / 110.0
+		var putting_penalty = (100.0 - putting_ability) / 300.0
+		strokes = 1.55 + distance_ratio * 0.92 + approach_penalty + putting_penalty
 
 	if surface == "ROUGH":
 		strokes += 0.28
@@ -81,8 +85,8 @@ func _putting_strokes(golfer: Node, distance: float) -> float:
 	return max(base + (70.0 - ability) / 120.0, 1.0)
 
 func _comfortable_approach_distance(golfer: Node) -> float:
-	# Uses the golfer's demonstrated approach ability and driving-distance scale
-	# to avoid assuming every golfer has the same one-shot reach.
+	# Uses the golfer's demonstrated approach ability to define a personalized
+	# distance scale for the continuous expected-strokes curve.
 	var approach_ability = float(golfer.get_shot_ability(1))
 	return max(24.0 + approach_ability * 0.18, 26.0)
 
