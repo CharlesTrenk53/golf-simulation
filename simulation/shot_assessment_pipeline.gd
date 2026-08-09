@@ -6,10 +6,12 @@ const GolferAssessment = preload("res://simulation/golfer_assessment.gd")
 const GolferStateContext = preload("res://simulation/golfer_state_context.gd")
 const RecentPerformanceContext = preload("res://simulation/recent_performance_context.gd")
 const ShotCommitment = preload("res://simulation/shot_commitment.gd")
+const FutureStateEstimator = preload("res://simulation/future_state_estimator.gd")
 
 var requirements_model = ShotRequirements.new()
 var assessment_model = GolferAssessment.new()
 var commitment_model = ShotCommitment.new()
+var future_state_model = FutureStateEstimator.new()
 var state_context = GolferStateContext.new()
 var recent_performance = RecentPerformanceContext.new()
 var initialized_for_golfer := false
@@ -43,9 +45,6 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		var miss = commitment_model.assess_miss_consequences(situation, option.get("target_position", state.hole_position), max(float(capability.get("expected_dispersion", 2.0)), 2.0))
 		var willingness = assessment_model.assess_willingness(golfer, capability, option, state_context)
 
-		# The golfer still makes the choice through its personality-driven evaluator.
-		# We modify the perceived reward/risk presented to that evaluator using the
-		# assessment layers rather than replacing personality with an omniscient AI.
 		var base_reward = float(option.get("reward", 0.0))
 		var base_risk = float(option.get("risk", 0.0))
 		var capability_score = float(capability.get("capability_score", 0.0))
@@ -73,6 +72,10 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 			"assessed_reward": assessment_reward,
 			"assessed_risk": assessment_risk
 		}
+		var future_state = future_state_model.estimate(golfer, state, option)
+		option["assessment"]["future_state"] = future_state
+		option["expected_strokes_remaining"] = future_state["expected_strokes_remaining"]
+		option["expected_remaining_distance"] = future_state["expected_remaining_distance"]
 		assessed.append(option)
 	return assessed
 
