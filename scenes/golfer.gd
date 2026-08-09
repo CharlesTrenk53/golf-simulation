@@ -126,9 +126,6 @@ func skill_experience_for(shot_type: int) -> int:
 
 
 func physical_distance_factor(shot_type: int) -> float:
-	# Power is most important on full shots. Mobility contributes to usable speed,
-	# while coordination helps turn physical capacity into centered contact.
-	# Putting is deliberately almost independent of power.
 	var power_weight = 0.0
 	var mobility_weight = 0.0
 	var coordination_weight = 0.0
@@ -150,7 +147,6 @@ func physical_distance_factor(shot_type: int) -> float:
 			mobility_weight = 0.03
 			coordination_weight = 0.95
 	var capacity = physical_power * power_weight + mobility * mobility_weight + coordination * coordination_weight
-	# 70 is the neutral physical profile for the existing POC club distances.
 	return clamp(lerp(0.82, 1.18, capacity / 100.0) / lerp(0.82, 1.18, 0.70), 0.72, 1.22)
 
 
@@ -164,8 +160,9 @@ func choose_best_option(options: Array) -> Dictionary:
 		var utility: float = evaluation["utility"]
 		evaluated_options.append({"option": option, "utility": utility})
 		print("Option: ", option["name"])
-		print("Reward: ", option["reward"])
-		print("Risk: ", option["risk"])
+		print("Decision basis: ", evaluation["decision_basis"])
+		print("Perceived reward: ", evaluation["perceived_reward"])
+		print("Perceived risk: ", evaluation["perceived_risk"])
 		print("Relevant ability: ", evaluation["ability"])
 		print("Ability bonus: ", evaluation["ability_bonus"])
 		if evaluation["lie_improvement_bonus"] > 0.0:
@@ -177,7 +174,8 @@ func choose_best_option(options: Array) -> Dictionary:
 		if option["is_aggressive"]:
 			print("Model success chance: ", option["model_success_chance"])
 			print("Believed success chance: ", evaluation["believed_success_chance"])
-			print("Experience penalty: ", evaluation["experience_penalty"])
+		print("Specific confidence: ", evaluation["specific_confidence"])
+		print("Willingness: ", evaluation["willingness"])
 		print("Utility: ", utility)
 		print("--------------------")
 		if utility > best_utility:
@@ -224,19 +222,73 @@ func apply_behavioral_variability(evaluated_options: Array, best_option: Diction
 
 
 func evaluate_option(option: Dictionary) -> Dictionary:
-	var reward: float = option["reward"]
-	var risk: float = option["risk"]
-	var shot_type: int = option["shot_type"]
+	var assessment: Dictionary = option.get("assessment", {})
+	var subjective: Dictionary = assessment.get("subjective", {})
+	if not subjective.is_empty():
+		return _evaluate_subjective_option(option, subjective)
+	return _evaluate_legacy_option(option)
+
+
+func _evaluate_subjective_option(option: Dictionary, subjective: Dictionary) -> Dictionary:
+	# The golfer now decides from the world as they perceive it. Objective values
+	# remain in assessment.objective for diagnostics and never enter this utility.
+	var perceived_reward = float(subjective.get("assessed_reward", option.get("reward", 0.0)))
+	var perceived_risk = float(subjective.get("assessed_risk", option.get("risk", 0.0)))
+	var shot_type = int(option.get("shot_type", ShotType.APPROACH))
+	var ability = get_shot_ability(shot_type)
+	var ability_bonus = ability * 0.06
+	var risk_weight = 1.0 - (risk_tolerance / 100.0)
+	var risk_penalty = perceived_risk * risk_weight
+	var lie_improvement = float(option.get("lie_improvement", 0.0))
+	var lie_improvement_bonus = lie_improvement * risk_weight * 60.0
+	var believed_success = float(subjective.get("believed_success_chance", option.get("model_success_chance", 50.0)))
+	var specific_confidence = float(subjective.get("specific_confidence", confidence))
+	var willingness_data: Dictionary = subjective.get("willingness", {})
+	var willingness = float(willingness_data.get("willingness_score", 50.0))
+
+	# Belief, willingness and shot-specific confidence are deliberately modest
+	# terms: they can move a close decision without overwhelming course strategy.
+	var belief_adjustment = (believed_success - 50.0) * 0.12
+	var willingness_adjustment = (willingness - 50.0) * 0.10
+	var confidence_adjustment = (specific_confidence - 50.0) * 0.06
+	var utility = perceived_reward + ability_bonus + lie_improvement_bonus - risk_penalty
+	utility += belief_adjustment + willingness_adjustment + confidence_adjustment
+
+	return {
+		"utility": utility,
+		"decision_basis": "SUBJECTIVE_ASSESSMENT",
+		"perceived_reward": perceived_reward,
+		"perceived_risk": perceived_risk,
+		"ability": ability,
+		"ability_bonus": ability_bonus,
+		"risk_penalty": risk_penalty,
+		"lie_improvement_bonus": lie_improvement_bonus,
+		"experience_penalty": 0.0,
+		"believed_success_chance": believed_success,
+		"specific_confidence": specific_confidence,
+		"willingness": willingness,
+		"belief_adjustment": belief_adjustment,
+		"willingness_adjustment": willingness_adjustment,
+		"confidence_adjustment": confidence_adjustment
+	}
+
+
+func _evaluate_legacy_option(option: Dictionary) -> Dictionary:
+	# Compatibility path for older tests/scenes that have not gone through the
+	# shot-assessment pipeline yet.
+	var reward = float(option.get("reward", 0.0))
+	var risk = float(option.get("risk", 0.0))
+	var shot_type = int(option.get("shot_type", ShotType.APPROACH))
 	var ability = get_shot_ability(shot_type)
 	var ability_bonus = ability * 0.10
 	var risk_weight = 1.0 - (risk_tolerance / 100.0)
 	var risk_penalty = risk * risk_weight
-	var lie_improvement: float = float(option.get("lie_improvement", 0.0))
+	var lie_improvement = float(option.get("lie_improvement", 0.0))
 	var lie_improvement_bonus = lie_improvement * risk_weight * 60.0
-	var experience_penalty: float = 0.0
-	var believed_success_chance: float = 100.0
-	if option["is_aggressive"]:
-		var model_success_chance: float = option["model_success_chance"]
+	var experience_penalty = 0.0
+	var believed_success_chance = 100.0
+	if bool(option.get("is_aggressive", false)):
+		var model_success_chance = float(option.get("model_success_chance", 50.0))
 		believed_success_chance = get_believed_aggressive_success(model_success_chance)
 		if aggressive_attempts >= 3:
 			var experience_factor = responsiveness_to_experience / 100.0
@@ -244,7 +296,20 @@ func evaluate_option(option: Dictionary) -> Dictionary:
 			var learning_maturity = clamp(float(aggressive_attempts - 2) / 18.0, 0.0, 1.0)
 			experience_penalty = failure_belief * experience_factor * learning_maturity * 30.0
 	var utility = reward + ability_bonus + lie_improvement_bonus - risk_penalty - experience_penalty
-	return {"utility": utility, "ability": ability, "ability_bonus": ability_bonus, "risk_penalty": risk_penalty, "lie_improvement_bonus": lie_improvement_bonus, "experience_penalty": experience_penalty, "believed_success_chance": believed_success_chance}
+	return {
+		"utility": utility,
+		"decision_basis": "LEGACY",
+		"perceived_reward": reward,
+		"perceived_risk": risk,
+		"ability": ability,
+		"ability_bonus": ability_bonus,
+		"risk_penalty": risk_penalty,
+		"lie_improvement_bonus": lie_improvement_bonus,
+		"experience_penalty": experience_penalty,
+		"believed_success_chance": believed_success_chance,
+		"specific_confidence": confidence,
+		"willingness": 50.0
+	}
 
 
 func get_shot_ability(shot_type: int) -> float:
