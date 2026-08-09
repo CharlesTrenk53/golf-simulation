@@ -22,13 +22,13 @@ func _init() -> void:
 
 	var lifecycle = GolferLifecycle.new()
 	var bag = GolfBag.new()
-	var driver = bag.get_club("DRIVER")
-	var skill_before := golfer.driving
-	var carry_35 := bag.effective_carry(driver, golfer, "TEE", 1.0)
+	var driver: Dictionary = bag.get_club("DRIVER")
+	var skill_before: float = float(golfer.driving)
+	var carry_35: float = float(bag.effective_carry(driver, golfer, "TEE", 1.0))
 
 	for _year in range(30):
 		lifecycle.advance_year(golfer)
-	var carry_65 := bag.effective_carry(driver, golfer, "TEE", 1.0)
+	var carry_65: float = float(bag.effective_carry(driver, golfer, "TEE", 1.0))
 
 	_expect(golfer.age == 65, "thirty annual advances move golfer from age 35 to 65")
 	_expect(abs(golfer.driving - skill_before) < 0.001, "aging does not directly erase Driver technical skill")
