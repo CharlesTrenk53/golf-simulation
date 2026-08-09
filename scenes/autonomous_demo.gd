@@ -56,7 +56,7 @@ func _run_comparison() -> void:
 		_reset_golfer(profile_data["profile"])
 		ball.global_position = start_position
 		state = simulation.create_state(start_position, hole.global_position, 4, seed_value, course_context)
-		_update_status("NOW PLAYING: %s" % golfer.golfer_name, "Lie: %s | Same course and random seed." % state.surface_name())
+		_update_status("NOW PLAYING: %s" % golfer.golfer_name, "Lie: %s | Confidence %.0f | Same course and seed." % [state.surface_name(), golfer.confidence])
 		await get_tree().create_timer(golfer_pause).timeout
 		var result = await _play_current_golfer()
 		results.append(result)
@@ -94,6 +94,9 @@ func _play_current_golfer() -> Dictionary:
 			water_count += 1
 		var title = "%s — Stroke %d: %s" % [golfer.golfer_name, result["shot_number"], selected["name"]]
 		var detail = "%s | %s lie | %.1f remaining | Carry %.1f | Dispersion %.1f" % [club_name, result["surface_before"], before_distance, result["club_effective_carry"], result["club_dispersion"]]
+		if selected.has("next_shot_quality"):
+			var reachable_text = "YES" if selected.get("next_shot_green_reachable", false) else "NO"
+			detail += " | Next-shot quality %.1f | Green next: %s | Confidence %.0f" % [selected["next_shot_quality"], reachable_text, golfer.confidence]
 		_update_status(title, detail)
 		await _animate_ball(result["start_position"], result["landing_position"])
 		if result["outcome"] == "WATER":
