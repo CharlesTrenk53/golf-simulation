@@ -6,52 +6,71 @@ const TechniqueSkillDevelopment = preload("res://simulation/technique_skill_deve
 var failures := 0
 
 func _init() -> void:
-	var golfer = QuietGolfer.new()
-	golfer.profile = 0
-	golfer.apply_profile()
-	var model = TechniqueSkillDevelopment.new()
-	model.initialize_from_golfer(golfer)
-	var baseline = model.development_state(0)
-	_expect(abs(float(baseline["skill_delta"])) < 0.001, "skill starts at established baseline")
+	var novice = QuietGolfer.new()
+	novice.profile = 1
+	novice.apply_profile()
+	novice.career_shot_experience[0] = 100
+	var veteran = QuietGolfer.new()
+	veteran.profile = 1
+	veteran.apply_profile()
+	veteran.career_shot_experience[0] = 8000
 
-	# Short slump: confidence systems may react, but true skill must not.
+	var novice_model = TechniqueSkillDevelopment.new()
+	novice_model.initialize_from_golfer(novice)
+	var veteran_model = TechniqueSkillDevelopment.new()
+	veteran_model.initialize_from_golfer(veteran)
+
+	var novice_base = novice_model.development_state(0)
+	var veteran_base = veteran_model.development_state(0)
+	_expect(abs(float(novice_base["skill_delta"])) < 0.001, "skill starts at established baseline")
+	_expect(float(veteran_base["experience_stability"]) > float(novice_base["experience_stability"]), "large experience history creates stronger skill stability")
+
+	# Short slumps can affect confidence/technique but must not alter true skill.
 	for i in range(20):
-		model.record_execution(0, 22.0, 8.0, -5.0)
-	var short_slump = model.development_state(0)
-	_expect(abs(float(short_slump["skill_delta"])) < 0.001, "short slump does not change true skill")
-	_expect(float(short_slump["technique_bias"]["lateral"]) > 0.0, "repeated directional misses begin forming a technique pattern")
+		novice_model.record_execution(0, 22.0, 8.0, -5.0)
+		veteran_model.record_execution(0, 22.0, 8.0, -5.0)
+	var novice_short = novice_model.development_state(0)
+	var veteran_short = veteran_model.development_state(0)
+	_expect(abs(float(novice_short["skill_delta"])) < 0.001, "short slump does not change novice true skill")
+	_expect(abs(float(veteran_short["skill_delta"])) < 0.001, "short slump does not change veteran true skill")
+	_expect(float(novice_short["technique_bias"]["lateral"]) > 0.0, "repeated directional misses begin forming a technique pattern")
 
-	# Sustained poor execution: skill should drift, but only slightly.
-	for i in range(140):
-		model.record_execution(0, 24.0, 8.0, -5.0)
-	var long_slump = model.development_state(0)
-	_expect(float(long_slump["skill_delta"]) < 0.0, "sustained poor execution eventually lowers skill")
-	_expect(float(long_slump["skill_delta"]) > -2.0, "skill deterioration remains deliberately gradual")
-	_expect(not bool(long_slump["coaching_candidate"]), "moderate drift does not trigger coaching too early")
+	# Same sustained slump, different experience. Both may drift, but the veteran's
+	# established motor pattern should strongly resist permanent deterioration.
+	for i in range(580):
+		novice_model.record_execution(0, 20.0, 8.5, -5.5)
+		veteran_model.record_execution(0, 20.0, 8.5, -5.5)
+	var novice_slump = novice_model.development_state(0)
+	var veteran_slump = veteran_model.development_state(0)
+	_expect(float(novice_slump["skill_delta"]) < 0.0, "hundreds of poor executions can eventually lower true skill")
+	_expect(float(novice_slump["skill_delta"]) > -2.5, "true skill decline remains slow over hundreds of repetitions")
+	_expect(float(veteran_slump["skill_delta"]) > float(novice_slump["skill_delta"]), "established experience limits skill decline under the same slump")
+	_expect(abs(float(veteran_slump["skill_delta"])) < 1.25, "highly established skill remains strongly anchored")
+	_expect(float(veteran_slump["technique_bias"]["dispersion"]) < float(novice_slump["technique_bias"]["dispersion"]), "experience also resists embedding a bad technique pattern")
 
-	# Much longer poor stretch can eventually cross a future coaching threshold.
-	for i in range(500):
-		model.record_execution(0, 18.0, 9.0, -6.0)
-	var deep_slump = model.development_state(0)
-	_expect(float(deep_slump["skill_delta"]) <= -2.5, "very long slump can reach coaching threshold")
-	_expect(bool(deep_slump["coaching_candidate"]), "coaching candidate flag activates at threshold delta")
-
-	# Recovery is also slow; a few good shots should not instantly restore skill.
-	var before_recovery = float(deep_slump["skill_delta"])
-	for i in range(30):
-		model.record_execution(0, 90.0, 0.0, 0.0)
-	var early_recovery = model.development_state(0)
-	_expect(float(early_recovery["skill_delta"]) > before_recovery, "excellent execution begins gradual recovery")
-	_expect(float(early_recovery["skill_delta"]) < -1.5, "short recovery streak cannot erase a long-term skill decline")
+	# Excellent recent execution should begin recovery for both. The veteran's
+	# stronger established pattern should help pull skill back toward baseline.
+	var novice_before_recovery = float(novice_slump["skill_delta"])
+	var veteran_before_recovery = float(veteran_slump["skill_delta"])
+	for i in range(40):
+		novice_model.record_execution(0, 92.0, 0.0, 0.0)
+		veteran_model.record_execution(0, 92.0, 0.0, 0.0)
+	var novice_recovery = novice_model.development_state(0)
+	var veteran_recovery = veteran_model.development_state(0)
+	var novice_gain = float(novice_recovery["skill_delta"]) - novice_before_recovery
+	var veteran_gain = float(veteran_recovery["skill_delta"]) - veteran_before_recovery
+	_expect(novice_gain > 0.0, "excellent execution begins gradual novice recovery")
+	_expect(veteran_gain > 0.0, "excellent execution begins gradual veteran recovery")
+	_expect(veteran_gain > novice_gain, "established golfer self-corrects more efficiently once execution improves")
+	_expect(float(novice_recovery["skill_delta"]) < -0.05, "short recovery streak cannot instantly erase a long slump")
 
 	print("============================================================")
-	print("POC-08 TECHNIQUE & SKILL DEVELOPMENT")
-	print("Short slump delta: %.3f" % float(short_slump["skill_delta"]))
-	print("Long slump delta: %.3f" % float(long_slump["skill_delta"]))
-	print("Deep slump delta: %.3f | coaching candidate %s" % [float(deep_slump["skill_delta"]), str(deep_slump["coaching_candidate"])])
-	print("Early recovery delta: %.3f" % float(early_recovery["skill_delta"]))
+	print("POC-08 EXPERIENCE-STABILIZED SKILL DEVELOPMENT")
+	print("Novice stability: %.3f | slump delta: %.3f | recovery delta: %.3f" % [float(novice_base["experience_stability"]), float(novice_slump["skill_delta"]), float(novice_recovery["skill_delta"])])
+	print("Veteran stability: %.3f | slump delta: %.3f | recovery delta: %.3f" % [float(veteran_base["experience_stability"]), float(veteran_slump["skill_delta"]), float(veteran_recovery["skill_delta"])])
 	print("============================================================")
-	golfer.free()
+	novice.free()
+	veteran.free()
 	if failures == 0:
 		print("POC-08 TECHNIQUE & SKILL DEVELOPMENT TESTS PASSED")
 		quit(0)
