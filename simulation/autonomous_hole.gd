@@ -27,6 +27,8 @@ func play_step(
 	if not state.can_continue():
 		return {}
 
+	var surface_before = state.surface_name()
+	var lie_quality_before = state.current_lie_quality
 	var options = option_generator.generate_options(golfer, state, hazards)
 	if options.is_empty():
 		return {}
@@ -34,9 +36,17 @@ func play_step(
 	var chosen = golfer.choose_best_option(options)
 	var result = _execute_option(golfer, state, chosen, hazards)
 	result["selected_option"] = chosen
-	result["surface_before"] = state.surface_name()
-	result["lie_quality_before"] = state.current_lie_quality
-	shot_history.append(result)
+	result["surface_before"] = surface_before
+	result["lie_quality_before"] = lie_quality_before
+
+	# Course geometry is authoritative. If the actual landing point resolves to
+	# WATER, the shot is a water outcome regardless of option type or whether an
+	# aggressive carry check happened to fail.
+	if state.course_context != null:
+		var landing_surface = state.course_context.surface_at(result["landing_position"])
+		if state.course_context.surface_name(landing_surface) == "WATER":
+			result["outcome"] = "WATER"
+			result["penalty_strokes"] = max(int(result["penalty_strokes"]), 1)
 
 	state.advance_to(
 		result["landing_position"],
@@ -45,6 +55,7 @@ func play_step(
 	)
 	result["surface_after"] = state.surface_name()
 	result["lie_quality_after"] = state.current_lie_quality
+	shot_history.append(result)
 
 	golfer.record_shot_result(
 		result["outcome"],
