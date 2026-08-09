@@ -2,6 +2,7 @@ extends SceneTree
 
 const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
+const CourseContext = preload("res://simulation/course_context.gd")
 
 const RUNS_PER_GOLFER := 1000
 const START_POSITION := Vector3(0, 0.9, 55)
@@ -26,35 +27,38 @@ var profiles: Array = [
 
 func _init() -> void:
 	print("============================================================")
-	print("POC-05F MONTE CARLO GOLFER SIMULATION")
+	print("POC-06C LIE-AWARE MONTE CARLO GOLFER SIMULATION")
 	print("Runs per golfer: ", RUNS_PER_GOLFER)
-	print("Same hole geometry; seeds 1 through ", RUNS_PER_GOLFER)
+	print("Same course context; seeds 1 through ", RUNS_PER_GOLFER)
+	print("Surfaces: tee, fairway, rough, bunker, green, water")
 	print("============================================================")
 
 	for profile_data in profiles:
-		var summary = _run_profile(
-			profile_data["profile"],
-			profile_data["name"]
-		)
+		var summary = _run_profile(profile_data["profile"], profile_data["name"])
 		_print_summary(summary)
 
-	print("POC-05F MONTE CARLO COMPLETE")
+	print("POC-06C MONTE CARLO COMPLETE")
 	quit(0)
+
+
+func _build_course_context():
+	var context = CourseContext.new()
+	# Default outside explicit zones is rough. Zones are checked last-added first.
+	context.add_zone("Fairway", CourseContext.Surface.FAIRWAY, Vector3(0, 0, 5), Vector2(11, 45))
+	context.add_zone("Tee", CourseContext.Surface.TEE, START_POSITION, Vector2(8, 5))
+	context.add_zone("Green", CourseContext.Surface.GREEN, HOLE_POSITION, Vector2(14, 11))
+	context.add_zone("Front Bunker", CourseContext.Surface.BUNKER, Vector3(11, 0, -39), Vector2(6, 7))
+	context.add_zone("Water", CourseContext.Surface.WATER, Vector3(0, 0, 5), Vector2(16, 6))
+	return context
 
 
 func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 	var strokes: Array[int] = []
-	var finished_count: int = 0
-	var total_water: int = 0
-	var total_shots: int = 0
-	var option_counts := {
-		"ATTACK": 0,
-		"LAYUP": 0,
-		"BAILOUT": 0,
-		"PITCH": 0,
-		"SAFE_PITCH": 0,
-		"PUTT": 0
-	}
+	var finished_count := 0
+	var total_water := 0
+	var total_shots := 0
+	var option_counts := {}
+	var surface_counts := {}
 	var score_counts := {}
 
 	for run_number in range(1, RUNS_PER_GOLFER + 1):
@@ -69,7 +73,8 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 			HOLE_POSITION,
 			hazards,
 			PAR,
-			run_number
+			run_number,
+			_build_course_context()
 		)
 
 		var score: int = result["strokes"]
@@ -81,13 +86,11 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 		for shot in result["history"]:
 			total_shots += 1
 			var option_name: String = shot["option"]
-			if not option_counts.has(option_name):
-				option_counts[option_name] = 0
-			option_counts[option_name] += 1
+			option_counts[option_name] = int(option_counts.get(option_name, 0)) + 1
+			var surface_name: String = shot["surface_after"]
+			surface_counts[surface_name] = int(surface_counts.get(surface_name, 0)) + 1
 
-		if not score_counts.has(score):
-			score_counts[score] = 0
-		score_counts[score] += 1
+		score_counts[score] = int(score_counts.get(score, 0)) + 1
 		golfer.free()
 
 	strokes.sort()
@@ -101,17 +104,15 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 		"worst": strokes.back(),
 		"finish_rate": float(finished_count) / RUNS_PER_GOLFER * 100.0,
 		"water_per_hole": float(total_water) / RUNS_PER_GOLFER,
-		"attack_rate": _option_rate(option_counts, "ATTACK", total_shots),
-		"layup_rate": _option_rate(option_counts, "LAYUP", total_shots),
-		"bailout_rate": _option_rate(option_counts, "BAILOUT", total_shots),
-		"pitch_rate": _option_rate(option_counts, "PITCH", total_shots),
-		"putt_rate": _option_rate(option_counts, "PUTT", total_shots),
+		"total_shots": total_shots,
+		"option_counts": option_counts,
+		"surface_counts": surface_counts,
 		"score_counts": score_counts
 	}
 
 
 func _mean(values: Array[int]) -> float:
-	var total: int = 0
+	var total := 0
 	for value in values:
 		total += value
 	return float(total) / values.size()
@@ -122,17 +123,29 @@ func _percentile(values: Array[int], proportion: float) -> int:
 	return values[clamp(index, 0, values.size() - 1)]
 
 
-func _option_rate(counts: Dictionary, option_name: String, total: int) -> float:
+func _rate(counts: Dictionary, name: String, total: int) -> float:
 	if total == 0:
 		return 0.0
-	return float(counts.get(option_name, 0)) / total * 100.0
+	return float(counts.get(name, 0)) / total * 100.0
 
 
 func _score_percent(score_counts: Dictionary, score: int) -> float:
 	return float(score_counts.get(score, 0)) / RUNS_PER_GOLFER * 100.0
 
 
+func _score_5_plus(score_counts: Dictionary) -> float:
+	var count := 0
+	for score in score_counts.keys():
+		if int(score) >= 5:
+			count += int(score_counts[score])
+	return float(count) / RUNS_PER_GOLFER * 100.0
+
+
 func _print_summary(summary: Dictionary) -> void:
+	var options: Dictionary = summary["option_counts"]
+	var surfaces: Dictionary = summary["surface_counts"]
+	var total: int = summary["total_shots"]
+
 	print("")
 	print("-------------------- ", summary["name"], " --------------------")
 	print("Mean strokes: %.3f" % summary["mean"])
@@ -146,16 +159,13 @@ func _print_summary(summary: Dictionary) -> void:
 	print("Score 3: %.1f%%" % _score_percent(summary["score_counts"], 3))
 	print("Score 4: %.1f%%" % _score_percent(summary["score_counts"], 4))
 	print("Score 5+: %.1f%%" % _score_5_plus(summary["score_counts"]))
-	print("Attack rate: %.1f%%" % summary["attack_rate"])
-	print("Layup rate: %.1f%%" % summary["layup_rate"])
-	print("Bailout rate: %.1f%%" % summary["bailout_rate"])
-	print("Pitch rate: %.1f%%" % summary["pitch_rate"])
-	print("Putt rate: %.1f%%" % summary["putt_rate"])
-
-
-func _score_5_plus(score_counts: Dictionary) -> float:
-	var count: int = 0
-	for score in score_counts.keys():
-		if int(score) >= 5:
-			count += int(score_counts[score])
-	return float(count) / RUNS_PER_GOLFER * 100.0
+	print("-- Decisions --")
+	for option_name in ["ATTACK", "LAYUP", "BAILOUT", "ADVANCE_FROM_ROUGH", "BUNKER_EXIT", "SPLASH_OUT", "SAFE_BUNKER_EXIT", "PITCH", "SAFE_PITCH", "PUTT"]:
+		var count: int = int(options.get(option_name, 0))
+		if count > 0:
+			print("%s: %.1f%% (%d)" % [option_name, _rate(options, option_name, total), count])
+	print("-- Landing surfaces --")
+	for surface_name in ["TEE", "FAIRWAY", "ROUGH", "BUNKER", "GREEN", "WATER"]:
+		var count: int = int(surfaces.get(surface_name, 0))
+		if count > 0:
+			print("%s: %.1f%% (%d)" % [surface_name, _rate(surfaces, surface_name, total), count])
