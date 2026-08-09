@@ -35,7 +35,7 @@ func _ready() -> void:
 	start_position = ball.global_position
 	hazards = [{"name": "Water", "position": water_hazard.global_position, "radius": 10.0, "risk": 90.0}]
 	course_context = _build_course_context()
-	_update_status("Ready", "Three golfers will play the same lie-aware hole.")
+	_update_status("Ready", "Three golfers will choose strategy and club autonomously.")
 	_update_comparison()
 	await get_tree().create_timer(0.8).timeout
 	await _run_comparison()
@@ -62,7 +62,7 @@ func _run_comparison() -> void:
 		results.append(result)
 		_update_comparison()
 		await get_tree().create_timer(golfer_pause).timeout
-	_update_status("COMPARISON COMPLETE", "All three golfers played the same lie-aware course autonomously.")
+	_update_status("COMPARISON COMPLETE", "All three golfers selected strategy and clubs autonomously.")
 
 
 func _reset_golfer(profile_value: int) -> void:
@@ -87,23 +87,20 @@ func _play_current_golfer() -> Dictionary:
 			_update_status("Stopped", "No valid shot options were available.")
 			break
 		var selected = result["selected_option"]
-		shot_sequence.append(selected["name"])
+		var club_name: String = result.get("club_name", "")
+		var shot_label = selected["name"] if club_name.is_empty() else "%s [%s]" % [selected["name"], club_name]
+		shot_sequence.append(shot_label)
 		if result["outcome"] == "WATER":
 			water_count += 1
 		var title = "%s — Stroke %d: %s" % [golfer.golfer_name, result["shot_number"], selected["name"]]
-		var detail = "%s lie | %.1f remaining | Risk %.1f | Expected %.1f%%" % [result["surface_before"], before_distance, selected["risk"], selected["model_success_chance"]]
+		var detail = "%s | %s lie | %.1f remaining | Carry %.1f | Dispersion %.1f" % [club_name, result["surface_before"], before_distance, result["club_effective_carry"], result["club_dispersion"]]
 		_update_status(title, detail)
 		await _animate_ball(result["start_position"], result["landing_position"])
 		if result["outcome"] == "WATER":
-			_update_status(
-				title,
-				"WATER | Shot +1 | Penalty +1 | Score %d → %d | Drop to %s" % [score_before, state.strokes, result["surface_after"]]
-			)
+			_update_status(title, "%s | WATER | Shot +1 | Penalty +1 | Score %d → %d | Drop to %s" % [club_name, score_before, state.strokes, result["surface_after"]])
 			await get_tree().create_timer(decision_pause).timeout
-			ball.global_position = result["relief_position"]
-		else:
-			ball.global_position = result["relief_position"]
-		_update_status(title, "%s | Now %s | %.1f from hole | Score %d" % [result["outcome"], result["surface_after"], state.remaining_distance(), state.strokes])
+		ball.global_position = result["relief_position"]
+		_update_status(title, "%s | %s | Now %s | %.1f from hole | Score %d" % [club_name, result["outcome"], result["surface_after"], state.remaining_distance(), state.strokes])
 		await get_tree().create_timer(decision_pause).timeout
 	var finish_text = "Finished" if state.finished else "Stroke limit"
 	_update_status("%s: %s" % [golfer.golfer_name, finish_text], "Score %d | Water %d | %s" % [state.strokes, water_count, " → ".join(shot_sequence)])
@@ -130,7 +127,7 @@ func _update_status(title: String, detail: String) -> void:
 
 
 func _update_comparison() -> void:
-	var lines: Array[String] = ["POC-06F — LIE-AWARE VISUAL COMPARISON"]
+	var lines: Array[String] = ["POC-07 — CLUB-AWARE AUTONOMOUS COMPARISON"]
 	if results.is_empty():
 		lines.append("Waiting for results...")
 	else:
