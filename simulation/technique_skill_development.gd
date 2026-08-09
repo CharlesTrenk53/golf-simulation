@@ -16,6 +16,9 @@ const COACHING_TRIGGER_DELTA := -2.5
 const EXPERIENCE_STABILITY_HALF_LIFE := 1800.0
 const DEVELOPMENT_RESISTANCE_SCALE := 6.0
 const DEVELOPMENT_RESISTANCE_POWER := 1.35
+const BASELINE_RECOVERY_EXPERIENCE_MAX := 1.75
+const BASELINE_REGRESSION_MIN := 0.0008
+const BASELINE_REGRESSION_MAX := 0.0018
 
 var baseline_skill: Dictionary = {}
 var skill_delta: Dictionary = {}
@@ -129,13 +132,14 @@ func _update_skill_delta(shot_type: int) -> void:
 
 	# Experience has three distinct roles:
 	# 1) it protects established ability from deterioration;
-	# 2) it speeds restoration toward a previously established baseline;
+	# 2) it helps restoration toward a previously established baseline, but true
+	#    skill recovery remains slower than form, technique, or confidence;
 	# 3) it makes acquisition of genuinely new above-baseline skill slower.
 	var experience_modifier: float
 	if skill_signal < 0.0:
 		experience_modifier = lerp(1.0, 0.32, stability)
 	elif current_delta < 0.0:
-		experience_modifier = lerp(1.0, 2.20, stability)
+		experience_modifier = lerp(1.0, BASELINE_RECOVERY_EXPERIENCE_MAX, stability)
 	else:
 		experience_modifier = lerp(1.0, 0.45, stability)
 
@@ -152,18 +156,17 @@ func _update_skill_delta(shot_type: int) -> void:
 	elif skill_signal < 0.0:
 		boundary_modifier = sqrt(clamp(current_skill / 100.0, 0.0, 1.0))
 
-	# Baseline regression is a recovery aid, not an automatic healing force.
-	# It applies only when current evidence points back toward the established
-	# baseline. Continued poor execution cannot make a below-baseline golfer
-	# recover, and continued excellent execution cannot pull an improving golfer
-	# downward merely because the old baseline was lower.
+	# Baseline regression is deliberately modest. It preserves the useful idea
+	# that established golfers self-correct somewhat faster, without letting a
+	# relatively short run of good swings instantly erase genuine skill loss.
+	# Faster rebound still belongs to technique, confidence, and comfort layers.
 	var regression = 0.0
 	var evidence_points_toward_baseline = (
 		(current_delta < 0.0 and skill_signal > 0.0)
 		or (current_delta > 0.0 and skill_signal < 0.0)
 	)
 	if evidence_points_toward_baseline:
-		regression = -current_delta * lerp(0.0015, 0.0035, stability)
+		regression = -current_delta * lerp(BASELINE_REGRESSION_MIN, BASELINE_REGRESSION_MAX, stability)
 
 	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * resistance * boundary_modifier + regression
 	var next_skill = clamp(current_skill + step, 0.0, 100.0)
