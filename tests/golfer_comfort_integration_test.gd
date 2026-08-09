@@ -8,6 +8,7 @@ const ShotAssessmentPipeline = preload("res://simulation/shot_assessment_pipelin
 var failures := 0
 
 func _init() -> void:
+	print("DEBUG comfort test: start")
 	var golfer = QuietGolfer.new()
 	golfer.profile = 0
 	golfer.apply_profile()
@@ -15,7 +16,9 @@ func _init() -> void:
 	var driver = bag.get_club("DRIVER")
 	var state = CourseState.new(Vector3.ZERO, Vector3(0, 0, -70), 4)
 	var pipeline = ShotAssessmentPipeline.new()
+	print("DEBUG comfort test: before initialize")
 	pipeline.initialize(golfer)
+	print("DEBUG comfort test: after initialize")
 
 	var option = {
 		"name": "ATTACK",
@@ -31,7 +34,9 @@ func _init() -> void:
 		"shot_form": "NORMAL"
 	}
 
+	print("DEBUG comfort test: before first assessment")
 	var before = pipeline.assess_options(golfer, state, [option], [])[0]
+	print("DEBUG comfort test: after first assessment")
 	var before_assessment: Dictionary = before["assessment"]
 	var before_capability = float(before_assessment["capability"]["capability_score"])
 	var before_confidence = float(before_assessment["specific_confidence"])
@@ -39,7 +44,8 @@ func _init() -> void:
 	var before_willingness = float(before_assessment["willingness"]["willingness_score"])
 	var before_belief = float(before_assessment["comfort_believed_success_chance"])
 
-	for _i in range(5):
+	for i in range(5):
+		print("DEBUG comfort test: before record %d" % [i + 1])
 		pipeline.record_result(before, {
 			"target_position": state.hole_position,
 			"landing_position": Vector3(15, 0, -48),
@@ -48,8 +54,11 @@ func _init() -> void:
 			"execution_quality": "POOR",
 			"execution_score": 15.0
 		})
+		print("DEBUG comfort test: after record %d" % [i + 1])
 
+	print("DEBUG comfort test: before second assessment")
 	var after = pipeline.assess_options(golfer, state, [option], [])[0]
+	print("DEBUG comfort test: after second assessment")
 	var after_assessment: Dictionary = after["assessment"]
 	var after_capability = float(after_assessment["capability"]["capability_score"])
 	var after_confidence = float(after_assessment["specific_confidence"])
@@ -64,16 +73,21 @@ func _init() -> void:
 	_expect(after_belief < before_belief, "lower comfort reduces perceived success without changing model success")
 	_expect(is_equal_approx(float(after["model_success_chance"]), 72.0), "objective model success chance remains unchanged")
 
+	print("DEBUG comfort test: before commitment checks")
 	var commitment_before = pipeline.commitment_model.assess_commitment(golfer, before_assessment["capability"], before_confidence, {"focus": 75.0, "nervous": 0.0, "fear": 0.0, "frustrated": 0.0}, 0.0)
 	var commitment_after = pipeline.commitment_model.assess_commitment(golfer, after_assessment["capability"], after_confidence, {"focus": 75.0, "nervous": 0.0, "fear": 0.0, "frustrated": 0.0}, 0.0)
 	_expect(float(commitment_after["score"]) < float(commitment_before["score"]), "learned comfort can reduce commitment through specific confidence")
+	print("DEBUG comfort test: after commitment checks")
 
 	golfer.free()
+	print("DEBUG comfort test: golfer freed")
 	if failures == 0:
 		print("POC-08 GOLFER COMFORT INTEGRATION TESTS PASSED")
+		print("DEBUG comfort test: quitting success")
 		quit(0)
 	else:
 		push_error("POC-08 GOLFER COMFORT INTEGRATION TESTS FAILED: %d" % failures)
+		print("DEBUG comfort test: quitting failure")
 		quit(1)
 
 func _expect(condition: bool, label: String) -> void:
