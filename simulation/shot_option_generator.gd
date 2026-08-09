@@ -1,9 +1,13 @@
 extends RefCounted
 
+const GolfBag = preload("res://simulation/golf_bag.gd")
+
 const DRIVE := 0
 const APPROACH := 1
 const SHORT_GAME := 2
 const PUTT := 3
+
+var bag = GolfBag.new()
 
 
 func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
@@ -12,13 +16,13 @@ func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
 	var lie_quality: float = state.current_lie_quality
 
 	if surface == "GREEN" or distance <= 8.0:
-		return [_putt_option(state)]
+		return [_putt_option(golfer, state)]
 	if surface == "BUNKER":
-		return _bunker_options(state, distance)
+		return _bunker_options(golfer, state, distance)
 	if distance <= 25.0:
 		return [
-			_direct_option("PITCH", SHORT_GAME, state, 68.0 * lie_quality, _lie_risk(12.0, state)),
-			_direct_option("SAFE_PITCH", SHORT_GAME, state, 58.0 * lie_quality, _lie_risk(5.0, state))
+			_clubbed_direct_option("PITCH", golfer, SHORT_GAME, state, 68.0 * lie_quality, _lie_risk(12.0, state)),
+			_clubbed_direct_option("SAFE_PITCH", golfer, SHORT_GAME, state, 58.0 * lie_quality, _lie_risk(5.0, state))
 		]
 
 	var options: Array = []
@@ -29,27 +33,55 @@ func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
 	var layup_target = _find_playable_target(state, state.ball_position + direction * layup_distance, direction, lateral)
 	var bailout_target = _find_playable_target(state, state.ball_position + direction * bailout_distance + lateral * 8.0, direction, lateral)
 
-	options.append(_option("LAYUP", APPROACH, layup_target, 45.0 * lie_quality, _lie_risk(10.0, state), false, _safe_success_chance(92.0, lie_quality)))
-	options.append(_option("BAILOUT", APPROACH, bailout_target, 55.0 * lie_quality, _lie_risk(30.0, state), false, _safe_success_chance(86.0, lie_quality)))
+	options.append(_option_with_club(
+		"LAYUP", golfer, APPROACH, state, layup_target,
+		45.0 * lie_quality, _lie_risk(10.0, state), false,
+		_safe_success_chance(92.0, lie_quality)
+	))
+	options.append(_option_with_club(
+		"BAILOUT", golfer, APPROACH, state, bailout_target,
+		55.0 * lie_quality, _lie_risk(30.0, state), false,
+		_safe_success_chance(86.0, lie_quality)
+	))
 
 	if surface == "TEE" or surface == "FAIRWAY" or state.course_context == null:
-		var attack_distance = min(distance, golfer.driving_distance * lie_quality)
+		var preferred_attack_distance = min(distance, golfer.driving_distance * lie_quality)
+		var attack_club = bag.best_distance_match(golfer, surface, lie_quality, preferred_attack_distance)
+		var attack_distance = preferred_attack_distance
+		if not attack_club.is_empty():
+			attack_distance = min(distance, bag.effective_carry(attack_club, golfer, surface, lie_quality))
 		var attack_target = state.ball_position + direction * attack_distance
 		var attack_risk = _estimate_attack_risk(golfer, state, attack_target, hazards)
 		var success_chance = _estimate_success_chance(golfer, attack_distance, lie_quality)
-		options.append(_option("ATTACK", DRIVE, attack_target, 65.0 * lie_quality, _lie_risk(attack_risk, state), true, success_chance))
+		options.append(_option(
+			"ATTACK", DRIVE, attack_target, 65.0 * lie_quality,
+			_lie_risk(attack_risk, state), true, success_chance, attack_club
+		))
 	elif surface == "ROUGH":
 		var recovery_distance = min(distance * 0.50, 32.0) * lie_quality
 		var recovery_target = _find_playable_target(state, state.ball_position + direction * recovery_distance, direction, lateral)
-		options.append(_option("ADVANCE_FROM_ROUGH", APPROACH, recovery_target, 50.0 * lie_quality, _lie_risk(18.0, state), false, _safe_success_chance(80.0, lie_quality)))
+		options.append(_option_with_club(
+			"ADVANCE_FROM_ROUGH", golfer, APPROACH, state, recovery_target,
+			50.0 * lie_quality, _lie_risk(18.0, state), false,
+			_safe_success_chance(80.0, lie_quality)
+		))
 
 	return options
+
+
+func _option_with_club(name: String, golfer: Node, shot_type: int, state, target: Vector3, reward: float, risk: float, is_aggressive: bool, success_chance: float) -> Dictionary:
+	var desired_distance = state.ball_position.distance_to(target)
+	var club = bag.best_distance_match(golfer, state.surface_name(), state.current_lie_quality, desired_distance)
+	return _option(name, shot_type, target, reward, risk, is_aggressive, success_chance, club)
+
+
+func _clubbed_direct_option(name: String, golfer: Node, shot_type: int, state, reward: float, risk: float) -> Dictionary:
+	return _option_with_club(name, golfer, shot_type, state, state.hole_position, reward, risk, false, 100.0)
 
 
 func _find_playable_target(state, preferred: Vector3, direction: Vector3, lateral: Vector3) -> Vector3:
 	if state.course_context == null or not _is_water(state, preferred):
 		return preferred
-	# Search for a conservative dry target around and short of the preferred point.
 	for side_offset in [8.0, -8.0, 14.0, -14.0, 20.0, -20.0]:
 		var candidate = preferred + lateral * side_offset
 		if not _is_water(state, candidate):
@@ -68,30 +100,37 @@ func _is_water(state, position: Vector3) -> bool:
 	return state.course_context.surface_name(surface) == "WATER"
 
 
-func _bunker_options(state, distance: float) -> Array:
+func _bunker_options(golfer: Node, state, distance: float) -> Array:
 	var lie_quality: float = state.current_lie_quality
 	if distance <= 28.0:
 		return [
-			_direct_option("SPLASH_OUT", SHORT_GAME, state, 54.0 * lie_quality, _lie_risk(14.0, state)),
-			_direct_option("SAFE_BUNKER_EXIT", SHORT_GAME, state, 45.0 * lie_quality, _lie_risk(5.0, state))
+			_clubbed_direct_option("SPLASH_OUT", golfer, SHORT_GAME, state, 54.0 * lie_quality, _lie_risk(14.0, state)),
+			_clubbed_direct_option("SAFE_BUNKER_EXIT", golfer, SHORT_GAME, state, 45.0 * lie_quality, _lie_risk(5.0, state))
 		]
 	var direction = _direction_to_hole(state)
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
 	var exit_distance = min(distance * 0.25, 18.0)
 	var exit_target = _find_playable_target(state, state.ball_position + direction * exit_distance, direction, lateral)
-	return [_option("BUNKER_EXIT", SHORT_GAME, exit_target, 42.0 * lie_quality, _lie_risk(8.0, state), false, 72.0)]
+	return [_option_with_club("BUNKER_EXIT", golfer, SHORT_GAME, state, exit_target, 42.0 * lie_quality, _lie_risk(8.0, state), false, 72.0)]
 
 
-func _putt_option(state) -> Dictionary:
-	return _option("PUTT", PUTT, state.hole_position, 80.0, 5.0, false, 100.0)
+func _putt_option(golfer: Node, state) -> Dictionary:
+	return _option_with_club("PUTT", golfer, PUTT, state, state.hole_position, 80.0, 5.0, false, 100.0)
 
 
-func _direct_option(name: String, shot_type: int, state, reward: float, risk: float) -> Dictionary:
-	return _option(name, shot_type, state.hole_position, reward, risk, false, 100.0)
-
-
-func _option(name: String, shot_type: int, target_position: Vector3, reward: float, risk: float, is_aggressive: bool, model_success_chance: float) -> Dictionary:
-	return {"name": name, "shot_type": shot_type, "target_position": target_position, "reward": reward, "risk": risk, "is_aggressive": is_aggressive, "model_success_chance": model_success_chance}
+func _option(name: String, shot_type: int, target_position: Vector3, reward: float, risk: float, is_aggressive: bool, model_success_chance: float, club: Dictionary = {}) -> Dictionary:
+	return {
+		"name": name,
+		"shot_type": shot_type,
+		"target_position": target_position,
+		"reward": reward,
+		"risk": risk,
+		"is_aggressive": is_aggressive,
+		"model_success_chance": model_success_chance,
+		"club": club,
+		"club_id": club.get("id", ""),
+		"club_name": club.get("name", "")
+	}
 
 
 func _direction_to_hole(state) -> Vector3:
