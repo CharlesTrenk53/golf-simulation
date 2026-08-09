@@ -81,5 +81,8 @@ jobs:
       - name: Calibrate age-based physical checkpoints
         run: ./godot --headless --path . --script res://tests/age_calibration_diagnostic.gd
 
+      - name: Calibrate iron distance aging
+        run: ./godot --headless --path . --script res://tests/iron_age_calibration_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
