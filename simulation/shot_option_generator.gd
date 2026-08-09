@@ -18,6 +18,9 @@ func generate_options(
 	if surface == "GREEN" or distance <= 8.0:
 		return [_putt_option(state)]
 
+	if surface == "BUNKER":
+		return _bunker_options(state, distance)
+
 	if distance <= 25.0:
 		return [
 			_direct_option("PITCH", SHORT_GAME, state, 68.0 * lie_quality, _lie_risk(12.0, state)),
@@ -26,10 +29,8 @@ func generate_options(
 
 	var options: Array = []
 	var direction = _direction_to_hole(state)
-
 	var layup_distance = min(distance * 0.45, 28.0) * lie_quality
 	var bailout_distance = min(distance * 0.60, 38.0) * lie_quality
-	var attack_distance = min(distance, golfer.driving_distance * lie_quality)
 
 	options.append(_option(
 		"LAYUP",
@@ -38,7 +39,7 @@ func generate_options(
 		45.0 * lie_quality,
 		_lie_risk(10.0, state),
 		false,
-		100.0
+		_safe_success_chance(92.0, lie_quality)
 	))
 
 	var lateral = Vector3(-direction.z, 0.0, direction.x)
@@ -49,54 +50,71 @@ func generate_options(
 		55.0 * lie_quality,
 		_lie_risk(30.0, state),
 		false,
-		100.0
+		_safe_success_chance(86.0, lie_quality)
 	))
 
-	var attack_target = state.ball_position + direction * attack_distance
-	var attack_risk = _estimate_attack_risk(golfer, state, attack_target, hazards)
-	var success_chance = _estimate_success_chance(golfer, attack_distance, lie_quality)
+	# A driver-style attack is only a credible option from a tee or fairway.
+	# From rough, the golfer must advance with an approach rather than pretend
+	# the lie supports a full driving-distance attack.
+	if surface == "TEE" or surface == "FAIRWAY" or state.course_context == null:
+		var attack_distance = min(distance, golfer.driving_distance * lie_quality)
+		var attack_target = state.ball_position + direction * attack_distance
+		var attack_risk = _estimate_attack_risk(golfer, state, attack_target, hazards)
+		var success_chance = _estimate_success_chance(golfer, attack_distance, lie_quality)
 
-	options.append(_option(
-		"ATTACK",
-		DRIVE,
-		attack_target,
-		65.0 * lie_quality,
-		_lie_risk(attack_risk, state),
-		true,
-		success_chance
-	))
+		options.append(_option(
+			"ATTACK",
+			DRIVE,
+			attack_target,
+			65.0 * lie_quality,
+			_lie_risk(attack_risk, state),
+			true,
+			success_chance
+		))
+	elif surface == "ROUGH":
+		var recovery_distance = min(distance * 0.50, 32.0) * lie_quality
+		options.append(_option(
+			"ADVANCE_FROM_ROUGH",
+			APPROACH,
+			state.ball_position + direction * recovery_distance,
+			50.0 * lie_quality,
+			_lie_risk(18.0, state),
+			false,
+			_safe_success_chance(80.0, lie_quality)
+		))
 
 	return options
 
 
+func _bunker_options(state, distance: float) -> Array:
+	var lie_quality: float = state.current_lie_quality
+	if distance <= 28.0:
+		return [
+			_direct_option("SPLASH_OUT", SHORT_GAME, state, 54.0 * lie_quality, _lie_risk(14.0, state)),
+			_direct_option("SAFE_BUNKER_EXIT", SHORT_GAME, state, 45.0 * lie_quality, _lie_risk(5.0, state))
+		]
+
+	var direction = _direction_to_hole(state)
+	var exit_distance = min(distance * 0.25, 18.0)
+	return [
+		_option(
+			"BUNKER_EXIT",
+			SHORT_GAME,
+			state.ball_position + direction * exit_distance,
+			42.0 * lie_quality,
+			_lie_risk(8.0, state),
+			false,
+			72.0
+		)
+	]
+
+
 func _putt_option(state) -> Dictionary:
-	return _option(
-		"PUTT",
-		PUTT,
-		state.hole_position,
-		80.0,
-		5.0,
-		false,
-		100.0
-	)
+	return _option("PUTT", PUTT, state.hole_position, 80.0, 5.0, false, 100.0)
 
 
-func _direct_option(
-	name: String,
-	shot_type: int,
-	state,
-	reward: float,
-	risk: float
-) -> Dictionary:
-	return _option(
-		name,
-		shot_type,
-		state.hole_position,
-		reward,
-		risk,
-		false,
-		100.0
-	)
+func _direct_option(name: String, shot_type: int, state, reward: float, risk: float) -> Dictionary:
+	return _option(name, shot_type, state.hole_position, reward, risk, false, 100.0)
 
 
 func _option(
@@ -127,11 +145,11 @@ func _direction_to_hole(state) -> Vector3:
 	return delta.normalized()
 
 
-func _estimate_success_chance(
-	golfer: Node,
-	attempted_distance: float,
-	lie_quality: float = 1.0
-) -> float:
+func _safe_success_chance(base_chance: float, lie_quality: float) -> float:
+	return clamp(base_chance - (1.0 - lie_quality) * 45.0, 35.0, 100.0)
+
+
+func _estimate_success_chance(golfer: Node, attempted_distance: float, lie_quality: float = 1.0) -> float:
 	var effective_distance = golfer.driving_distance * lie_quality
 	var carry_margin = effective_distance - attempted_distance
 	var chance = 50.0 + carry_margin * 5.0
@@ -143,19 +161,10 @@ func _estimate_success_chance(
 func _lie_risk(base_risk: float, state) -> float:
 	if state.course_context == null:
 		return base_risk
-	return clamp(
-		base_risk + state.course_context.risk_modifier(state.current_surface),
-		0.0,
-		100.0
-	)
+	return clamp(base_risk + state.course_context.risk_modifier(state.current_surface), 0.0, 100.0)
 
 
-func _estimate_attack_risk(
-	golfer: Node,
-	state,
-	attack_target: Vector3,
-	hazards: Array
-) -> float:
+func _estimate_attack_risk(golfer: Node, state, attack_target: Vector3, hazards: Array) -> float:
 	var attempted_distance = state.ball_position.distance_to(attack_target)
 	var effective_distance = golfer.driving_distance * state.current_lie_quality
 	var carry_margin = effective_distance - attempted_distance
@@ -167,25 +176,14 @@ func _estimate_attack_risk(
 			continue
 		var hazard_position: Vector3 = hazard["position"]
 		var radius: float = hazard.get("radius", 6.0)
-		var path_distance = _distance_to_segment(
-			hazard_position,
-			state.ball_position,
-			attack_target
-		)
+		var path_distance = _distance_to_segment(hazard_position, state.ball_position, attack_target)
 		if path_distance <= radius:
-			hazard_risk = max(
-				hazard_risk,
-				float(hazard.get("risk", 75.0))
-			)
+			hazard_risk = max(hazard_risk, float(hazard.get("risk", 75.0)))
 
 	return clamp(max(distance_risk, hazard_risk), 0.0, 100.0)
 
 
-func _distance_to_segment(
-	point: Vector3,
-	start: Vector3,
-	end: Vector3
-) -> float:
+func _distance_to_segment(point: Vector3, start: Vector3, end: Vector3) -> float:
 	var segment = end - start
 	var length_squared = segment.length_squared()
 	if length_squared <= 0.001:
