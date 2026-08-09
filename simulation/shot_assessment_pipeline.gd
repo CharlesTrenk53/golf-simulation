@@ -62,13 +62,16 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		var willingness = assessment_model.assess_willingness(golfer, capability, option, state_context)
 		var raw_willingness = float(willingness.get("willingness_score", 50.0))
 		var comfort_adjustment = (float(comfort.get("comfort", 50.0)) - 50.0) * 0.20 * response_factor
+		var social_readiness = state_context.social_execution_readiness() if state_context.has_method("social_execution_readiness") else 50.0
+		var social_adjustment = (social_readiness - 50.0) * 0.08
 		willingness["pre_comfort_willingness"] = raw_willingness
 		willingness["comfort_adjustment"] = comfort_adjustment
+		willingness["social_adjustment"] = social_adjustment
 		willingness["experience_response_factor"] = response_factor
-		willingness["willingness_score"] = clamp(raw_willingness + comfort_adjustment, 0.0, 100.0)
+		willingness["willingness_score"] = clamp(raw_willingness + comfort_adjustment + social_adjustment, 0.0, 100.0)
 
 		var model_success = float(option.get("model_success_chance", 50.0))
-		var comfort_believed_success = clamp(model_success + (float(comfort.get("comfort", 50.0)) - 50.0) * 0.12 * response_factor, 0.0, 100.0)
+		var comfort_believed_success = clamp(model_success + (float(comfort.get("comfort", 50.0)) - 50.0) * 0.12 * response_factor + (social_readiness - 50.0) * 0.04, 0.0, 100.0)
 		option["comfort_believed_success_chance"] = comfort_believed_success
 
 		var base_reward = float(option.get("reward", 0.0))
@@ -79,20 +82,52 @@ func assess_options(golfer: Node, state, options: Array, hazards: Array = []) ->
 		var distance_error = abs(perceived_distance - situation.effective_playing_distance())
 		var miss_cost = float(miss.get("worst_cost", 0.0))
 		var confidence_shift = (confidence - 50.0) * 0.08
+		var group_aggression = state_context.aggression_pressure()
 		var assessment_reward = base_reward + (capability_score - 50.0) * 0.18 + (willingness_score - 50.0) * 0.12 + confidence_shift
+		if bool(option.get("is_aggressive", false)):
+			assessment_reward += group_aggression * 0.08
 		var assessment_risk = base_risk + miss_cost * 0.16 + distance_error * 1.5 + max(0.0, 50.0 - capability_score) * 0.22
+		assessment_risk += max(0.0, 50.0 - social_readiness) * 0.05
 		option["reward"] = assessment_reward
 		option["risk"] = assessment_risk
 		option["shot_form"] = shot_form
+
+		var objective_assessment = {
+			"world_distance": situation.effective_playing_distance(),
+			"requirements": requirements,
+			"capability": capability,
+			"model_success_chance": model_success,
+			"miss_consequences": miss,
+			"base_reward": base_reward,
+			"base_risk": base_risk
+		}
+		var subjective_assessment = {
+			"perceived_distance": perceived_distance,
+			"judgment_skill": perception.get("judgment_skill", 50.0),
+			"specific_confidence": confidence,
+			"recent_confidence": recent_confidence,
+			"comfort": comfort,
+			"experience_response_factor": response_factor,
+			"believed_success_chance": comfort_believed_success,
+			"willingness": willingness,
+			"social_readiness": social_readiness,
+			"social_context": state_context.snapshot(),
+			"assessed_reward": assessment_reward,
+			"assessed_risk": assessment_risk
+		}
 		option["assessment"] = {
-			"world_distance": situation.effective_playing_distance(), "perceived_distance": perceived_distance, "judgment_skill": perception.get("judgment_skill", 50.0),
+			"objective": objective_assessment,
+			"subjective": subjective_assessment,
+			# Backward-compatible fields retained while downstream code migrates.
+			"world_distance": objective_assessment["world_distance"], "perceived_distance": perceived_distance, "judgment_skill": subjective_assessment["judgment_skill"],
 			"requirements": requirements, "capability": capability, "specific_confidence": confidence, "recent_confidence": recent_confidence, "comfort": comfort,
 			"experience_response_factor": response_factor, "comfort_believed_success_chance": comfort_believed_success, "shot_form": shot_form,
 			"miss_consequences": miss, "willingness": willingness, "performance": performance, "skill_development": development,
-			"base_reward": base_reward, "base_risk": base_risk, "assessed_reward": assessment_reward, "assessed_risk": assessment_risk
+			"social_readiness": social_readiness, "base_reward": base_reward, "base_risk": base_risk, "assessed_reward": assessment_reward, "assessed_risk": assessment_risk
 		}
 		var future_state = future_state_model.estimate(golfer, state, option)
 		option["assessment"]["future_state"] = future_state
+		option["assessment"]["objective"]["future_state"] = future_state
 		option["expected_strokes_remaining"] = future_state["expected_strokes_remaining"]
 		option["expected_remaining_distance"] = future_state["expected_remaining_distance"]
 		assessed.append(option)
@@ -102,7 +137,7 @@ func prepare_execution(golfer: Node, chosen: Dictionary, decision_gap: float = 0
 	var assessment: Dictionary = chosen.get("assessment", {})
 	var capability: Dictionary = assessment.get("capability", {})
 	var specific_confidence = float(assessment.get("specific_confidence", golfer.confidence))
-	var mental_state = {"focus": state_context.focus, "nervous": state_context.nervous, "fear": 0.0, "frustrated": state_context.frustration}
+	var mental_state = {"focus": state_context.focus, "nervous": state_context.nervous, "fear": state_context.pressure, "frustrated": state_context.frustration}
 	return commitment_model.assess_commitment(golfer, capability, specific_confidence, mental_state, decision_gap)
 
 func record_result(chosen: Dictionary, result: Dictionary) -> void:
@@ -139,3 +174,5 @@ func set_mental_state(values: Dictionary) -> void:
 	state_context.set_mental_state(values)
 func set_strategic_context(values: Dictionary) -> void:
 	state_context.set_strategic_context(values)
+func set_social_context(values: Dictionary) -> void:
+	state_context.set_social_context(values)
