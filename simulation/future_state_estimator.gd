@@ -6,29 +6,24 @@ extends RefCounted
 
 func estimate(golfer: Node, state, option: Dictionary) -> Dictionary:
 	var assessment: Dictionary = option.get("assessment", {})
-	var capability: Dictionary = assessment.get("capability", {})
+	var objective: Dictionary = assessment.get("objective", assessment)
+	var capability: Dictionary = objective.get("capability", {})
 	var target: Vector3 = option.get("target_position", state.hole_position)
 	var expected_surface = String(option.get("expected_surface", ""))
 	if expected_surface.is_empty():
 		expected_surface = _surface_at_target(state, target)
 	var remaining = target.distance_to(state.hole_position)
-	var success = clamp(float(option.get("model_success_chance", 50.0)) / 100.0, 0.05, 0.98)
+	var success = clamp(float(objective.get("model_success_chance", option.get("model_success_chance", 50.0))) / 100.0, 0.05, 0.98)
 	var dispersion = max(float(capability.get("expected_dispersion", 6.0)), 1.0)
-	var miss: Dictionary = assessment.get("miss_consequences", {})
+	var miss: Dictionary = objective.get("miss_consequences", {})
 	var worst_cost = float(miss.get("worst_cost", 0.0))
 
-	# Likely miss state is represented as extra remaining distance plus lie cost.
-	# This keeps the model shallow and explainable while acknowledging that the
-	# target point is not guaranteed.
 	var miss_distance_penalty = dispersion * 0.65
 	var likely_remaining = remaining + (1.0 - success) * miss_distance_penalty
 	var expected_strokes = _strokes_from_state(golfer, likely_remaining, expected_surface)
 	var hazard_penalty = (1.0 - success) * clamp(worst_cost / 100.0, 0.0, 1.5) * 0.80
 	expected_strokes += hazard_penalty
 
-	# If the option explicitly says the green is reachable next, modestly reduce
-	# future burden. Conversely, a layup that still leaves another layup-range
-	# shot should carry a small sequencing cost.
 	if option.get("next_shot_green_reachable", false):
 		expected_strokes -= 0.18
 	if String(option.get("name", "")) == "LAYUP" and likely_remaining > _comfortable_approach_distance(golfer):
@@ -60,10 +55,6 @@ func _strokes_from_state(golfer: Node, distance: float, surface: String) -> floa
 	elif distance <= 25.0:
 		strokes = 1.55 + (100.0 - short_ability) / 105.0 + (100.0 - putting_ability) / 250.0
 	else:
-		# Use a continuous distance burden instead of ceil(distance / comfortable).
-		# The previous stair-step made 36.9 and 72.8 units both count as two full
-		# shots for Bill. This smooth curve preserves the intuitive ordering that
-		# every extra unit of distance increases expected strokes gradually.
 		var distance_ratio = distance / max(comfortable, 1.0)
 		var approach_penalty = (100.0 - approach_ability) / 110.0
 		var putting_penalty = (100.0 - putting_ability) / 300.0
@@ -85,8 +76,6 @@ func _putting_strokes(golfer: Node, distance: float) -> float:
 	return max(base + (70.0 - ability) / 120.0, 1.0)
 
 func _comfortable_approach_distance(golfer: Node) -> float:
-	# Uses the golfer's demonstrated approach ability to define a personalized
-	# distance scale for the continuous expected-strokes curve.
 	var approach_ability = float(golfer.get_shot_ability(1))
 	return max(24.0 + approach_ability * 0.18, 26.0)
 
