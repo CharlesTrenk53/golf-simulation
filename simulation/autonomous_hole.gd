@@ -4,6 +4,7 @@ const CourseState = preload("res://simulation/course_state.gd")
 const ShotOptionGenerator = preload("res://simulation/shot_option_generator.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const ShotAssessmentPipeline = preload("res://simulation/shot_assessment_pipeline.gd")
+const DecisionQualityEvaluator = preload("res://simulation/decision_quality_evaluator.gd")
 
 const WATER_BOUNDARY_STEPS := 80
 const LATERAL_RELIEF_DISTANCE := 4.0
@@ -11,6 +12,7 @@ const LATERAL_RELIEF_DISTANCE := 4.0
 var option_generator = ShotOptionGenerator.new()
 var bag = GolfBag.new()
 var assessment_pipeline = ShotAssessmentPipeline.new()
+var decision_evaluator = DecisionQualityEvaluator.new()
 var shot_history: Array = []
 
 func create_state(start_position: Vector3, hole_position: Vector3, par: int = 4, seed_value: int = 1, course_context = null):
@@ -26,7 +28,7 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	if generated_options.is_empty(): return {}
 	var options = assessment_pipeline.assess_options(golfer, state, generated_options, hazards)
 	var chosen = golfer.choose_best_option(options)
-	var decision_assessment = _assess_decision(golfer, state, chosen, options)
+	var decision_assessment = decision_evaluator.evaluate(golfer, chosen, options)
 	var commitment = assessment_pipeline.prepare_execution(golfer, chosen, float(decision_assessment["gap"]))
 	var result = _execute_option(golfer, state, chosen, hazards, commitment)
 	result["selected_option"] = chosen
@@ -36,6 +38,7 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	result["decision_score"] = decision_assessment["score"]
 	result["decision_best_score"] = decision_assessment["best_score"]
 	result["decision_gap"] = decision_assessment["gap"]
+	result["decision_best_option"] = decision_assessment["best_option"]
 	result["decision_reason"] = decision_assessment["reason"]
 	result["commitment_score"] = commitment["score"]
 	result["commitment_quality"] = commitment["label"]
@@ -68,45 +71,6 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	shot_history.append(result)
 	golfer.record_shot_result(result["outcome"], chosen["is_aggressive"])
 	return result
-
-func _assess_decision(golfer: Node, state, chosen: Dictionary, options: Array) -> Dictionary:
-	var chosen_score = _objective_option_score(golfer, state, chosen)
-	var best_score = chosen_score
-	for option in options:
-		best_score = max(best_score, _objective_option_score(golfer, state, option))
-	var gap = best_score - chosen_score
-	var quality = "OPTIMAL"
-	if gap > 20.0:
-		quality = "POOR"
-	elif gap > 10.0:
-		quality = "QUESTIONABLE"
-	elif gap > 3.0:
-		quality = "SENSIBLE"
-	var reason = "Objective strategic gap %.1f from best available option" % gap
-	if quality == "OPTIMAL": reason = "At or near the best objective strategic option (gap %.1f)" % gap
-	elif chosen.get("name", "") == "RECOVER_TO_FAIRWAY" and not chosen.get("advance_sets_up_green", true):
-		reason = "Fairway recovery improves the next-shot setup when rough advancement does not create a realistic green opportunity (gap %.1f)" % gap
-	return {"quality": quality, "score": chosen_score, "best_score": best_score, "gap": gap, "reason": reason}
-
-func _objective_option_score(golfer: Node, state, option: Dictionary) -> float:
-	var assessment: Dictionary = option.get("assessment", {})
-	var reward = float(assessment.get("base_reward", option.get("reward", 0.0)))
-	var risk = float(assessment.get("base_risk", option.get("risk", 0.0)))
-	var success_chance = float(option.get("model_success_chance", 50.0))
-	var score = reward - risk * 0.55
-	score += (success_chance - 50.0) * 0.18
-	if option.has("next_shot_quality"): score += float(option["next_shot_quality"]) * 0.10
-	if option.get("next_shot_green_reachable", false): score += 7.0
-	if option.get("expected_surface", "") == "FAIRWAY" and state.surface_name() == "ROUGH": score += 6.0
-	var capability: Dictionary = assessment.get("capability", {})
-	if not capability.is_empty():
-		score += (float(capability.get("capability_score", 50.0)) - 50.0) * 0.12
-	else:
-		var club: Dictionary = option.get("club", {})
-		if not club.is_empty():
-			var ability = float(golfer.get_shot_ability(int(club["shot_type"])))
-			score += (ability - 50.0) * 0.06
-	return score
 
 func _assess_execution(result: Dictionary) -> Dictionary:
 	var miss_distance = result["target_position"].distance_to(result["landing_position"])
