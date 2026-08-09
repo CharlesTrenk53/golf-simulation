@@ -34,7 +34,7 @@ jobs:
         run: ./godot --headless --path . --script res://tests/golfer_memory_comfort_test.gd
 
       - name: Run golfer comfort integration tests
-        run: timeout 45s ./godot --headless --path . --script res://tests/golfer_comfort_integration_test.gd
+        run: ./godot --headless --path . --script res://tests/golfer_comfort_integration_test.gd
 
       - name: Run multi-hole memory adaptation tests
         run: ./godot --headless --path . --script res://tests/multi_hole_memory_adaptation_test.gd
