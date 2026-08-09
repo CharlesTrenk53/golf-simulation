@@ -6,6 +6,7 @@ const GolferAssessment = preload("res://simulation/golfer_assessment.gd")
 const GolferStateContext = preload("res://simulation/golfer_state_context.gd")
 const RecentPerformanceContext = preload("res://simulation/recent_performance_context.gd")
 const ShotCommitment = preload("res://simulation/shot_commitment.gd")
+const FutureStateEstimator = preload("res://simulation/future_state_estimator.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 
@@ -65,7 +66,6 @@ func _init() -> void:
 	var protect_willingness = assessment.assess_willingness(bill, fresh_bill_driver, attack_option, protecting)
 	_expect(float(chase_willingness["willingness_score"]) > float(protect_willingness["willingness_score"]), "same golfer becomes more willing to attack when strategic context demands it")
 
-	# Recent performance changes expectations gradually without altering base ability.
 	var performance = RecentPerformanceContext.new()
 	performance.initialize_from_golfer(bill)
 	var baseline_confidence = performance.confidence_for(bill, driver, "FAIRWAY", 20.0)
@@ -77,13 +77,11 @@ func _init() -> void:
 	_expect(float(slump_modifier["dispersion_factor"]) > 1.0, "recent poor driving can widen expected dispersion")
 	_expect(float(slump_modifier["directional_bias"]) < 0.0, "recent misses can create a remembered left-right tendency")
 
-	# Miss consequence analysis distinguishes where a miss goes rather than binary failure.
 	var commitment_model = ShotCommitment.new()
 	var miss_map = commitment_model.assess_miss_consequences(situation, situation.target_position, float(fresh_bill_driver["expected_dispersion"]))
 	_expect(miss_map.has("short") == false and miss_map.has("costs"), "miss consequence layer returns directional cost map")
 	_expect(float(miss_map["worst_cost"]) >= float(miss_map["safest_cost"]), "miss consequences identify safer and worse miss directions")
 
-	# Commitment can differ even after a shot has been selected, changing execution quality.
 	var calm_mental = {"focus": 85.0, "nervous": 10.0, "fear": 5.0, "frustrated": 5.0}
 	var doubtful_mental = {"focus": 30.0, "nervous": 80.0, "fear": 70.0, "frustrated": 60.0}
 	var committed = commitment_model.assess_commitment(bill, fresh_bill_driver, 90.0, calm_mental, 0.0)
@@ -92,6 +90,21 @@ func _init() -> void:
 	_expect(float(doubtful["dispersion_factor"]) > float(committed["dispersion_factor"]), "low commitment can worsen execution dispersion")
 	_expect(float(doubtful["carry_factor"]) < float(committed["carry_factor"]), "low commitment can reduce effective carry")
 
+	# Shallow look-ahead distinguishes a shot that leaves a strong next state from
+	# a conservative shot that still leaves too much work.
+	var estimator = FutureStateEstimator.new()
+	var fake_state = RefCounted.new()
+	fake_state.set_meta("unused", true)
+	# Use a lightweight object with the fields/methods the estimator needs.
+	var state = _FutureTestState.new()
+	state.hole_position = Vector3(0, 0, 0)
+	var attack = {"name": "ATTACK", "target_position": Vector3(0, 0, 8), "model_success_chance": 80.0, "assessment": {"capability": {"expected_dispersion": 3.0}, "miss_consequences": {"worst_cost": 15.0}}}
+	var layup = {"name": "LAYUP", "target_position": Vector3(0, 0, 38), "model_success_chance": 95.0, "assessment": {"capability": {"expected_dispersion": 2.0}, "miss_consequences": {"worst_cost": 5.0}}}
+	var attack_future = estimator.estimate(bill, state, attack)
+	var layup_future = estimator.estimate(bill, state, layup)
+	_expect(float(attack_future["expected_strokes_remaining"]) < float(layup_future["expected_strokes_remaining"]), "lookahead rewards a materially stronger next state")
+	_expect(int(attack_future["lookahead_depth"]) == 1, "future-state estimator remains intentionally shallow")
+
 	bill.free(); rick.free()
 	if failures == 0:
 		print("POC-08 SHOT ASSESSMENT TESTS PASSED")
@@ -99,6 +112,11 @@ func _init() -> void:
 	else:
 		push_error("POC-08 SHOT ASSESSMENT TESTS FAILED: %d" % failures)
 		quit(1)
+
+class _FutureTestState:
+	extends RefCounted
+	var hole_position := Vector3.ZERO
+	var course_context = null
 
 func _expect(condition: bool, label: String) -> void:
 	if condition:
