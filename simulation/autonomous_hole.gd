@@ -11,11 +11,12 @@ func create_state(
 	start_position: Vector3,
 	hole_position: Vector3,
 	par: int = 4,
-	seed_value: int = 1
+	seed_value: int = 1,
+	course_context = null
 ):
 	seed(seed_value)
 	shot_history.clear()
-	return CourseState.new(start_position, hole_position, par)
+	return CourseState.new(start_position, hole_position, par, course_context)
 
 
 func play_step(
@@ -33,6 +34,8 @@ func play_step(
 	var chosen = golfer.choose_best_option(options)
 	var result = _execute_option(golfer, state, chosen, hazards)
 	result["selected_option"] = chosen
+	result["surface_before"] = state.surface_name()
+	result["lie_quality_before"] = state.current_lie_quality
 	shot_history.append(result)
 
 	state.advance_to(
@@ -40,6 +43,8 @@ func play_step(
 		result["outcome"],
 		result["penalty_strokes"]
 	)
+	result["surface_after"] = state.surface_name()
+	result["lie_quality_after"] = state.current_lie_quality
 
 	golfer.record_shot_result(
 		result["outcome"],
@@ -55,13 +60,15 @@ func play_hole(
 	hole_position: Vector3,
 	hazards: Array = [],
 	par: int = 4,
-	seed_value: int = 1
+	seed_value: int = 1,
+	course_context = null
 ) -> Dictionary:
 	var state = create_state(
 		start_position,
 		hole_position,
 		par,
-		seed_value
+		seed_value,
+		course_context
 	)
 
 	while state.can_continue():
@@ -75,6 +82,7 @@ func play_hole(
 		"par": state.par,
 		"remaining_distance": state.remaining_distance(),
 		"final_position": state.ball_position,
+		"final_surface": state.surface_name(),
 		"history": shot_history.duplicate(true)
 	}
 
@@ -91,8 +99,9 @@ func _execute_option(
 	var start: Vector3 = state.ball_position
 	var intended_distance = start.distance_to(target)
 	var accuracy_factor = 1.0 - ability / 100.0
-	var lateral_error = randf_range(-6.0, 6.0) * accuracy_factor
-	var distance_error = randf_range(-6.0, 6.0) * accuracy_factor
+	var lie_error_multiplier = 1.0 + (1.0 - state.current_lie_quality)
+	var lateral_error = randf_range(-6.0, 6.0) * accuracy_factor * lie_error_multiplier
+	var distance_error = randf_range(-6.0, 6.0) * accuracy_factor * lie_error_multiplier
 
 	var direction = target - start
 	direction.y = 0.0
