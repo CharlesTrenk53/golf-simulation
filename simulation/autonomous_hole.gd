@@ -3,6 +3,9 @@ extends RefCounted
 const CourseState = preload("res://simulation/course_state.gd")
 const ShotOptionGenerator = preload("res://simulation/shot_option_generator.gd")
 
+const WATER_BOUNDARY_STEPS := 80
+const LATERAL_RELIEF_DISTANCE := 4.0
+
 var option_generator = ShotOptionGenerator.new()
 var shot_history: Array = []
 
@@ -35,9 +38,12 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 
 	var next_position: Vector3 = result["landing_position"]
 	if result["outcome"] == "WATER":
-		next_position = _water_relief_position(state, result["start_position"], result["landing_position"])
+		var entry_point = _find_water_entry_point(state, result["start_position"], result["landing_position"])
+		next_position = _lateral_water_relief_position(state, entry_point, result["start_position"])
+		result["water_entry_point"] = entry_point
 		result["relief_position"] = next_position
 	else:
+		result["water_entry_point"] = result["landing_position"]
 		result["relief_position"] = result["landing_position"]
 
 	state.advance_to(next_position, result["outcome"], result["penalty_strokes"])
@@ -48,25 +54,57 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	return result
 
 
-func _water_relief_position(state, start: Vector3, water_position: Vector3) -> Vector3:
+func _find_water_entry_point(state, start: Vector3, water_position: Vector3) -> Vector3:
 	if state.course_context == null:
-		return start
-	# First preference: previous playable position. If that somehow resolves to
-	# water, walk back from the water point toward the prior position until dry.
-	if not _position_is_water(state, start):
-		return start
-	var direction = start - water_position
-	direction.y = 0.0
-	if direction.length() <= 0.001:
-		direction = Vector3.BACK
+		return water_position
+	var last_dry = start
+	for step in range(1, WATER_BOUNDARY_STEPS + 1):
+		var t = float(step) / float(WATER_BOUNDARY_STEPS)
+		var sample = start.lerp(water_position, t)
+		if _position_is_water(state, sample):
+			# Refine the boundary between the last dry sample and first wet sample.
+			var dry = last_dry
+			var wet = sample
+			for _refine in range(10):
+				var midpoint = dry.lerp(wet, 0.5)
+				if _position_is_water(state, midpoint):
+					wet = midpoint
+				else:
+					dry = midpoint
+			return dry
+		last_dry = sample
+	return water_position
+
+
+func _lateral_water_relief_position(state, entry_point: Vector3, previous_position: Vector3) -> Vector3:
+	if state.course_context == null:
+		return previous_position
+	var toward_hole = state.hole_position - entry_point
+	toward_hole.y = 0.0
+	if toward_hole.length() <= 0.001:
+		toward_hole = Vector3.FORWARD
 	else:
-		direction = direction.normalized()
-	for distance in [4.0, 8.0, 12.0, 16.0, 24.0, 32.0]:
-		var candidate = water_position + direction * distance
-		candidate.y = start.y
-		if not _position_is_water(state, candidate):
+		toward_hole = toward_hole.normalized()
+	var lateral = Vector3(-toward_hole.z, 0.0, toward_hole.x)
+
+	# Model red-penalty-area lateral relief: search beside the crossing point,
+	# within an approximate two-club-length radius, and never nearer the hole.
+	var reference_distance = entry_point.distance_to(state.hole_position)
+	for distance in [LATERAL_RELIEF_DISTANCE, 3.0, 2.0, 1.0]:
+		for side in [1.0, -1.0]:
+			var candidate = entry_point + lateral * distance * side
+			candidate.y = previous_position.y
+			if not _position_is_water(state, candidate) and candidate.distance_to(state.hole_position) >= reference_distance - 0.01:
+				return candidate
+
+	# If the simple lateral candidates are blocked, search a semicircle behind
+	# the reference point while preserving the no-nearer-the-hole constraint.
+	for back_distance in [1.0, 2.0, 3.0, LATERAL_RELIEF_DISTANCE]:
+		var candidate = entry_point - toward_hole * back_distance
+		candidate.y = previous_position.y
+		if not _position_is_water(state, candidate) and candidate.distance_to(state.hole_position) >= reference_distance - 0.01:
 			return candidate
-	return start
+	return previous_position
 
 
 func _position_is_water(state, position: Vector3) -> bool:
