@@ -1,0 +1,103 @@
+name: Godot Headless Tests
+
+on:
+  push:
+    branches:
+      - main
+      - poc-05-autonomous-hole
+      - poc-06-course-context
+      - poc-07-shot-club-selection
+      - poc-08-shot-assessment
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Run club-model tests
+        run: ./godot --headless --path . --script res://tests/golf_bag_test.gd
+
+      - name: Run golfer memory and comfort tests
+        run: ./godot --headless --path . --script res://tests/golfer_memory_comfort_test.gd
+
+      - name: Run golfer comfort integration tests
+        run: ./godot --headless --path . --script res://tests/golfer_comfort_integration_test.gd
+
+      - name: Run multi-hole memory adaptation tests
+        run: ./godot --headless --path . --script res://tests/multi_hole_memory_adaptation_test.gd
+
+      - name: Run technique and skill development tests
+        run: ./godot --headless --path . --script res://tests/technique_skill_development_test.gd
+
+      - name: Run age-retention tests
+        run: ./godot --headless --path . --script res://tests/age_retention_test.gd
+
+      - name: Run transient form and persistent skill separation tests
+        run: ./godot --headless --path . --script res://tests/transient_form_skill_separation_test.gd
+
+      - name: Run skill-specific learning aptitude tests
+        run: ./godot --headless --path . --script res://tests/skill_learning_aptitude_test.gd
+
+      - name: Run golfer lifecycle tests
+        run: ./godot --headless --path . --script res://tests/golfer_lifecycle_test.gd
+
+      - name: Run shot-assessment tests
+        run: ./godot --headless --path . --script res://tests/shot_assessment_test.gd
+
+      - name: Run integrated shot-assessment pipeline tests
+        run: ./godot --headless --path . --script res://tests/shot_assessment_pipeline_test.gd
+
+      - name: Run subjective shot-choice tests
+        run: ./godot --headless --path . --script res://tests/subjective_decision_choice_test.gd
+
+      - name: Run autonomous-hole tests
+        run: ./godot --headless --path . --script res://tests/autonomous_hole_test.gd
+
+      - name: Diagnose Wild Bill tee decision
+        run: ./godot --headless --path . --script res://tests/bill_tee_diagnostic.gd
+
+      - name: Trace long-horizon skill development curves
+        run: ./godot --headless --path . --script res://tests/development_curve_diagnostic.gd
+
+      - name: Trace stochastic career development
+        run: ./godot --headless --path . --script res://tests/career_stochastic_development_diagnostic.gd
+
+      - name: Validate recovery across slump severities and durations
+        run: ./godot --headless --path . --script res://tests/recovery_generalization_diagnostic.gd
+
+      - name: Trace learning-profile career divergence
+        run: ./godot --headless --path . --script res://tests/learning_profile_career_diagnostic.gd
+
+      - name: Trace age-based physical trajectory
+        run: ./godot --headless --path . --script res://tests/age_trajectory_diagnostic.gd
+
+      - name: Calibrate age-based physical checkpoints
+        run: ./godot --headless --path . --script res://tests/age_calibration_diagnostic.gd
+
+      - name: Calibrate iron distance aging
+        run: ./godot --headless --path . --script res://tests/iron_age_calibration_diagnostic.gd
+
+      - name: Calibrate full-bag distance aging
+        run: ./godot --headless --path . --script res://tests/bag_age_calibration_diagnostic.gd
+
+      - name: Trace age x technical development
+        run: ./godot --headless --path . --script res://tests/age_technical_development_diagnostic.gd
+
+      - name: Run full-career lifetime stress test
+        run: ./godot --headless --path . --script res://tests/full_career_lifetime_diagnostic.gd
+
+      - name: Run 3000-hole Monte Carlo comparison
+        run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd

@@ -1,0 +1,111 @@
+extends SceneTree
+
+const QuietGolfer = preload("res://tests/quiet_golfer.gd")
+const TechniqueSkillDevelopment = preload("res://simulation/technique_skill_development.gd")
+
+var failures := 0
+
+func _init() -> void:
+	var novice = QuietGolfer.new()
+	novice.profile = 1
+	novice.apply_profile()
+	novice.career_shot_experience[0] = 100
+	var veteran = QuietGolfer.new()
+	veteran.profile = 1
+	veteran.apply_profile()
+	veteran.career_shot_experience[0] = 8000
+
+	var novice_model = TechniqueSkillDevelopment.new()
+	novice_model.initialize_from_golfer(novice)
+	var veteran_model = TechniqueSkillDevelopment.new()
+	veteran_model.initialize_from_golfer(veteran)
+
+	var novice_base = novice_model.development_state(0)
+	var veteran_base = veteran_model.development_state(0)
+	_expect(abs(float(novice_base["skill_delta"])) < 0.001, "skill starts at established baseline")
+	_expect(float(veteran_base["experience_stability"]) > float(novice_base["experience_stability"]), "large experience history creates stronger skill stability")
+
+	# Short slumps can affect confidence/technique but must not alter true skill.
+	for i in range(20):
+		novice_model.record_execution(0, 22.0, 8.0, -5.0)
+		veteran_model.record_execution(0, 22.0, 8.0, -5.0)
+	var novice_short = novice_model.development_state(0)
+	var veteran_short = veteran_model.development_state(0)
+	_expect(abs(float(novice_short["skill_delta"])) < 0.001, "short slump does not change novice true skill")
+	_expect(abs(float(veteran_short["skill_delta"])) < 0.001, "short slump does not change veteran true skill")
+	_expect(float(novice_short["technique_bias"]["lateral"]) > 0.0, "repeated directional misses begin forming a technique pattern")
+
+	# Same sustained slump, different experience. Both may drift, but the veteran's
+	# established motor pattern should strongly resist permanent deterioration.
+	for i in range(580):
+		novice_model.record_execution(0, 20.0, 8.5, -5.5)
+		veteran_model.record_execution(0, 20.0, 8.5, -5.5)
+	var novice_slump = novice_model.development_state(0)
+	var veteran_slump = veteran_model.development_state(0)
+	_expect(float(novice_slump["skill_delta"]) < 0.0, "hundreds of poor executions can eventually lower true skill")
+	_expect(float(novice_slump["skill_delta"]) > -2.5, "true skill decline remains slow over hundreds of repetitions")
+	_expect(float(veteran_slump["skill_delta"]) > float(novice_slump["skill_delta"]), "established experience limits skill decline under the same slump")
+	_expect(abs(float(veteran_slump["skill_delta"])) < 1.25, "highly established skill remains strongly anchored")
+	_expect(float(veteran_slump["technique_bias"]["dispersion"]) < float(novice_slump["technique_bias"]["dispersion"]), "experience also resists embedding a bad technique pattern")
+
+	# Excellent recent execution should begin recovery for both. Because the veteran
+	# lost much less skill in the first place, recovery efficiency is measured as the
+	# fraction of the slump repaired rather than raw points regained.
+	var novice_before_recovery = float(novice_slump["skill_delta"])
+	var veteran_before_recovery = float(veteran_slump["skill_delta"])
+	for i in range(40):
+		novice_model.record_execution(0, 92.0, 0.0, 0.0)
+		veteran_model.record_execution(0, 92.0, 0.0, 0.0)
+	var novice_recovery = novice_model.development_state(0)
+	var veteran_recovery = veteran_model.development_state(0)
+	var novice_gain = float(novice_recovery["skill_delta"]) - novice_before_recovery
+	var veteran_gain = float(veteran_recovery["skill_delta"]) - veteran_before_recovery
+	var novice_recovery_fraction = novice_gain / max(abs(novice_before_recovery), 0.001)
+	var veteran_recovery_fraction = veteran_gain / max(abs(veteran_before_recovery), 0.001)
+	_expect(novice_gain > 0.0, "excellent execution begins gradual novice recovery")
+	_expect(veteran_gain > 0.0, "excellent execution begins gradual veteran recovery")
+	_expect(veteran_recovery_fraction > novice_recovery_fraction, "established golfer self-corrects a larger fraction of lost skill once execution improves")
+	_expect(float(novice_recovery["skill_delta"]) < -0.05, "short recovery streak cannot instantly erase a long slump")
+
+	# Regression guard for mixed-round usage. Each shot family must retain enough of
+	# its own recent evidence to develop even when higher-frequency shot types are
+	# interleaved between repetitions. A shared 240-event history previously starved
+	# drive and short-game windows below the 60-event skill threshold.
+	var mixed = QuietGolfer.new()
+	mixed.profile = 1
+	mixed.apply_profile()
+	var mixed_model = TechniqueSkillDevelopment.new()
+	mixed_model.initialize_from_golfer(mixed)
+	for _cycle in range(100):
+		mixed_model.record_execution(0, 90.0, 0.0, 0.0)
+		for _shot in range(2):
+			mixed_model.record_execution(1, 90.0, 0.0, 0.0)
+		mixed_model.record_execution(2, 90.0, 0.0, 0.0)
+		for _shot in range(4):
+			mixed_model.record_execution(3, 90.0, 0.0, 0.0)
+	_expect(float(mixed_model.development_state(0)["skill_delta"]) > 0.0, "interleaved drive evidence can produce skill development")
+	_expect(float(mixed_model.development_state(1)["skill_delta"]) > 0.0, "interleaved approach evidence can produce skill development")
+	_expect(float(mixed_model.development_state(2)["skill_delta"]) > 0.0, "interleaved short-game evidence can produce skill development")
+	_expect(float(mixed_model.development_state(3)["skill_delta"]) > 0.0, "interleaved putting evidence can produce skill development")
+
+	print("============================================================")
+	print("POC-08 EXPERIENCE-STABILIZED SKILL DEVELOPMENT")
+	print("Novice stability: %.3f | slump delta: %.3f | recovery delta: %.3f | repaired %.1f%%" % [float(novice_base["experience_stability"]), float(novice_slump["skill_delta"]), float(novice_recovery["skill_delta"]), novice_recovery_fraction * 100.0])
+	print("Veteran stability: %.3f | slump delta: %.3f | recovery delta: %.3f | repaired %.1f%%" % [float(veteran_base["experience_stability"]), float(veteran_slump["skill_delta"]), float(veteran_recovery["skill_delta"]), veteran_recovery_fraction * 100.0])
+	print("============================================================")
+	novice.free()
+	veteran.free()
+	mixed.free()
+	if failures == 0:
+		print("POC-08 TECHNIQUE & SKILL DEVELOPMENT TESTS PASSED")
+		quit(0)
+	else:
+		push_error("POC-08 TECHNIQUE & SKILL DEVELOPMENT TESTS FAILED: %d" % failures)
+		quit(1)
+
+func _expect(condition: bool, label: String) -> void:
+	if condition:
+		print("PASS: ", label)
+	else:
+		failures += 1
+		push_error("FAIL: " + label)

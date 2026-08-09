@@ -1,0 +1,117 @@
+[gd_scene load_steps=19 format=3]
+
+[ext_resource type="Script" path="res://scenes/autonomous_demo.gd" id="1_demo"]
+[ext_resource type="Script" path="res://scenes/golfer.gd" id="2_golfer"]
+
+[sub_resource type="StandardMaterial3D" id="RoughMaterial"]
+albedo_color = Color(0.12, 0.32, 0.08, 1)
+[sub_resource type="BoxMesh" id="GroundMesh"]
+material = SubResource("RoughMaterial")
+size = Vector3(58, 0.2, 140)
+[sub_resource type="StandardMaterial3D" id="FairwayMaterial"]
+albedo_color = Color(0.18, 0.58, 0.16, 1)
+[sub_resource type="BoxMesh" id="FairwayMesh"]
+material = SubResource("FairwayMaterial")
+size = Vector3(22, 0.12, 90)
+[sub_resource type="StandardMaterial3D" id="GreenMaterial"]
+albedo_color = Color(0.30, 0.72, 0.24, 1)
+[sub_resource type="CylinderMesh" id="GreenMesh"]
+material = SubResource("GreenMaterial")
+top_radius = 14.0
+bottom_radius = 14.0
+height = 0.12
+[sub_resource type="StandardMaterial3D" id="BunkerMaterial"]
+albedo_color = Color(0.82, 0.72, 0.48, 1)
+[sub_resource type="BoxMesh" id="BunkerMesh"]
+material = SubResource("BunkerMaterial")
+size = Vector3(12, 0.14, 14)
+[sub_resource type="StandardMaterial3D" id="BallMaterial"]
+albedo_color = Color(1, 1, 1, 1)
+[sub_resource type="SphereMesh" id="BallMesh"]
+material = SubResource("BallMaterial")
+radius = 0.8
+height = 1.6
+[sub_resource type="StandardMaterial3D" id="HoleMaterial"]
+albedo_color = Color(0.95, 0.15, 0.12, 1)
+[sub_resource type="CylinderMesh" id="HoleMesh"]
+material = SubResource("HoleMaterial")
+top_radius = 1.5
+bottom_radius = 1.5
+height = 0.15
+[sub_resource type="StandardMaterial3D" id="WaterMaterial"]
+albedo_color = Color(0.04, 0.22, 0.85, 1)
+[sub_resource type="BoxMesh" id="WaterMesh"]
+material = SubResource("WaterMaterial")
+size = Vector3(32, 0.25, 12)
+[sub_resource type="StandardMaterial3D" id="FlagMaterial"]
+albedo_color = Color(0.95, 0.95, 0.1, 1)
+[sub_resource type="CylinderMesh" id="FlagPoleMesh"]
+material = SubResource("FlagMaterial")
+top_radius = 0.08
+bottom_radius = 0.08
+height = 5.0
+
+[node name="AutonomousDemo" type="Node3D"]
+script = ExtResource("1_demo")
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("GroundMesh")
+[node name="Fairway" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.12, 5)
+mesh = SubResource("FairwayMesh")
+[node name="Green" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.14, -55)
+mesh = SubResource("GreenMesh")
+[node name="FrontBunker" type="MeshInstance3D" parent="."]
+position = Vector3(11, 0.16, -39)
+mesh = SubResource("BunkerMesh")
+[node name="GolfBall" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.9, 55)
+mesh = SubResource("BallMesh")
+[node name="Hole" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.55, -55)
+mesh = SubResource("HoleMesh")
+[node name="FlagPole" type="MeshInstance3D" parent="Hole"]
+position = Vector3(0, 2.5, 0)
+mesh = SubResource("FlagPoleMesh")
+[node name="WaterHazard" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.25, 5)
+mesh = SubResource("WaterMesh")
+[node name="Golfer" type="Node" parent="."]
+script = ExtResource("2_golfer")
+profile = 0
+[node name="Camera3D" type="Camera3D" parent="."]
+position = Vector3(48, 62, 68)
+rotation_degrees = Vector3(-35, 33, 0)
+current = true
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -25, 0)
+shadow_enabled = true
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="UI" type="CanvasLayer" parent="."]
+[node name="Panel" type="PanelContainer" parent="UI"]
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 690.0
+offset_bottom = 145.0
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 2
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "POC-06F — LIE-AWARE AUTONOMOUS GOLF"
+[node name="Status" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Preparing comparison..."
+[node name="Detail" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "Watch each golfer react to fairway, rough, bunker, green, and water."
+[node name="ComparisonPanel" type="PanelContainer" parent="UI"]
+offset_left = 24.0
+offset_top = 165.0
+offset_right = 690.0
+offset_bottom = 390.0
+[node name="Comparison" type="Label" parent="UI/ComparisonPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "POC-06F — LIE-AWARE VISUAL COMPARISON\nWaiting for results..."
