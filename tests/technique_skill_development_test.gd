@@ -48,8 +48,9 @@ func _init() -> void:
 	_expect(abs(float(veteran_slump["skill_delta"])) < 1.25, "highly established skill remains strongly anchored")
 	_expect(float(veteran_slump["technique_bias"]["dispersion"]) < float(novice_slump["technique_bias"]["dispersion"]), "experience also resists embedding a bad technique pattern")
 
-	# Excellent recent execution should begin recovery for both. The veteran's
-	# stronger established pattern should help pull skill back toward baseline.
+	# Excellent recent execution should begin recovery for both. Because the veteran
+	# lost much less skill in the first place, recovery efficiency is measured as the
+	# fraction of the slump repaired rather than raw points regained.
 	var novice_before_recovery = float(novice_slump["skill_delta"])
 	var veteran_before_recovery = float(veteran_slump["skill_delta"])
 	for i in range(40):
@@ -59,15 +60,17 @@ func _init() -> void:
 	var veteran_recovery = veteran_model.development_state(0)
 	var novice_gain = float(novice_recovery["skill_delta"]) - novice_before_recovery
 	var veteran_gain = float(veteran_recovery["skill_delta"]) - veteran_before_recovery
+	var novice_recovery_fraction = novice_gain / max(abs(novice_before_recovery), 0.001)
+	var veteran_recovery_fraction = veteran_gain / max(abs(veteran_before_recovery), 0.001)
 	_expect(novice_gain > 0.0, "excellent execution begins gradual novice recovery")
 	_expect(veteran_gain > 0.0, "excellent execution begins gradual veteran recovery")
-	_expect(veteran_gain > novice_gain, "established golfer self-corrects more efficiently once execution improves")
+	_expect(veteran_recovery_fraction > novice_recovery_fraction, "established golfer self-corrects a larger fraction of lost skill once execution improves")
 	_expect(float(novice_recovery["skill_delta"]) < -0.05, "short recovery streak cannot instantly erase a long slump")
 
 	print("============================================================")
 	print("POC-08 EXPERIENCE-STABILIZED SKILL DEVELOPMENT")
-	print("Novice stability: %.3f | slump delta: %.3f | recovery delta: %.3f" % [float(novice_base["experience_stability"]), float(novice_slump["skill_delta"]), float(novice_recovery["skill_delta"])])
-	print("Veteran stability: %.3f | slump delta: %.3f | recovery delta: %.3f" % [float(veteran_base["experience_stability"]), float(veteran_slump["skill_delta"]), float(veteran_recovery["skill_delta"])])
+	print("Novice stability: %.3f | slump delta: %.3f | recovery delta: %.3f | repaired %.1f%%" % [float(novice_base["experience_stability"]), float(novice_slump["skill_delta"]), float(novice_recovery["skill_delta"]), novice_recovery_fraction * 100.0])
+	print("Veteran stability: %.3f | slump delta: %.3f | recovery delta: %.3f | repaired %.1f%%" % [float(veteran_base["experience_stability"]), float(veteran_slump["skill_delta"]), float(veteran_recovery["skill_delta"]), veteran_recovery_fraction * 100.0])
 	print("============================================================")
 	novice.free()
 	veteran.free()
