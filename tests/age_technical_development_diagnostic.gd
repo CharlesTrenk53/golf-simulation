@@ -20,7 +20,7 @@ const START_AGES := [35, 55, 65]
 var rng := RandomNumberGenerator.new()
 
 func _init() -> void:
-	print("AGEDEVCSV,start_age,current_age,season,shots,physical_power,mobility,coordination,technical_skill,driver_carry,skill_change,carry_change")
+	print("AGEDEVCSV,start_age,current_age,season,shots,age_plasticity,physical_power,mobility,coordination,technical_skill,driver_carry,skill_change,carry_change")
 	for start_age in START_AGES:
 		_run_age_cohort(start_age)
 	print("POC-08 AGE X TECHNICAL DEVELOPMENT DIAGNOSTIC COMPLETE")
@@ -33,7 +33,7 @@ func _run_age_cohort(start_age: int) -> void:
 	var bag = GolfBag.new()
 	model.initialize_from_golfer(golfer)
 	# Reuse the same stochastic execution stream for every age cohort. Any difference
-	# in technical development therefore cannot be blamed on different shot quality.
+	# in technical development therefore comes from age plasticity, not shot quality.
 	rng.seed = 52026
 
 	var driver = bag.get_club("DRIVER")
@@ -42,6 +42,10 @@ func _run_age_cohort(start_age: int) -> void:
 
 	var total_shots := 0
 	for season in range(1, SEASONS + 1):
+		# Technical plasticity follows chronological age during the career rather than
+		# being frozen at initialization. Every shot in this season uses the golfer's
+		# current age before lifecycle aging advances them into the following season.
+		model.set_current_age(float(golfer.age))
 		for _shot in range(SHOTS_PER_SEASON):
 			var score = clamp(rng.randfn(TARGET_EXECUTION, EXECUTION_SD), 0.0, 100.0)
 			var severity = (62.0 - score) / 37.0
@@ -51,6 +55,7 @@ func _run_age_cohort(start_age: int) -> void:
 			total_shots += 1
 
 		lifecycle.advance_year(golfer)
+		model.set_current_age(float(golfer.age))
 		var technical_skill = float(model.development_state(SHOT_TYPE)["effective_skill"])
 		_emit(start_age, season, total_shots, golfer, model, bag, driver, technical_skill, start_carry)
 
@@ -80,11 +85,13 @@ func _carry_with_effective_skill(bag, driver: Dictionary, golfer, technical_skil
 
 func _emit(start_age: int, season: int, shots: int, golfer, model, bag, driver: Dictionary, technical_skill: float, start_carry: float) -> void:
 	var carry = _carry_with_effective_skill(bag, driver, golfer, technical_skill)
-	print("AGEDEVCSV,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f" % [
+	var plasticity = float(model.development_state(SHOT_TYPE)["age_learning_plasticity"])
+	print("AGEDEVCSV,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f" % [
 		start_age,
 		int(golfer.age),
 		season,
 		shots,
+		plasticity,
 		float(golfer.physical_power),
 		float(golfer.mobility),
 		float(golfer.coordination),
