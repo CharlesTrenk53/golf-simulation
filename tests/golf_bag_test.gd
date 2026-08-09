@@ -24,11 +24,38 @@ func _init() -> void:
 	var driver = bag.get_club("DRIVER")
 	var bill_driver = bag.effective_carry(driver, bill, "TEE", 1.0)
 	var rick_driver = bag.effective_carry(driver, rick, "TEE", 1.0)
-	_check(bill_driver > rick_driver, "better driver ability increases effective carry")
+	_check(bill_driver > rick_driver, "physical capacity and strike quality can create different driver carry")
 	_check(
 		bag.effective_dispersion(driver, bill, "TEE", 1.0) < bag.effective_dispersion(driver, rick, "TEE", 1.0),
-		"better driver ability reduces dispersion"
+		"better driver technique reduces dispersion"
 	)
+
+	# Hold technique constant and change only physical capacity. Carry should move,
+	# while dispersion should remain unchanged.
+	var physical_a = QuietGolfer.new()
+	physical_a.profile = 1
+	physical_a.apply_profile()
+	var physical_b = QuietGolfer.new()
+	physical_b.profile = 1
+	physical_b.apply_profile()
+	physical_a.driving = 70.0
+	physical_b.driving = 70.0
+	physical_a.physical_power = 85.0
+	physical_a.mobility = 80.0
+	physical_a.coordination = 70.0
+	physical_b.physical_power = 45.0
+	physical_b.mobility = 55.0
+	physical_b.coordination = 70.0
+	var strong_carry = bag.effective_carry(driver, physical_a, "TEE", 1.0)
+	var limited_carry = bag.effective_carry(driver, physical_b, "TEE", 1.0)
+	_check(strong_carry > limited_carry, "physical capacity changes distance at equal technical skill")
+	_check(abs(bag.effective_dispersion(driver, physical_a, "TEE", 1.0) - bag.effective_dispersion(driver, physical_b, "TEE", 1.0)) < 0.001, "physical power does not rewrite technical dispersion")
+
+	# Age is metadata for future physical evolution, not an arbitrary direct penalty.
+	var age_carry_before = bag.effective_carry(driver, physical_a, "TEE", 1.0)
+	physical_a.age = 65
+	var age_carry_after = bag.effective_carry(driver, physical_a, "TEE", 1.0)
+	_check(abs(age_carry_before - age_carry_after) < 0.001, "age affects distance only through changing physical capacity")
 
 	var seven_iron = bag.get_club("7_IRON")
 	_check(
@@ -41,6 +68,8 @@ func _init() -> void:
 
 	bill.free()
 	rick.free()
+	physical_a.free()
+	physical_b.free()
 
 	if failures == 0:
 		print("POC-07 CLUB TESTS PASSED")
