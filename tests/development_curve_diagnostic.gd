@@ -4,8 +4,8 @@ const TechniqueSkillDevelopment = preload("res://simulation/technique_skill_deve
 const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 
 const SHOT_TYPE := 0
-const MAX_SHOTS := 2000
-const CHECKPOINT := 100
+const MAX_SHOTS := 10000
+const CHECKPOINT := 250
 
 func _init() -> void:
 	print("scenario,profile,prior_experience,shots,baseline_skill,effective_skill,skill_delta,pct_change,stability,avg_execution")
@@ -16,8 +16,8 @@ func _init() -> void:
 	_run_constant_scenario("VETERAN_POOR", 2, 8000, 25.0)
 	_run_constant_scenario("NOVICE_GOOD", 2, 100, 90.0)
 	_run_constant_scenario("VETERAN_GOOD", 2, 8000, 90.0)
-	_run_recovery_scenario("NOVICE_SLUMP_RECOVERY", 2, 100, 800, 25.0, 90.0)
-	_run_recovery_scenario("VETERAN_SLUMP_RECOVERY", 2, 8000, 800, 25.0, 90.0)
+	_run_recovery_scenario("NOVICE_SLUMP_RECOVERY", 2, 100, 2000, 25.0, 90.0)
+	_run_recovery_scenario("VETERAN_SLUMP_RECOVERY", 2, 8000, 2000, 25.0, 90.0)
 
 	# Current golfer profiles under the same sustained poor Driver execution.
 	# This checks the actual experience anchors assigned to Bill, Rick and Carl.
