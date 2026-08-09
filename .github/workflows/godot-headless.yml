@@ -69,5 +69,8 @@ jobs:
       - name: Validate recovery across slump severities and durations
         run: ./godot --headless --path . --script res://tests/recovery_generalization_diagnostic.gd
 
+      - name: Trace learning-profile career divergence
+        run: ./godot --headless --path . --script res://tests/learning_profile_career_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
