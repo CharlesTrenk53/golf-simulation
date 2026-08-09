@@ -6,6 +6,7 @@ on:
       - main
       - poc-05-autonomous-hole
       - poc-06-course-context
+      - poc-07-shot-club-selection
   pull_request:
 
 jobs:
