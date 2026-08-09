@@ -16,10 +16,9 @@ var profiles: Array = [
 	{"profile": 2, "name": "Careful Carl"}
 ]
 
-
 func _init() -> void:
 	print("============================================================")
-	print("POC-07 CLUB-AWARE MONTE CARLO GOLFER SIMULATION")
+	print("POC-07 FOUR-TIER DECISION QUALITY MONTE CARLO")
 	print("Runs per golfer: ", RUNS_PER_GOLFER)
 	print("Same course context; seeds 1 through ", RUNS_PER_GOLFER)
 	print("============================================================")
@@ -27,7 +26,6 @@ func _init() -> void:
 		_print_summary(_run_profile(profile_data["profile"], profile_data["name"]))
 	print("POC-07 MONTE CARLO COMPLETE")
 	quit(0)
-
 
 func _build_course_context():
 	var context = CourseContext.new()
@@ -38,153 +36,84 @@ func _build_course_context():
 	context.add_zone("Water", CourseContext.Surface.WATER, Vector3(0, 0, 5), Vector2(16, 6))
 	return context
 
-
 func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 	var strokes: Array[int] = []
-	var finished_count := 0
-	var total_water := 0
-	var total_shots := 0
-	var option_counts := {}
-	var club_counts := {}
-	var surface_counts := {}
-	var score_counts := {}
-	var decision_quality_counts := {}
-	var execution_quality_counts := {}
-	var decision_execution_counts := {}
-
+	var finished_count := 0; var total_water := 0; var total_shots := 0
+	var option_counts := {}; var club_counts := {}; var surface_counts := {}; var score_counts := {}
+	var decision_quality_counts := {}; var execution_quality_counts := {}; var decision_execution_counts := {}
+	var decision_gap_total := 0.0; var decision_gap_max := 0.0
 	for run_number in range(1, RUNS_PER_GOLFER + 1):
-		var golfer = QuietGolfer.new()
-		golfer.profile = profile_value
-		golfer.apply_profile()
+		var golfer = QuietGolfer.new(); golfer.profile = profile_value; golfer.apply_profile()
 		var simulation = AutonomousHole.new()
 		var result = simulation.play_hole(golfer, START_POSITION, HOLE_POSITION, hazards, PAR, run_number, _build_course_context())
-		var score: int = result["strokes"]
-		strokes.append(score)
-		if result["finished"]:
-			finished_count += 1
+		var score: int = result["strokes"]; strokes.append(score)
+		if result["finished"]: finished_count += 1
 		total_water += golfer.water_balls
 		for shot in result["history"]:
 			total_shots += 1
-			var option_name: String = shot["option"]
-			option_counts[option_name] = int(option_counts.get(option_name, 0)) + 1
-			var club_name: String = shot.get("club_name", "UNASSIGNED")
-			if club_name.is_empty():
-				club_name = "UNASSIGNED"
+			var option_name: String = shot["option"]; option_counts[option_name] = int(option_counts.get(option_name, 0)) + 1
+			var club_name: String = shot.get("club_name", "UNASSIGNED"); if club_name.is_empty(): club_name = "UNASSIGNED"
 			club_counts[club_name] = int(club_counts.get(club_name, 0)) + 1
-			var surface_name: String = shot["surface_after"]
-			surface_counts[surface_name] = int(surface_counts.get(surface_name, 0)) + 1
-
+			var surface_name: String = shot["surface_after"]; surface_counts[surface_name] = int(surface_counts.get(surface_name, 0)) + 1
 			var decision_quality: String = shot.get("decision_quality", "UNKNOWN")
 			var execution_quality: String = shot.get("execution_quality", "UNKNOWN")
 			decision_quality_counts[decision_quality] = int(decision_quality_counts.get(decision_quality, 0)) + 1
 			execution_quality_counts[execution_quality] = int(execution_quality_counts.get(execution_quality, 0)) + 1
-			var decision_bucket = "SENSIBLE" if decision_quality == "SENSIBLE" else "QUESTIONABLE_OR_POOR"
+			var gap = float(shot.get("decision_gap", 0.0)); decision_gap_total += gap; decision_gap_max = max(decision_gap_max, gap)
+			var decision_bucket = "GOOD_DECISION" if decision_quality == "OPTIMAL" or decision_quality == "SENSIBLE" else "WEAK_DECISION"
 			var execution_bucket = "GOOD_OR_ACCEPTABLE" if execution_quality == "GOOD" or execution_quality == "ACCEPTABLE" else "POOR"
 			var combo_key = decision_bucket + " + " + execution_bucket
 			decision_execution_counts[combo_key] = int(decision_execution_counts.get(combo_key, 0)) + 1
-
 		score_counts[score] = int(score_counts.get(score, 0)) + 1
 		golfer.free()
-
 	strokes.sort()
-	return {
-		"name": profile_name,
-		"mean": _mean(strokes),
-		"median": _percentile(strokes, 0.50),
-		"p95": _percentile(strokes, 0.95),
-		"best": strokes.front(),
-		"worst": strokes.back(),
-		"finish_rate": float(finished_count) / RUNS_PER_GOLFER * 100.0,
-		"water_per_hole": float(total_water) / RUNS_PER_GOLFER,
-		"total_shots": total_shots,
-		"option_counts": option_counts,
-		"club_counts": club_counts,
-		"surface_counts": surface_counts,
-		"score_counts": score_counts,
-		"decision_quality_counts": decision_quality_counts,
-		"execution_quality_counts": execution_quality_counts,
-		"decision_execution_counts": decision_execution_counts
-	}
-
+	return {"name": profile_name, "mean": _mean(strokes), "median": _percentile(strokes, 0.50), "p95": _percentile(strokes, 0.95), "best": strokes.front(), "worst": strokes.back(), "finish_rate": float(finished_count) / RUNS_PER_GOLFER * 100.0, "water_per_hole": float(total_water) / RUNS_PER_GOLFER, "total_shots": total_shots, "option_counts": option_counts, "club_counts": club_counts, "surface_counts": surface_counts, "score_counts": score_counts, "decision_quality_counts": decision_quality_counts, "execution_quality_counts": execution_quality_counts, "decision_execution_counts": decision_execution_counts, "mean_decision_gap": decision_gap_total / max(total_shots, 1), "max_decision_gap": decision_gap_max}
 
 func _mean(values: Array[int]) -> float:
 	var total := 0
-	for value in values:
-		total += value
+	for value in values: total += value
 	return float(total) / values.size()
 
-
 func _percentile(values: Array[int], proportion: float) -> int:
-	var index = int(round((values.size() - 1) * proportion))
-	return values[clamp(index, 0, values.size() - 1)]
-
+	return values[clamp(int(round((values.size() - 1) * proportion)), 0, values.size() - 1)]
 
 func _rate(counts: Dictionary, name: String, total: int) -> float:
-	if total == 0:
-		return 0.0
+	if total == 0: return 0.0
 	return float(counts.get(name, 0)) / total * 100.0
-
 
 func _score_percent(score_counts: Dictionary, score: int) -> float:
 	return float(score_counts.get(score, 0)) / RUNS_PER_GOLFER * 100.0
 
-
 func _score_5_plus(score_counts: Dictionary) -> float:
 	var count := 0
 	for score in score_counts.keys():
-		if int(score) >= 5:
-			count += int(score_counts[score])
+		if int(score) >= 5: count += int(score_counts[score])
 	return float(count) / RUNS_PER_GOLFER * 100.0
 
-
 func _print_summary(summary: Dictionary) -> void:
-	var options: Dictionary = summary["option_counts"]
-	var clubs: Dictionary = summary["club_counts"]
-	var surfaces: Dictionary = summary["surface_counts"]
-	var decisions: Dictionary = summary["decision_quality_counts"]
-	var executions: Dictionary = summary["execution_quality_counts"]
-	var combos: Dictionary = summary["decision_execution_counts"]
+	var options: Dictionary = summary["option_counts"]; var clubs: Dictionary = summary["club_counts"]; var surfaces: Dictionary = summary["surface_counts"]
+	var decisions: Dictionary = summary["decision_quality_counts"]; var executions: Dictionary = summary["execution_quality_counts"]; var combos: Dictionary = summary["decision_execution_counts"]
 	var total: int = summary["total_shots"]
-	print("")
-	print("-------------------- ", summary["name"], " --------------------")
-	print("Mean strokes: %.3f" % summary["mean"])
-	print("Median strokes: ", summary["median"])
-	print("Best score: ", summary["best"])
-	print("Worst score: ", summary["worst"])
-	print("P95 strokes: ", summary["p95"])
-	print("Finished holes: %.1f%%" % summary["finish_rate"])
-	print("Water balls per hole: %.3f" % summary["water_per_hole"])
-	print("Score 2: %.1f%%" % _score_percent(summary["score_counts"], 2))
-	print("Score 3: %.1f%%" % _score_percent(summary["score_counts"], 3))
-	print("Score 4: %.1f%%" % _score_percent(summary["score_counts"], 4))
-	print("Score 5+: %.1f%%" % _score_5_plus(summary["score_counts"]))
+	print(""); print("-------------------- ", summary["name"], " --------------------")
+	print("Mean strokes: %.3f" % summary["mean"]); print("Median strokes: ", summary["median"]); print("Best score: ", summary["best"]); print("Worst score: ", summary["worst"]); print("P95 strokes: ", summary["p95"])
+	print("Finished holes: %.1f%%" % summary["finish_rate"]); print("Water balls per hole: %.3f" % summary["water_per_hole"])
+	print("Score 2: %.1f%%" % _score_percent(summary["score_counts"], 2)); print("Score 3: %.1f%%" % _score_percent(summary["score_counts"], 3)); print("Score 4: %.1f%%" % _score_percent(summary["score_counts"], 4)); print("Score 5+: %.1f%%" % _score_5_plus(summary["score_counts"]))
+	print("Mean objective decision gap: %.3f" % summary["mean_decision_gap"]); print("Worst objective decision gap: %.3f" % summary["max_decision_gap"])
 	print("-- Decisions --")
 	for option_name in ["ATTACK", "LAYUP", "BAILOUT", "ADVANCE_FROM_ROUGH", "RECOVER_TO_FAIRWAY", "BUNKER_EXIT", "SPLASH_OUT", "SAFE_BUNKER_EXIT", "PITCH", "SAFE_PITCH", "PUTT"]:
-		var count: int = int(options.get(option_name, 0))
-		if count > 0:
-			print("%s: %.1f%% (%d)" % [option_name, _rate(options, option_name, total), count])
+		var count: int = int(options.get(option_name, 0)); if count > 0: print("%s: %.1f%% (%d)" % [option_name, _rate(options, option_name, total), count])
 	print("-- Clubs --")
 	for club_name in ["Driver", "3 Wood", "5 Iron", "7 Iron", "9 Iron", "Pitching Wedge", "Sand Wedge", "Putter", "UNASSIGNED"]:
-		var count: int = int(clubs.get(club_name, 0))
-		if count > 0:
-			print("%s: %.1f%% (%d)" % [club_name, _rate(clubs, club_name, total), count])
+		var count: int = int(clubs.get(club_name, 0)); if count > 0: print("%s: %.1f%% (%d)" % [club_name, _rate(clubs, club_name, total), count])
 	print("-- Landing surfaces --")
 	for surface_name in ["TEE", "FAIRWAY", "ROUGH", "BUNKER", "GREEN", "WATER"]:
-		var count: int = int(surfaces.get(surface_name, 0))
-		if count > 0:
-			print("%s: %.1f%% (%d)" % [surface_name, _rate(surfaces, surface_name, total), count])
-	print("-- Decision quality --")
-	for label in ["SENSIBLE", "QUESTIONABLE", "POOR", "UNKNOWN"]:
-		var count: int = int(decisions.get(label, 0))
-		if count > 0:
-			print("%s: %.1f%% (%d)" % [label, _rate(decisions, label, total), count])
+		var count: int = int(surfaces.get(surface_name, 0)); if count > 0: print("%s: %.1f%% (%d)" % [surface_name, _rate(surfaces, surface_name, total), count])
+	print("-- Decision quality (objective evaluator) --")
+	for label in ["OPTIMAL", "SENSIBLE", "QUESTIONABLE", "POOR", "UNKNOWN"]:
+		var count: int = int(decisions.get(label, 0)); if count > 0: print("%s: %.1f%% (%d)" % [label, _rate(decisions, label, total), count])
 	print("-- Execution quality --")
 	for label in ["GOOD", "ACCEPTABLE", "POOR", "UNKNOWN"]:
-		var count: int = int(executions.get(label, 0))
-		if count > 0:
-			print("%s: %.1f%% (%d)" % [label, _rate(executions, label, total), count])
+		var count: int = int(executions.get(label, 0)); if count > 0: print("%s: %.1f%% (%d)" % [label, _rate(executions, label, total), count])
 	print("-- Decision x execution --")
-	for label in ["SENSIBLE + GOOD_OR_ACCEPTABLE", "SENSIBLE + POOR", "QUESTIONABLE_OR_POOR + GOOD_OR_ACCEPTABLE", "QUESTIONABLE_OR_POOR + POOR"]:
-		var count: int = int(combos.get(label, 0))
-		if count > 0:
-			print("%s: %.1f%% (%d)" % [label, _rate(combos, label, total), count])
+	for label in ["GOOD_DECISION + GOOD_OR_ACCEPTABLE", "GOOD_DECISION + POOR", "WEAK_DECISION + GOOD_OR_ACCEPTABLE", "WEAK_DECISION + POOR"]:
+		var count: int = int(combos.get(label, 0)); if count > 0: print("%s: %.1f%% (%d)" % [label, _rate(combos, label, total), count])
