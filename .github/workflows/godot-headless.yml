@@ -90,5 +90,8 @@ jobs:
       - name: Trace age x technical development
         run: ./godot --headless --path . --script res://tests/age_technical_development_diagnostic.gd
 
+      - name: Run full-career lifetime stress test
+        run: ./godot --headless --path . --script res://tests/full_career_lifetime_diagnostic.gd
+
       - name: Run 3000-hole Monte Carlo comparison
         run: ./godot --headless --path . --script res://tests/monte_carlo_golfer_simulation.gd
