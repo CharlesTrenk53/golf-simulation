@@ -7,6 +7,48 @@ var option_generator = ShotOptionGenerator.new()
 var shot_history: Array = []
 
 
+func create_state(
+	start_position: Vector3,
+	hole_position: Vector3,
+	par: int = 4,
+	seed_value: int = 1
+):
+	seed(seed_value)
+	shot_history.clear()
+	return CourseState.new(start_position, hole_position, par)
+
+
+func play_step(
+	golfer: Node,
+	state,
+	hazards: Array = []
+) -> Dictionary:
+	if not state.can_continue():
+		return {}
+
+	var options = option_generator.generate_options(golfer, state, hazards)
+	if options.is_empty():
+		return {}
+
+	var chosen = golfer.choose_best_option(options)
+	var result = _execute_option(golfer, state, chosen, hazards)
+	result["selected_option"] = chosen
+	shot_history.append(result)
+
+	state.advance_to(
+		result["landing_position"],
+		result["outcome"],
+		result["penalty_strokes"]
+	)
+
+	golfer.record_shot_result(
+		result["outcome"],
+		chosen["is_aggressive"]
+	)
+
+	return result
+
+
 func play_hole(
 	golfer: Node,
 	start_position: Vector3,
@@ -15,30 +57,17 @@ func play_hole(
 	par: int = 4,
 	seed_value: int = 1
 ) -> Dictionary:
-	seed(seed_value)
-	shot_history.clear()
-
-	var state = CourseState.new(start_position, hole_position, par)
+	var state = create_state(
+		start_position,
+		hole_position,
+		par,
+		seed_value
+	)
 
 	while state.can_continue():
-		var options = option_generator.generate_options(golfer, state, hazards)
-		if options.is_empty():
+		var result = play_step(golfer, state, hazards)
+		if result.is_empty():
 			break
-
-		var chosen = golfer.choose_best_option(options)
-		var result = _execute_option(golfer, state, chosen, hazards)
-		shot_history.append(result)
-
-		state.advance_to(
-			result["landing_position"],
-			result["outcome"],
-			result["penalty_strokes"]
-		)
-
-		golfer.record_shot_result(
-			result["outcome"],
-			chosen["is_aggressive"]
-		)
 
 	return {
 		"finished": state.finished,
@@ -78,10 +107,11 @@ func _execute_option(
 
 	var outcome = "SUCCESS"
 	var penalty_strokes = 0
+	var execution_roll = -1.0
 
 	if option["is_aggressive"]:
-		var success_roll = randf_range(0.0, 100.0)
-		if success_roll > float(option["model_success_chance"]):
+		execution_roll = randf_range(0.0, 100.0)
+		if execution_roll > float(option["model_success_chance"]):
 			var hazard = _closest_intersecting_hazard(start, target, hazards)
 			if not hazard.is_empty():
 				landing = hazard["position"]
@@ -99,6 +129,7 @@ func _execute_option(
 		"intended_distance": intended_distance,
 		"outcome": outcome,
 		"penalty_strokes": penalty_strokes,
+		"execution_roll": execution_roll,
 		"remaining_after_shot": landing.distance_to(state.hole_position)
 	}
 
