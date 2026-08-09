@@ -48,6 +48,9 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 	var club_counts := {}
 	var surface_counts := {}
 	var score_counts := {}
+	var decision_quality_counts := {}
+	var execution_quality_counts := {}
+	var decision_execution_counts := {}
 
 	for run_number in range(1, RUNS_PER_GOLFER + 1):
 		var golfer = QuietGolfer.new()
@@ -70,6 +73,16 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 			club_counts[club_name] = int(club_counts.get(club_name, 0)) + 1
 			var surface_name: String = shot["surface_after"]
 			surface_counts[surface_name] = int(surface_counts.get(surface_name, 0)) + 1
+
+			var decision_quality: String = shot.get("decision_quality", "UNKNOWN")
+			var execution_quality: String = shot.get("execution_quality", "UNKNOWN")
+			decision_quality_counts[decision_quality] = int(decision_quality_counts.get(decision_quality, 0)) + 1
+			execution_quality_counts[execution_quality] = int(execution_quality_counts.get(execution_quality, 0)) + 1
+			var decision_bucket = "SENSIBLE" if decision_quality == "SENSIBLE" else "QUESTIONABLE_OR_POOR"
+			var execution_bucket = "GOOD_OR_ACCEPTABLE" if execution_quality == "GOOD" or execution_quality == "ACCEPTABLE" else "POOR"
+			var combo_key = decision_bucket + " + " + execution_bucket
+			decision_execution_counts[combo_key] = int(decision_execution_counts.get(combo_key, 0)) + 1
+
 		score_counts[score] = int(score_counts.get(score, 0)) + 1
 		golfer.free()
 
@@ -87,7 +100,10 @@ func _run_profile(profile_value: int, profile_name: String) -> Dictionary:
 		"option_counts": option_counts,
 		"club_counts": club_counts,
 		"surface_counts": surface_counts,
-		"score_counts": score_counts
+		"score_counts": score_counts,
+		"decision_quality_counts": decision_quality_counts,
+		"execution_quality_counts": execution_quality_counts,
+		"decision_execution_counts": decision_execution_counts
 	}
 
 
@@ -125,6 +141,9 @@ func _print_summary(summary: Dictionary) -> void:
 	var options: Dictionary = summary["option_counts"]
 	var clubs: Dictionary = summary["club_counts"]
 	var surfaces: Dictionary = summary["surface_counts"]
+	var decisions: Dictionary = summary["decision_quality_counts"]
+	var executions: Dictionary = summary["execution_quality_counts"]
+	var combos: Dictionary = summary["decision_execution_counts"]
 	var total: int = summary["total_shots"]
 	print("")
 	print("-------------------- ", summary["name"], " --------------------")
@@ -154,3 +173,18 @@ func _print_summary(summary: Dictionary) -> void:
 		var count: int = int(surfaces.get(surface_name, 0))
 		if count > 0:
 			print("%s: %.1f%% (%d)" % [surface_name, _rate(surfaces, surface_name, total), count])
+	print("-- Decision quality --")
+	for label in ["SENSIBLE", "QUESTIONABLE", "POOR", "UNKNOWN"]:
+		var count: int = int(decisions.get(label, 0))
+		if count > 0:
+			print("%s: %.1f%% (%d)" % [label, _rate(decisions, label, total), count])
+	print("-- Execution quality --")
+	for label in ["GOOD", "ACCEPTABLE", "POOR", "UNKNOWN"]:
+		var count: int = int(executions.get(label, 0))
+		if count > 0:
+			print("%s: %.1f%% (%d)" % [label, _rate(executions, label, total), count])
+	print("-- Decision x execution --")
+	for label in ["SENSIBLE + GOOD_OR_ACCEPTABLE", "SENSIBLE + POOR", "QUESTIONABLE_OR_POOR + GOOD_OR_ACCEPTABLE", "QUESTIONABLE_OR_POOR + POOR"]:
+		var count: int = int(combos.get(label, 0))
+		if count > 0:
+			print("%s: %.1f%% (%d)" % [label, _rate(combos, label, total), count])
