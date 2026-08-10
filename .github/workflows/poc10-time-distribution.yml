@@ -1,4 +1,4 @@
-name: POC-10 Time Distribution Diagnostic
+name: POC-10 Lifecycle Diagnostics
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  time-distribution:
+  poc10-diagnostics:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -33,3 +33,12 @@ jobs:
         with:
           name: poc10-time-distribution
           path: poc10_time_distribution.csv
+
+      - name: Trace POC-10 golf-life career spread
+        run: ./godot --headless --path . --script res://tests/poc10_golf_life_career_diagnostic.gd
+
+      - name: Upload POC-10 golf-life career spread
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc10-golf-life-careers
+          path: poc10_golf_life_careers.csv
