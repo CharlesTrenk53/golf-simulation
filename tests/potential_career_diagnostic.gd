@@ -10,15 +10,20 @@ const EXECUTION_MEAN := 68.0
 const EXECUTION_SD := 6.0
 const POTENTIAL_LEVELS := [58.0, 68.0, 78.0, 88.0, 96.0]
 const CHECKPOINTS := [16, 20, 25, 30, 35, 40, 45]
+const OUTPUT_PATH := "res://poc09_potential_careers.csv"
+
+var output_rows: Array[String] = []
 
 func _init() -> void:
 	print("=== POC-09 POTENTIAL CAREER DIAGNOSTIC ===")
 	print("Same start, aptitude, age, experience, and execution stream; only latent driving potential differs.")
 	print("potential,age,effective_skill,delta,potential_resistance")
+	output_rows.append("potential,age,effective_skill,delta,potential_resistance")
 
 	for potential in POTENTIAL_LEVELS:
 		_run_profile(float(potential))
 
+	_write_output()
 	print("=== END POC-09 POTENTIAL CAREER DIAGNOSTIC ===")
 	quit(0)
 
@@ -53,10 +58,23 @@ func _run_profile(potential: float) -> void:
 
 func _emit_state(potential: float, age: int, development: RefCounted) -> void:
 	var state = development.development_state(0)
-	print("%.1f,%d,%.4f,%.4f,%.4f" % [
+	var row = "%.1f,%d,%.4f,%.4f,%.4f" % [
 		potential,
 		age,
 		float(state["effective_skill"]),
 		float(state["skill_delta"]),
 		float(state["potential_resistance"])
-	])
+	]
+	print(row)
+	output_rows.append(row)
+
+func _write_output() -> void:
+	var output = FileAccess.open(OUTPUT_PATH, FileAccess.WRITE)
+	if output == null:
+		push_error("Could not write POC-09 career diagnostic CSV: %s" % OUTPUT_PATH)
+		quit(1)
+		return
+	for row in output_rows:
+		output.store_line(row)
+	output.close()
+	print("Wrote POC-09 career diagnostic CSV: %s" % OUTPUT_PATH)
