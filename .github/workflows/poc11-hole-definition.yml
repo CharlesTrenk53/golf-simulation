@@ -28,3 +28,6 @@ jobs:
 
       - name: Run POC-11B spatial query tests
         run: timeout 90s ./godot --headless --path . --script res://tests/hole_spatial_query_test.gd
+
+      - name: Run POC-11C course-to-decision integration tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/data_defined_autonomous_hole_test.gd
