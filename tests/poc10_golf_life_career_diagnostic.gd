@@ -138,7 +138,7 @@ func _run_career(config: Dictionary) -> void:
 	golfer.free()
 
 func _apply_round_event(golfer, development, activity, bridge, readiness, event_day: int, career_form: float) -> void:
-	var result := activity.record_round_on_day(event_day)
+	var result: Dictionary = activity.record_round_on_day(event_day)
 	for shot_type in SHOT_TYPES:
 		var reps := int(result["on_course_exposure"][shot_type])
 		if reps <= 0:
@@ -151,7 +151,7 @@ func _apply_round_event(golfer, development, activity, bridge, readiness, event_
 func _apply_practice_event(golfer, development, activity, bridge, readiness, event_day: int, session_reps: int, focus: Dictionary, quality: float) -> void:
 	if session_reps <= 0:
 		return
-	var result := activity.record_practice_on_day(event_day, session_reps, focus, quality)
+	var result: Dictionary = activity.record_practice_on_day(event_day, session_reps, focus, quality)
 	for shot_type in SHOT_TYPES:
 		var reps := int(result["practice_repetitions"][shot_type])
 		if reps <= 0:
@@ -358,7 +358,7 @@ func _emit_year(config: Dictionary, golfer, development, readiness, activity, ag
 		var state: Dictionary = development.development_state(shot_type)
 		states[shot_type] = state
 		var durable_skill := float(state["effective_skill"])
-		var usable_skill := readiness.usable_skill(durable_skill, shot_type)
+		var usable_skill: float = float(readiness.usable_skill(durable_skill, shot_type))
 		usable[shot_type] = usable_skill
 		durable_sum += durable_skill
 		usable_sum += usable_skill
