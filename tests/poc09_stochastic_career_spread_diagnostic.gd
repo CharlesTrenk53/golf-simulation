@@ -97,7 +97,8 @@ func _run_career(config: Dictionary) -> void:
 		golfer.age = age
 		development.set_current_age(age)
 		career_form = FORM_PERSISTENCE * career_form + rng.randfn(0.0, FORM_INNOVATION_SD)
-		var exposure := _annual_exposure(age, float(config["exposure"]))
+		var exposure_multiplier: float = float(config["exposure"]) * _career_stage_exposure_multiplier(config, age)
+		var exposure := _annual_exposure(age, exposure_multiplier)
 		var rounds := int(exposure["rounds"])
 		var annual_shots := 0
 
@@ -136,6 +137,23 @@ func _create_golfer(config: Dictionary):
 	golfer.career_shot_experience = {0: 800, 1: 1200, 2: 900, 3: 1400}
 	golfer.skill_learning_rates = config["aptitude"].duplicate(true)
 	return golfer
+
+func _career_stage_exposure_multiplier(config: Dictionary, age: int) -> float:
+	if str(config["id"]) != "late_bloomer":
+		return 1.0
+	# A late bloomer is modeled as someone whose developmental opportunity arrives
+	# later rather than someone whose biology suddenly changes. Early exposure is
+	# deliberately limited; the largest sustained practice/playing window comes
+	# between roughly 30 and 50 while the golfer still retains meaningful plasticity.
+	if age <= 24:
+		return 0.55
+	if age <= 29:
+		return 0.75
+	if age <= 39:
+		return 1.35
+	if age <= 50:
+		return 1.25
+	return 1.0
 
 func _annual_exposure(age: int, exposure_multiplier: float) -> Dictionary:
 	var base_rounds: int
