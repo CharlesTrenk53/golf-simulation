@@ -58,6 +58,9 @@ jobs:
       - name: Run potential integration tests
         run: ./godot --headless --path . --script res://tests/development_potential_integration_test.gd
 
+      - name: Run persistent golfer potential tests
+        run: ./godot --headless --path . --script res://tests/golfer_skill_potential_test.gd
+
       - name: Trace potential career divergence
         run: ./godot --headless --path . --script res://tests/potential_career_diagnostic.gd
 
