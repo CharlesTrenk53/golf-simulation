@@ -55,6 +55,9 @@ jobs:
       - name: Run latent development potential tests
         run: ./godot --headless --path . --script res://tests/development_potential_test.gd
 
+      - name: Run potential integration tests
+        run: ./godot --headless --path . --script res://tests/development_potential_integration_test.gd
+
       - name: Run golfer lifecycle tests
         run: ./godot --headless --path . --script res://tests/golfer_lifecycle_test.gd
 
