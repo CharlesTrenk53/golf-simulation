@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - poc-10-practice-playing-volume
-  pull_request:
-    branches:
-      - main
 
 jobs:
   poc10-diagnostics:
