@@ -174,7 +174,7 @@ func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float
 	var length_squared := segment.length_squared()
 	if length_squared <= GEOMETRY_EPSILON:
 		return point.distance_to(start)
-	var t := clamp((point - start).dot(segment) / length_squared, 0.0, 1.0)
+	var t: float = clampf((point - start).dot(segment) / length_squared, 0.0, 1.0)
 	return point.distance_to(start + segment * t)
 
 
