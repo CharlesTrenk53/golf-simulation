@@ -60,6 +60,18 @@ jobs:
       - name: Run persistent golfer potential tests
         run: ./godot --headless --path . --script res://tests/golfer_skill_potential_test.gd
 
+      - name: Run POC-10 golf activity accounting tests
+        run: ./godot --headless --path . --script res://tests/golf_activity_test.gd
+
+      - name: Run POC-10 development opportunity tests
+        run: ./godot --headless --path . --script res://tests/development_opportunity_test.gd
+
+      - name: Run POC-10 development evidence bridge tests
+        run: ./godot --headless --path . --script res://tests/development_evidence_bridge_test.gd
+
+      - name: Run POC-10 technical readiness tests
+        run: ./godot --headless --path . --script res://tests/technical_readiness_test.gd
+
       - name: Trace potential career divergence
         run: ./godot --headless --path . --script res://tests/potential_career_diagnostic.gd
 

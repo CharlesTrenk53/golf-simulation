@@ -1,0 +1,48 @@
+name: POC-10 Lifecycle Diagnostics
+
+on:
+  workflow_dispatch:
+
+jobs:
+  poc10-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Compare 10,000 rapid vs distributed repetitions
+        run: ./godot --headless --path . --script res://tests/poc10_time_distribution_diagnostic.gd
+
+      - name: Upload POC-10 time-distribution diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc10-time-distribution
+          path: poc10_time_distribution.csv
+
+      - name: Trace former competitor inactivity and reacquisition
+        run: ./godot --headless --path . --script res://tests/poc10_former_competitor_inactivity_diagnostic.gd
+
+      - name: Upload former competitor inactivity diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc10-former-competitor-inactivity
+          path: poc10_former_competitor_inactivity.csv
+
+      - name: Trace POC-10 golf-life career spread
+        run: ./godot --headless --path . --script res://tests/poc10_golf_life_career_diagnostic.gd
+
+      - name: Upload POC-10 golf-life career spread
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc10-golf-life-careers
+          path: poc10_golf_life_careers.csv

@@ -52,6 +52,7 @@ var skill_delta: Dictionary = {}
 var technique_bias: Dictionary = {}
 var evidence: Dictionary = {}
 var prior_experience: Dictionary = {}
+var supplemental_experience: Dictionary = {}
 var learning_aptitude: Dictionary = {}
 var history: Array = []
 var shot_history: Dictionary = {}
@@ -64,6 +65,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 	technique_bias.clear()
 	evidence.clear()
 	prior_experience.clear()
+	supplemental_experience.clear()
 	learning_aptitude.clear()
 	history.clear()
 	shot_history.clear()
@@ -75,6 +77,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 		technique_bias[shot_type] = {"lateral": 0.0, "distance": 0.0, "dispersion": 0.0}
 		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "persistent_quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
 		prior_experience[shot_type] = int(golfer.skill_experience_for(shot_type)) if golfer.has_method("skill_experience_for") else 0
+		supplemental_experience[shot_type] = 0
 		learning_aptitude[shot_type] = clamp(float(golfer.skill_learning_rate_for(shot_type)), 0.25, 2.0) if golfer.has_method("skill_learning_rate_for") else 1.0
 		if golfer.has_method("skill_potential_for"):
 			development_potential.set_potential(shot_type, float(golfer.skill_potential_for(shot_type)))
@@ -93,6 +96,11 @@ func potential_resistance_for(shot_type: int) -> float:
 	var base = float(baseline_skill.get(shot_type, 50.0))
 	var delta = float(skill_delta.get(shot_type, 0.0))
 	return development_potential.resistance_for(shot_type, clamp(base + delta, 0.0, 100.0))
+
+func record_experience_only(shot_type: int, repetitions: int) -> void:
+	if not supplemental_experience.has(shot_type):
+		return
+	supplemental_experience[shot_type] = int(supplemental_experience.get(shot_type, 0)) + maxi(repetitions, 0)
 
 func advance_year() -> void:
 	# Technical retention is a time-based annual effect, deliberately separate
@@ -184,7 +192,7 @@ func development_state(shot_type: int) -> Dictionary:
 	var count = int(row.get("count", 0))
 	var avg_quality = float(row.get("quality_sum", 0.0)) / max(count, 1)
 	var avg_persistent_quality = float(row.get("persistent_quality_sum", row.get("quality_sum", 0.0))) / max(count, 1)
-	var total_experience = int(prior_experience.get(shot_type, 0)) + count
+	var total_experience = _total_experience(shot_type)
 	var stability = _experience_stability(total_experience)
 	return {
 		"baseline_skill": base,
@@ -192,6 +200,7 @@ func development_state(shot_type: int) -> Dictionary:
 		"effective_skill": current_skill,
 		"evidence_count": count,
 		"prior_experience": int(prior_experience.get(shot_type, 0)),
+		"supplemental_experience": int(supplemental_experience.get(shot_type, 0)),
 		"total_experience": total_experience,
 		"experience_stability": stability,
 		"learning_aptitude": float(learning_aptitude.get(shot_type, 1.0)),
@@ -223,7 +232,7 @@ func _update_technique(shot_type: int) -> void:
 	avg_lateral /= recent.size()
 	avg_distance /= recent.size()
 	var bias: Dictionary = technique_bias[shot_type]
-	var stability = _experience_stability(int(prior_experience.get(shot_type, 0)) + int(evidence[shot_type]["count"]))
+	var stability = _experience_stability(_total_experience(shot_type))
 	var technique_rate = TECHNIQUE_STEP_SCALE * lerp(1.0, 0.55, stability)
 	bias["lateral"] = lerp(float(bias["lateral"]), avg_lateral, technique_rate)
 	bias["distance"] = lerp(float(bias["distance"]), avg_distance, technique_rate)
@@ -251,7 +260,7 @@ func _update_skill_delta(shot_type: int) -> void:
 	var current_delta = float(skill_delta[shot_type])
 	var base = float(baseline_skill[shot_type])
 	var current_skill = clamp(base + current_delta, 0.0, 100.0)
-	var total_experience = int(prior_experience.get(shot_type, 0)) + count
+	var total_experience = _total_experience(shot_type)
 	var stability = _experience_stability(total_experience)
 
 	# Experience has three distinct roles:
@@ -304,6 +313,9 @@ func _update_skill_delta(shot_type: int) -> void:
 	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * aptitude_modifier * potential_modifier * resistance * boundary_modifier + regression
 	var next_skill = clamp(current_skill + step, 0.0, 100.0)
 	skill_delta[shot_type] = next_skill - base
+
+func _total_experience(shot_type: int) -> int:
+	return int(prior_experience.get(shot_type, 0)) + int(evidence.get(shot_type, {}).get("count", 0)) + int(supplemental_experience.get(shot_type, 0))
 
 func _development_resistance(delta: float) -> float:
 	var distance = abs(delta) / DEVELOPMENT_RESISTANCE_SCALE
