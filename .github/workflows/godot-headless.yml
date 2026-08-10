@@ -8,6 +8,7 @@ on:
       - poc-06-course-context
       - poc-07-shot-club-selection
       - poc-08-shot-assessment
+      - poc-09-latent-potential
   pull_request:
 
 jobs:
@@ -50,6 +51,9 @@ jobs:
 
       - name: Run skill-specific learning aptitude tests
         run: ./godot --headless --path . --script res://tests/skill_learning_aptitude_test.gd
+
+      - name: Run latent development potential tests
+        run: ./godot --headless --path . --script res://tests/development_potential_test.gd
 
       - name: Run golfer lifecycle tests
         run: ./godot --headless --path . --script res://tests/golfer_lifecycle_test.gd
