@@ -8,6 +8,7 @@ on:
 jobs:
   course-architecture:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -23,7 +24,7 @@ jobs:
         run: ./godot --headless --editor --path . --quit
 
       - name: Run POC-11A hole definition tests
-        run: ./godot --headless --path . --script res://tests/hole_definition_test.gd
+        run: timeout 90s ./godot --headless --path . --script res://tests/hole_definition_test.gd
 
       - name: Run POC-11B spatial query tests
-        run: ./godot --headless --path . --script res://tests/hole_spatial_query_test.gd
+        run: timeout 90s ./godot --headless --path . --script res://tests/hole_spatial_query_test.gd
