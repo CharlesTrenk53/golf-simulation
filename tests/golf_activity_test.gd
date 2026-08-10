@@ -8,6 +8,7 @@ func _init() -> void:
 	_test_round_accounting()
 	_test_practice_focus_allocation()
 	_test_quality_bookkeeping()
+	_test_dated_activity_cadence()
 	_test_zero_and_invalid_inputs()
 
 	if failures == 0:
@@ -48,6 +49,24 @@ func _test_quality_bookkeeping() -> void:
 	_expect(activity.average_practice_quality(1) == 0.0, "unpracticed skill has zero recorded practice quality")
 	var before_state := activity.state()
 	_expect(not before_state.has("skill_delta"), "Golf Activity state contains no direct skill award")
+
+func _test_dated_activity_cadence() -> void:
+	var activity := GolfActivity.new()
+	var round_result := activity.record_round_on_day(40)
+	_expect(int(round_result["day"]) == 40, "dated round records requested day")
+	_expect(activity.career_rounds_played == 1, "dated round preserves ordinary round accounting")
+	_expect(activity.total_on_course_exposure() == 78, "dated round preserves ordinary shot exposure")
+	for shot_type in GolfActivity.SHOT_TYPES:
+		_expect(activity.days_since_activity(shot_type, 47) == 7, "round activity resets shot-family clock")
+
+	var practice_result := activity.record_practice_on_day(60, 100, {0: 0.75, 1: 0.25}, 0.80)
+	_expect(int(practice_result["day"]) == 60, "dated practice records requested day")
+	_expect(activity.total_practice_repetitions() == 100, "dated practice preserves raw repetition total")
+	_expect(activity.days_since_activity(0, 70) == 10, "practiced Driver clock uses practice date")
+	_expect(activity.days_since_activity(1, 70) == 10, "practiced Approach clock uses practice date")
+	_expect(activity.days_since_activity(2, 70) == 30, "unpracticed Short Game clock remains on last round")
+	_expect(activity.days_since_activity(3, 70) == 30, "unpracticed Putt clock remains on last round")
+	_expect(activity.last_play_day == 40, "practice does not overwrite last play day")
 
 func _test_zero_and_invalid_inputs() -> void:
 	var activity := GolfActivity.new()
