@@ -1,9 +1,7 @@
 name: POC-10 Lifecycle Diagnostics
 
 on:
-  push:
-    branches:
-      - poc-10-practice-playing-volume
+  workflow_dispatch:
 
 jobs:
   poc10-diagnostics:
