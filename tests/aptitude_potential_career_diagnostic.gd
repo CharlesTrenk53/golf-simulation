@@ -15,6 +15,7 @@ const PROFILES := [
 	{"id": "fast_low", "label": "Fast learner / lower potential", "aptitude": 1.35, "potential": 55.0},
 	{"id": "slow_high", "label": "Slow learner / higher potential", "aptitude": 0.75, "potential": 75.0},
 	{"id": "moderate_fast_low", "label": "Moderately fast learner / lower potential", "aptitude": 1.15, "potential": 58.0},
+	{"id": "moderate_fast_mid", "label": "Moderately fast learner / moderately lower potential", "aptitude": 1.15, "potential": 62.0},
 	{"id": "moderate_slow_high", "label": "Moderately slow learner / higher potential", "aptitude": 0.90, "potential": 75.0},
 	{"id": "high_high", "label": "High aptitude / high potential", "aptitude": 1.35, "potential": 75.0},
 	{"id": "low_low", "label": "Low aptitude / low potential", "aptitude": 0.75, "potential": 55.0},
@@ -27,7 +28,7 @@ func _init() -> void:
 	print("=== POC-09 APTITUDE X POTENTIAL CAREER DIAGNOSTIC ===")
 	print("Same start, age, experience, practice volume, and execution stream; aptitude and latent potential vary.")
 	print("This is an acquisition-focused crossover diagnostic: age plasticity applies, but annual age-retention erosion is intentionally omitted.")
-	print("The extreme pair tests whether a very large aptitude advantage can dominate potential. The moderate pair tests whether a smaller early-learning advantage can be overtaken by greater developmental runway.")
+	print("The extreme pair tests whether a very large aptitude advantage can dominate potential. The moderate-low pair proves crossover is possible. The moderate-mid pair tests whether a meaningful early aptitude lead can persist for years before higher potential overtakes it.")
 	print("profile,label,aptitude,potential,age,effective_skill,delta,potential_resistance")
 	output_rows.append("profile,label,aptitude,potential,age,effective_skill,delta,potential_resistance")
 
