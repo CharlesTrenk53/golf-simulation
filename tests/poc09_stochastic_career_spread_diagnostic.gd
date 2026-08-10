@@ -162,7 +162,7 @@ func _annual_exposure(age: int, exposure_multiplier: float) -> Dictionary:
 	return {"rounds": rounds, "shots": shots}
 
 func _physical_execution_modifier(golfer, shot_type: int) -> float:
-	var factor := golfer.physical_distance_factor(shot_type)
+	var factor: float = float(golfer.physical_distance_factor(shot_type))
 	var sensitivity := 0.0
 	match shot_type:
 		0: sensitivity = 2.0
@@ -185,10 +185,10 @@ func _emit_year(config: Dictionary, golfer, development, age: int, rounds: int, 
 		states[shot_type] = state
 		technical_sum += float(state["effective_skill"])
 	var technical_composite := technical_sum / float(SHOT_TYPES.size())
-	var physical_capacity := (golfer.physical_power + golfer.mobility + golfer.coordination + golfer.endurance) / 4.0
+	var physical_capacity: float = (float(golfer.physical_power) + float(golfer.mobility) + float(golfer.coordination) + float(golfer.endurance)) / 4.0
 	var driver_carry := _effective_driver_carry(golfer, float(states[0]["effective_skill"]))
 	var normalized_carry := clampf(driver_carry / 70.0 * 50.0, 0.0, 100.0)
-	var performance_index := technical_composite * 0.72 + normalized_carry * 0.20 + golfer.endurance * 0.08
+	var performance_index: float = float(technical_composite) * 0.72 + float(normalized_carry) * 0.20 + float(golfer.endurance) * 0.08
 	var mean_aptitude := _dict_mean(config["aptitude"])
 	var mean_potential := _dict_mean(config["potential"])
 	output_rows.append("%s,%s,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f" % [
