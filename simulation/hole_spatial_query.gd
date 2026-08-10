@@ -7,6 +7,7 @@ extends RefCounted
 # later option-generation and decision systems can consume.
 
 const DEFAULT_SURFACE := "ROUGH"
+const GEOMETRY_EPSILON := 0.000001
 
 var hole_definition = null
 
@@ -126,7 +127,7 @@ func _segment_intersects_polygon(a: Vector2, b: Vector2, polygon: PackedVector2A
 	for i in range(polygon.size()):
 		var edge_a := polygon[i]
 		var edge_b := polygon[(i + 1) % polygon.size()]
-		if Geometry2D.segment_intersects_segment(a, b, edge_a, edge_b) != null:
+		if _segments_intersect(a, b, edge_a, edge_b):
 			return true
 
 	if half_width <= 0.0:
@@ -141,10 +142,37 @@ func _segment_intersects_polygon(a: Vector2, b: Vector2, polygon: PackedVector2A
 	return false
 
 
+func _segments_intersect(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
+	var r := b - a
+	var s := d - c
+	var denominator := _cross_2d(r, s)
+	var c_minus_a := c - a
+
+	if abs(denominator) <= GEOMETRY_EPSILON:
+		# Parallel non-collinear segments cannot intersect. For collinear
+		# segments, test endpoint distance to the opposite segment.
+		if abs(_cross_2d(c_minus_a, r)) > GEOMETRY_EPSILON:
+			return false
+		return (
+			_distance_to_segment(a, c, d) <= GEOMETRY_EPSILON
+			or _distance_to_segment(b, c, d) <= GEOMETRY_EPSILON
+			or _distance_to_segment(c, a, b) <= GEOMETRY_EPSILON
+			or _distance_to_segment(d, a, b) <= GEOMETRY_EPSILON
+		)
+
+	var t := _cross_2d(c_minus_a, s) / denominator
+	var u := _cross_2d(c_minus_a, r) / denominator
+	return t >= -GEOMETRY_EPSILON and t <= 1.0 + GEOMETRY_EPSILON and u >= -GEOMETRY_EPSILON and u <= 1.0 + GEOMETRY_EPSILON
+
+
+func _cross_2d(a: Vector2, b: Vector2) -> float:
+	return a.x * b.y - a.y * b.x
+
+
 func _distance_to_segment(point: Vector2, start: Vector2, end: Vector2) -> float:
 	var segment := end - start
 	var length_squared := segment.length_squared()
-	if length_squared <= 0.000001:
+	if length_squared <= GEOMETRY_EPSILON:
 		return point.distance_to(start)
 	var t := clamp((point - start).dot(segment) / length_squared, 0.0, 1.0)
 	return point.distance_to(start + segment * t)
