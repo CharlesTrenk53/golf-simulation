@@ -1,4 +1,4 @@
-name: POC-11 Hole Definition
+name: POC-11 Course Architecture Checks
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - poc-11-playable-course-architecture
 
 jobs:
-  hole-definition:
+  course-architecture:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -24,3 +24,6 @@ jobs:
 
       - name: Run POC-11A hole definition tests
         run: ./godot --headless --path . --script res://tests/hole_definition_test.gd
+
+      - name: Run POC-11B spatial query tests
+        run: ./godot --headless --path . --script res://tests/hole_spatial_query_test.gd
