@@ -67,6 +67,9 @@ jobs:
       - name: Run POC-10 development opportunity tests
         run: ./godot --headless --path . --script res://tests/development_opportunity_test.gd
 
+      - name: Run POC-10 development evidence bridge tests
+        run: ./godot --headless --path . --script res://tests/development_evidence_bridge_test.gd
+
       - name: Trace potential career divergence
         run: ./godot --headless --path . --script res://tests/potential_career_diagnostic.gd
 
