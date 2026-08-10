@@ -7,6 +7,7 @@ var failures: int = 0
 
 
 func _init() -> void:
+	print("POC-11B: load hole")
 	var hole = HoleDefinition.load_json("res://data/courses/poc11_test_hole.json")
 	_assert_true(hole != null, "test hole loads")
 	if hole == null:
@@ -14,11 +15,17 @@ func _init() -> void:
 		return
 	var query = HoleSpatialQuery.new(hole)
 
+	print("POC-11B: surface queries")
 	_test_surface_queries(query)
+	print("POC-11B: distance query")
 	_test_distance_query(query)
+	print("POC-11B: hazard queries")
 	_test_hazard_queries(query)
+	print("POC-11B: out-of-bounds queries")
 	_test_out_of_bounds(query)
+	print("POC-11B: position snapshot")
 	_test_position_snapshot(query)
+	print("POC-11B: assertions complete")
 
 	if failures == 0:
 		print("POC-11B SPATIAL QUERY TESTS PASSED")
