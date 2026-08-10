@@ -4,11 +4,11 @@ const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 const TechniqueSkillDevelopment = preload("res://simulation/technique_skill_development.gd")
 
 const START_AGE := 16
-const END_AGE := 50
+const END_AGE := 76
 const SHOTS_PER_YEAR := 1100
 const EXECUTION_MEAN := 68.0
 const EXECUTION_SD := 6.0
-const CHECKPOINTS := [16, 18, 20, 22, 25, 30, 35, 40, 45, 50]
+const CHECKPOINTS := [16, 18, 20, 22, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 76]
 const OUTPUT_PATH := "res://poc09_aptitude_potential_careers.csv"
 
 const PROFILES := [
@@ -24,6 +24,7 @@ var output_rows: Array[String] = []
 func _init() -> void:
 	print("=== POC-09 APTITUDE X POTENTIAL CAREER DIAGNOSTIC ===")
 	print("Same start, age, experience, practice volume, and execution stream; aptitude and latent potential vary.")
+	print("This is an acquisition-focused crossover diagnostic: age plasticity applies, but annual age-retention erosion is intentionally omitted.")
 	print("profile,label,aptitude,potential,age,effective_skill,delta,potential_resistance")
 	output_rows.append("profile,label,aptitude,potential,age,effective_skill,delta,potential_resistance")
 
