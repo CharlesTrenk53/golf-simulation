@@ -8,7 +8,6 @@ on:
       - poc-06-course-context
       - poc-07-shot-club-selection
       - poc-08-shot-assessment
-      - poc-09-latent-potential
   pull_request:
 
 jobs:
