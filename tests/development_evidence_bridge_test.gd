@@ -8,6 +8,7 @@ var failures := 0
 
 func _init() -> void:
 	_test_practice_quality_separates_experience_from_evidence()
+	_test_evidence_is_invariant_to_batching()
 	_test_play_exposure_is_contextual_evidence_and_experience()
 	_test_zero_quality_practice_does_not_award_skill()
 	_test_legacy_record_execution_behavior_remains_intact()
@@ -21,9 +22,10 @@ func _init() -> void:
 func _test_practice_quality_separates_experience_from_evidence() -> void:
 	var low = _development()
 	var high = _development()
-	var bridge = DevelopmentEvidenceBridge.new()
-	bridge.apply_practice_exposure(low, 0, 100, 0.25, 70.0)
-	bridge.apply_practice_exposure(high, 0, 100, 0.90, 70.0)
+	var low_bridge = DevelopmentEvidenceBridge.new()
+	var high_bridge = DevelopmentEvidenceBridge.new()
+	low_bridge.apply_practice_exposure(low, 0, 100, 0.25, 70.0)
+	high_bridge.apply_practice_exposure(high, 0, 100, 0.90, 70.0)
 	var low_state: Dictionary = low.development_state(0)
 	var high_state: Dictionary = high.development_state(0)
 	_expect(int(low_state["total_experience"]) == int(high_state["total_experience"]), "same raw practice volume creates the same total experience")
@@ -31,6 +33,22 @@ func _test_practice_quality_separates_experience_from_evidence() -> void:
 	_expect(int(high_state["evidence_count"]) == 90, "90 percent quality practice creates 90 evidence repetitions from 100 reps")
 	_expect(int(low_state["supplemental_experience"]) == 75, "low-quality repetitions still remain as experience")
 	_expect(int(high_state["supplemental_experience"]) == 10, "high-quality practice needs fewer experience-only repetitions")
+
+func _test_evidence_is_invariant_to_batching() -> void:
+	var large_batches = _development()
+	var small_batches = _development()
+	var large_bridge = DevelopmentEvidenceBridge.new()
+	var small_bridge = DevelopmentEvidenceBridge.new()
+	for _i in range(5):
+		large_bridge.apply_practice_exposure(large_batches, 1, 2000, 0.85, 70.0)
+	for _i in range(40):
+		small_bridge.apply_practice_exposure(small_batches, 1, 250, 0.85, 70.0)
+	var large_state: Dictionary = large_batches.development_state(1)
+	var small_state: Dictionary = small_batches.development_state(1)
+	_expect(int(large_state["total_experience"]) == 10000, "large batches preserve 10,000 raw repetitions as experience")
+	_expect(int(small_state["total_experience"]) == 10000, "small batches preserve 10,000 raw repetitions as experience")
+	_expect(int(large_state["evidence_count"]) == 8500, "five large batches produce exactly 8,500 evidence events")
+	_expect(int(small_state["evidence_count"]) == 8500, "forty small batches produce the same 8,500 evidence events")
 
 func _test_play_exposure_is_contextual_evidence_and_experience() -> void:
 	var development = _development()
