@@ -1,0 +1,26 @@
+name: POC-11 Hole Definition
+
+on:
+  push:
+    branches:
+      - poc-11-playable-course-architecture
+
+jobs:
+  hole-definition:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Run POC-11A hole definition tests
+        run: ./godot --headless --path . --script res://tests/hole_definition_test.gd
