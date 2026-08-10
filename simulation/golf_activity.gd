@@ -4,8 +4,8 @@ extends RefCounted
 # -------------
 # Records what golf the golfer actually does. This layer is intentionally factual:
 # rounds played, on-course shot exposure, practice repetitions, practice focus,
-# and practice quality. It does not award skill and does not decide how much
-# durable learning results from that activity.
+# practice quality, and when that activity occurred. It does not award skill and
+# does not decide how much rust or durable learning results from the activity.
 
 const SHOT_TYPES := [0, 1, 2, 3]
 const DEFAULT_SHOTS_PER_ROUND := {
@@ -20,6 +20,9 @@ var career_on_course_exposure: Dictionary = {}
 var career_practice_repetitions: Dictionary = {}
 var practice_quality_sum: Dictionary = {}
 var practice_sessions: Dictionary = {}
+var last_play_day: int = -1
+var last_practice_day: Dictionary = {}
+var last_activity_day: Dictionary = {}
 
 func _init() -> void:
 	reset()
@@ -30,11 +33,16 @@ func reset() -> void:
 	career_practice_repetitions.clear()
 	practice_quality_sum.clear()
 	practice_sessions.clear()
+	last_play_day = -1
+	last_practice_day.clear()
+	last_activity_day.clear()
 	for shot_type in SHOT_TYPES:
 		career_on_course_exposure[shot_type] = 0
 		career_practice_repetitions[shot_type] = 0
 		practice_quality_sum[shot_type] = 0.0
 		practice_sessions[shot_type] = 0
+		last_practice_day[shot_type] = -1
+		last_activity_day[shot_type] = -1
 
 func record_rounds(rounds: int, shots_per_round: Dictionary = {}) -> Dictionary:
 	var resolved_rounds := maxi(rounds, 0)
@@ -50,6 +58,16 @@ func record_rounds(rounds: int, shots_per_round: Dictionary = {}) -> Dictionary:
 		"rounds": resolved_rounds,
 		"on_course_exposure": added_exposure
 	}
+
+func record_round_on_day(day: int, shots_per_round: Dictionary = {}) -> Dictionary:
+	var resolved_day := maxi(day, 0)
+	var result := record_rounds(1, shots_per_round)
+	last_play_day = resolved_day
+	for shot_type in SHOT_TYPES:
+		if int(result["on_course_exposure"].get(shot_type, 0)) > 0:
+			last_activity_day[shot_type] = resolved_day
+	result["day"] = resolved_day
+	return result
 
 func record_practice(total_repetitions: int, focus: Dictionary, quality: float = 1.0) -> Dictionary:
 	var repetitions := maxi(total_repetitions, 0)
@@ -69,6 +87,23 @@ func record_practice(total_repetitions: int, focus: Dictionary, quality: float =
 		"quality": resolved_quality,
 		"practice_repetitions": allocations
 	}
+
+func record_practice_on_day(day: int, total_repetitions: int, focus: Dictionary, quality: float = 1.0) -> Dictionary:
+	var resolved_day := maxi(day, 0)
+	var result := record_practice(total_repetitions, focus, quality)
+	for shot_type in SHOT_TYPES:
+		if int(result["practice_repetitions"].get(shot_type, 0)) <= 0:
+			continue
+		last_practice_day[shot_type] = resolved_day
+		last_activity_day[shot_type] = resolved_day
+	result["day"] = resolved_day
+	return result
+
+func days_since_activity(shot_type: int, current_day: int) -> int:
+	var last_day := int(last_activity_day.get(shot_type, -1))
+	if last_day < 0:
+		return -1
+	return maxi(current_day - last_day, 0)
 
 func average_practice_quality(shot_type: int) -> float:
 	var reps := int(career_practice_repetitions.get(shot_type, 0))
@@ -94,6 +129,9 @@ func state() -> Dictionary:
 		"career_on_course_exposure": career_on_course_exposure.duplicate(true),
 		"career_practice_repetitions": career_practice_repetitions.duplicate(true),
 		"average_practice_quality": average_quality,
+		"last_play_day": last_play_day,
+		"last_practice_day": last_practice_day.duplicate(true),
+		"last_activity_day": last_activity_day.duplicate(true),
 		"total_on_course_exposure": total_on_course_exposure(),
 		"total_practice_repetitions": total_practice_repetitions(),
 		"total_activity_repetitions": total_activity_repetitions()
