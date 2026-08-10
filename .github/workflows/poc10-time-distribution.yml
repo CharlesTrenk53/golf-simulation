@@ -1,0 +1,35 @@
+name: POC-10 Time Distribution Diagnostic
+
+on:
+  push:
+    branches:
+      - poc-10-practice-playing-volume
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  time-distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Compare 10,000 rapid vs distributed repetitions
+        run: ./godot --headless --path . --script res://tests/poc10_time_distribution_diagnostic.gd
+
+      - name: Upload POC-10 time-distribution diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc10-time-distribution
+          path: poc10_time_distribution.csv
