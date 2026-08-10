@@ -8,6 +8,7 @@ on:
       - poc-06-course-context
       - poc-07-shot-club-selection
       - poc-08-shot-assessment
+      - poc-09-latent-potential
   pull_request:
 
 jobs:
@@ -50,6 +51,42 @@ jobs:
 
       - name: Run skill-specific learning aptitude tests
         run: ./godot --headless --path . --script res://tests/skill_learning_aptitude_test.gd
+
+      - name: Run latent development potential tests
+        run: ./godot --headless --path . --script res://tests/development_potential_test.gd
+
+      - name: Run potential integration tests
+        run: ./godot --headless --path . --script res://tests/development_potential_integration_test.gd
+
+      - name: Run persistent golfer potential tests
+        run: ./godot --headless --path . --script res://tests/golfer_skill_potential_test.gd
+
+      - name: Trace potential career divergence
+        run: ./godot --headless --path . --script res://tests/potential_career_diagnostic.gd
+
+      - name: Upload POC-09 career diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc09-potential-careers
+          path: poc09_potential_careers.csv
+
+      - name: Trace aptitude x potential career divergence
+        run: ./godot --headless --path . --script res://tests/aptitude_potential_career_diagnostic.gd
+
+      - name: Upload POC-09 aptitude x potential careers
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc09-aptitude-potential-careers
+          path: poc09_aptitude_potential_careers.csv
+
+      - name: Trace POC-09 stochastic career spread
+        run: ./godot --headless --path . --script res://tests/poc09_stochastic_career_spread_diagnostic.gd
+
+      - name: Upload POC-09 stochastic career spread
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc09-stochastic-career-spread
+          path: poc09_stochastic_career_spread.csv
 
       - name: Run golfer lifecycle tests
         run: ./godot --headless --path . --script res://tests/golfer_lifecycle_test.gd

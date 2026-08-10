@@ -17,25 +17,29 @@ The simulator already separates:
 - comfort and confidence;
 - physical capacity: power, mobility, coordination, endurance;
 - chronological age;
-- shot assessment, willingness, personality, and decision behavior.
+- shot assessment, willingness, personality, and decision behavior;
+- shot-specific learning aptitude;
+- shot-specific latent development potential.
 
-POC-08 now also supports shot-specific learning aptitude. This aptitude affects acquisition of genuinely new above-baseline skill. It does not directly accelerate deterioration or restoration of previously established skill.
+POC-08 added shot-specific learning aptitude. Aptitude controls how readily a golfer acquires genuinely new above-baseline skill. It does not directly accelerate deterioration or restoration of previously established skill.
 
-## Future development systems
+POC-09 adds shot-specific latent development potential. Potential is a persistent golfer trait that introduces soft resistance as developed skill approaches and exceeds the golfer's latent level. It is not a hard cap, does not alter deterioration or recovery, and remains neutral for legacy golfers unless a potential is explicitly assigned.
 
-### 1. Skill-specific learning aptitude
+## Development systems
 
-Each golfer should be able to learn different parts of golf at different rates. Examples include faster iron development with slower putting development, or strong touch-skill learning with slower Driver development.
+### 1. Skill-specific learning aptitude — IMPLEMENTED
 
-Aptitude should remain separate from current skill, experience, and recent form.
+Each golfer can learn different parts of golf at different rates. Aptitude remains separate from current skill, experience, recent form, and potential.
 
-### 2. Latent/personal potential
+### 2. Latent/personal potential — IMPLEMENTED
 
-Long-run improvement should show diminishing returns and should eventually reflect individual potential rather than a universal hard cap. Potential may differ by skill and may interact with physical traits.
+Long-run improvement shows diminishing returns based on individual, skill-specific latent potential rather than a universal hard cap.
 
-Potential should be implemented as soft resistance, not an arbitrary maximum that suddenly stops learning.
+Potential is implemented as soft acquisition resistance. A golfer can continue improving beyond potential, but each additional point becomes increasingly costly. Potential affects genuinely new above-baseline acquisition only; it does not protect against deterioration or slow recovery toward established skill.
 
-### 3. Practice and playing volume
+Legacy compatibility is preserved by treating unconfigured potential as a neutral 100.0 value with a 1.0 acquisition modifier.
+
+### 3. Practice and playing volume — NEXT
 
 Career experience should eventually distinguish:
 
@@ -46,6 +50,8 @@ Career experience should eventually distinguish:
 - time elapsed between repetitions.
 
 Ten thousand shots accumulated in five years should not necessarily have the same developmental meaning as ten thousand shots accumulated over thirty years.
+
+The POC-09 stochastic career diagnostic already demonstrates that different exposure levels produce meaningfully different career shapes. The next step is to promote exposure from diagnostic configuration into a durable golfer-development system rather than leaving it as a test-harness input.
 
 ### 4. Aging
 
@@ -109,6 +115,8 @@ Validation should include:
 - different starting skills;
 - different prior experience;
 - different learning aptitudes;
-- eventually different ages and physical trajectories.
+- different latent potentials;
+- different ages and physical trajectories;
+- different practice and playing exposure.
 
 A new development mechanism should be evaluated by its curve over golf time (shots, rounds, seasons), not only by whether unit tests pass.

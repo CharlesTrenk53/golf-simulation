@@ -34,6 +34,11 @@ var career_shot_experience: Dictionary = {}
 # not directly change slump deterioration or restoration of established ability.
 var skill_learning_rates: Dictionary = {}
 
+# Skill-specific latent potential is a persistent golfer trait. Missing entries
+# deliberately resolve to 100.0 so legacy golfers remain completely neutral until
+# an individual potential has actually been assigned.
+var skill_potentials: Dictionary = {}
+
 # Physical capacity is intentionally separate from technical golf skill. Age is
 # recorded now for future aging logic; it does not directly subtract distance.
 # Instead, future aging/injury systems can gradually alter these capacities.
@@ -131,6 +136,12 @@ func skill_experience_for(shot_type: int) -> int:
 
 func skill_learning_rate_for(shot_type: int) -> float:
 	return clamp(float(skill_learning_rates.get(shot_type, 1.0)), 0.25, 2.0)
+
+func skill_potential_for(shot_type: int) -> float:
+	return clamp(float(skill_potentials.get(shot_type, 100.0)), 0.0, 100.0)
+
+func set_skill_potential(shot_type: int, potential: float) -> void:
+	skill_potentials[shot_type] = clamp(potential, 0.0, 100.0)
 
 func physical_distance_factor(shot_type: int) -> float:
 	var power_weight = 0.0

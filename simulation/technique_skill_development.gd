@@ -7,6 +7,8 @@ extends RefCounted
 # resistant to decline, slower to acquire genuinely new ability, and better at
 # self-correcting back toward an established pattern.
 
+const DevelopmentPotential = preload("res://simulation/development_potential.gd")
+
 const MIN_TECHNIQUE_EVIDENCE := 18
 const MIN_SKILL_EVIDENCE := 60
 const MAX_TRACKED_EVENTS := 240
@@ -54,6 +56,7 @@ var learning_aptitude: Dictionary = {}
 var history: Array = []
 var shot_history: Dictionary = {}
 var current_age: float = 30.0
+var development_potential := DevelopmentPotential.new()
 
 func initialize_from_golfer(golfer: Node) -> void:
 	baseline_skill.clear()
@@ -64,6 +67,7 @@ func initialize_from_golfer(golfer: Node) -> void:
 	learning_aptitude.clear()
 	history.clear()
 	shot_history.clear()
+	development_potential.initialize(100.0)
 	current_age = float(golfer.age) if "age" in golfer else 30.0
 	for shot_type in [0, 1, 2, 3]:
 		baseline_skill[shot_type] = float(golfer.get_shot_ability(shot_type))
@@ -72,10 +76,23 @@ func initialize_from_golfer(golfer: Node) -> void:
 		evidence[shot_type] = {"count": 0, "quality_sum": 0.0, "persistent_quality_sum": 0.0, "lateral_sum": 0.0, "distance_sum": 0.0}
 		prior_experience[shot_type] = int(golfer.skill_experience_for(shot_type)) if golfer.has_method("skill_experience_for") else 0
 		learning_aptitude[shot_type] = clamp(float(golfer.skill_learning_rate_for(shot_type)), 0.25, 2.0) if golfer.has_method("skill_learning_rate_for") else 1.0
+		if golfer.has_method("skill_potential_for"):
+			development_potential.set_potential(shot_type, float(golfer.skill_potential_for(shot_type)))
 		shot_history[shot_type] = []
 
 func set_current_age(age: float) -> void:
 	current_age = max(age, 0.0)
+
+func set_skill_potential(shot_type: int, potential: float) -> void:
+	development_potential.set_potential(shot_type, potential)
+
+func skill_potential_for(shot_type: int) -> float:
+	return development_potential.potential_for(shot_type)
+
+func potential_resistance_for(shot_type: int) -> float:
+	var base = float(baseline_skill.get(shot_type, 50.0))
+	var delta = float(skill_delta.get(shot_type, 0.0))
+	return development_potential.resistance_for(shot_type, clamp(base + delta, 0.0, 100.0))
 
 func advance_year() -> void:
 	# Technical retention is a time-based annual effect, deliberately separate
@@ -162,6 +179,7 @@ func effective_skill(golfer: Node, shot_type: int) -> float:
 func development_state(shot_type: int) -> Dictionary:
 	var base = float(baseline_skill.get(shot_type, 50.0))
 	var delta = float(skill_delta.get(shot_type, 0.0))
+	var current_skill = clamp(base + delta, 0.0, 100.0)
 	var row: Dictionary = evidence.get(shot_type, {"count": 0, "quality_sum": 0.0, "persistent_quality_sum": 0.0})
 	var count = int(row.get("count", 0))
 	var avg_quality = float(row.get("quality_sum", 0.0)) / max(count, 1)
@@ -171,12 +189,15 @@ func development_state(shot_type: int) -> Dictionary:
 	return {
 		"baseline_skill": base,
 		"skill_delta": delta,
-		"effective_skill": clamp(base + delta, 0.0, 100.0),
+		"effective_skill": current_skill,
 		"evidence_count": count,
 		"prior_experience": int(prior_experience.get(shot_type, 0)),
 		"total_experience": total_experience,
 		"experience_stability": stability,
 		"learning_aptitude": float(learning_aptitude.get(shot_type, 1.0)),
+		"skill_potential": development_potential.potential_for(shot_type),
+		"distance_to_potential": development_potential.potential_for(shot_type) - current_skill,
+		"potential_resistance": development_potential.resistance_for(shot_type, current_skill),
 		"current_age": current_age,
 		"age_learning_plasticity": age_learning_plasticity(),
 		"development_resistance": _development_resistance(delta),
@@ -250,12 +271,15 @@ func _update_skill_delta(shot_type: int) -> void:
 	# skill acquisition. Slump deterioration and restoration toward an established
 	# baseline remain governed by evidence and experience, keeping recovery separate.
 	var aptitude_modifier = 1.0
+	var potential_modifier = 1.0
 	if skill_signal > 0.0 and current_delta >= 0.0:
 		aptitude_modifier = float(learning_aptitude.get(shot_type, 1.0)) * age_learning_plasticity()
+		potential_modifier = development_potential.resistance_for(shot_type, current_skill)
 
 	# Moving farther from an established skill becomes progressively harder instead
-	# of stopping at an arbitrary +/-8 point clamp. This produces a soft plateau
-	# while still allowing truly prolonged evidence to keep changing the golfer.
+	# of stopping at an arbitrary +/-8 point clamp. This produces a general soft
+	# plateau. POC-09 adds golfer-specific potential resistance on top of this
+	# universal development resistance only for acquisition of genuinely new skill.
 	var resistance = _development_resistance(current_delta)
 
 	# The 0-100 skill scale is the only absolute bound. Movement naturally slows
@@ -277,7 +301,7 @@ func _update_skill_delta(shot_type: int) -> void:
 	if evidence_points_toward_baseline:
 		regression = -current_delta * lerp(BASELINE_REGRESSION_MIN, BASELINE_REGRESSION_MAX, stability)
 
-	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * aptitude_modifier * resistance * boundary_modifier + regression
+	var step = skill_signal * SKILL_STEP_SCALE * experience_modifier * aptitude_modifier * potential_modifier * resistance * boundary_modifier + regression
 	var next_skill = clamp(current_skill + step, 0.0, 100.0)
 	skill_delta[shot_type] = next_skill - base
 
