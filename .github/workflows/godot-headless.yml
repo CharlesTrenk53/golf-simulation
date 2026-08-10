@@ -76,6 +76,15 @@ jobs:
           name: poc09-aptitude-potential-careers
           path: poc09_aptitude_potential_careers.csv
 
+      - name: Trace POC-09 stochastic career spread
+        run: ./godot --headless --path . --script res://tests/poc09_stochastic_career_spread_diagnostic.gd
+
+      - name: Upload POC-09 stochastic career spread
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc09-stochastic-career-spread
+          path: poc09_stochastic_career_spread.csv
+
       - name: Run golfer lifecycle tests
         run: ./godot --headless --path . --script res://tests/golfer_lifecycle_test.gd
 
