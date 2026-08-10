@@ -5,8 +5,14 @@ extends RefCounted
 # Potential is a soft source of resistance to acquiring new above-baseline skill.
 # It is not a hard cap: sustained high-quality development can move a golfer
 # beyond latent potential, but each additional point becomes increasingly costly.
+#
+# A potential of 100 is deliberately neutral. TechniqueSkillDevelopment uses 100
+# for golfers that do not yet carry an explicit potential profile, so legacy
+# golfers retain exactly the pre-POC-09 acquisition path rather than receiving
+# subtle resistance merely because their current skill approaches 100.
 
 const DEFAULT_POTENTIAL := 85.0
+const NEUTRAL_POTENTIAL := 100.0
 const AT_POTENTIAL_RESISTANCE := 0.35
 const MIN_RESISTANCE := 0.08
 const APPROACH_WINDOW := 20.0
@@ -29,6 +35,13 @@ func potential_for(shot_type: int) -> float:
 
 func resistance_for(shot_type: int, current_skill: float) -> float:
 	var potential = potential_for(shot_type)
+
+	# Maximum potential is the explicit backward-compatibility sentinel. There is
+	# no developmental ceiling below the model's own 100-point skill boundary, so
+	# POC-09 must not alter acquisition for golfers with no configured potential.
+	if is_equal_approx(potential, NEUTRAL_POTENTIAL):
+		return 1.0
+
 	var skill = clamp(current_skill, 0.0, 100.0)
 	var gap = potential - skill
 
