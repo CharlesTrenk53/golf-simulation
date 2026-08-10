@@ -28,25 +28,26 @@ func _init() -> void:
 		var snapshot := _readiness_snapshot(durable, readiness)
 		var avg_rust := float(snapshot["avg_rust"])
 		if previous_penalty >= 0.0:
-			_expect(avg_rust > previous_penalty, "rust increases as inactivity lengthens through %d days" % days)
+			_expect(avg_rust > previous_penalty, "rust increases as inactivity lengthens through %d days" % int(days))
 		previous_penalty = avg_rust
-		_append_row("LAYOFF", days, 0, durable_composite, snapshot)
+		_append_row("LAYOFF", int(days), 0, durable_composite, snapshot)
 
 	var one_year = TechnicalReadiness.new()
 	one_year.advance_days(365.0)
 	var one_year_before := _readiness_snapshot(durable, one_year)
 	var recovery_checkpoints := [50, 100, 220, 500, 1000]
-	var cumulative_reps := 0
+	var cumulative_reps: int = 0
 	var previous_usable := float(one_year_before["usable_composite"])
 	for target_reps in recovery_checkpoints:
-		var added := target_reps - cumulative_reps
+		var target: int = int(target_reps)
+		var added: int = target - cumulative_reps
 		for shot_type in SHOT_TYPES:
 			one_year.record_activity(shot_type, added)
-		cumulative_reps = target_reps
+		cumulative_reps = target
 		var recovered := _readiness_snapshot(durable, one_year)
-		_expect(float(recovered["usable_composite"]) > previous_usable, "usable skill recovers with %d reacquisition reps" % target_reps)
+		_expect(float(recovered["usable_composite"]) > previous_usable, "usable skill recovers with %d reacquisition reps" % target)
 		previous_usable = float(recovered["usable_composite"])
-		_append_row("RECOVERY_FROM_1Y", 365, target_reps, durable_composite, recovered)
+		_append_row("RECOVERY_FROM_1Y", 365, target, durable_composite, recovered)
 
 	var final_recovery := _readiness_snapshot(durable, one_year)
 	_expect(float(final_recovery["usable_composite"]) > float(one_year_before["usable_composite"]) + 0.75 * float(one_year_before["avg_rust"]), "1000 reps recover most one-year rust")
