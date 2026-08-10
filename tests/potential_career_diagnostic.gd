@@ -8,7 +8,11 @@ const END_AGE := 45
 const SHOTS_PER_YEAR := 1100
 const EXECUTION_MEAN := 68.0
 const EXECUTION_SD := 6.0
-const POTENTIAL_LEVELS := [58.0, 68.0, 78.0, 88.0, 96.0]
+# These values intentionally sit near the skill range this controlled career can
+# plausibly reach by mid-career. The first diagnostic used much higher potentials,
+# which correctly produced almost no separation because those golfers never got
+# close enough for latent potential resistance to matter.
+const POTENTIAL_LEVELS := [52.0, 55.0, 58.0, 62.0, 70.0]
 const CHECKPOINTS := [16, 20, 25, 30, 35, 40, 45]
 const OUTPUT_PATH := "res://poc09_potential_careers.csv"
 
