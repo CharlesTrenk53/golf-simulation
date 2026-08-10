@@ -39,3 +39,12 @@ jobs:
         with:
           name: poc10-golf-life-careers
           path: poc10_golf_life_careers.csv
+
+      - name: Trace former competitor inactivity and reacquisition
+        run: ./godot --headless --path . --script res://tests/poc10_former_competitor_inactivity_diagnostic.gd
+
+      - name: Upload former competitor inactivity diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc10-former-competitor-inactivity
+          path: poc10_former_competitor_inactivity.csv
