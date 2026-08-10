@@ -8,6 +8,7 @@ on:
       - poc-06-course-context
       - poc-07-shot-club-selection
       - poc-08-shot-assessment
+      - poc-10-practice-playing-volume
   pull_request:
 
 jobs:
@@ -59,6 +60,9 @@ jobs:
 
       - name: Run persistent golfer potential tests
         run: ./godot --headless --path . --script res://tests/golfer_skill_potential_test.gd
+
+      - name: Run POC-10 golf activity accounting tests
+        run: ./godot --headless --path . --script res://tests/golf_activity_test.gd
 
       - name: Trace potential career divergence
         run: ./godot --headless --path . --script res://tests/potential_career_diagnostic.gd
