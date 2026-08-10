@@ -8,6 +8,7 @@ func _init() -> void:
 	_test_resistance_increases_toward_potential()
 	_test_potential_is_soft_not_hard()
 	_test_potential_is_skill_specific()
+	_test_maximum_potential_is_legacy_neutral()
 
 	if failures == 0:
 		print("POC-09 DEVELOPMENT POTENTIAL TESTS PASSED")
@@ -51,6 +52,14 @@ func _test_potential_is_skill_specific() -> void:
 	_expect(model.potential_for(0) == 72.0, "drive potential can differ from other skills")
 	_expect(model.potential_for(1) == 94.0, "approach potential can differ from other skills")
 	_expect(approach_resistance > drive_resistance, "same current skill develops more freely when latent potential is higher")
+
+func _test_maximum_potential_is_legacy_neutral() -> void:
+	var model = DevelopmentPotential.new()
+	model.initialize(DevelopmentPotential.NEUTRAL_POTENTIAL)
+
+	_expect(model.resistance_for(0, 50.0) == 1.0, "maximum potential leaves mid-skill legacy acquisition unchanged")
+	_expect(model.resistance_for(0, 85.0) == 1.0, "maximum potential leaves high-skill legacy acquisition unchanged")
+	_expect(model.resistance_for(0, 99.5) == 1.0, "maximum potential remains neutral at the model boundary")
 
 func _expect(condition: bool, label: String) -> void:
 	if condition:
