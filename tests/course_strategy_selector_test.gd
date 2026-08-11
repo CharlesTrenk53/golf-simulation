@@ -42,24 +42,27 @@ func _init() -> void:
 		_assert_true(option.has("perceived_expected_strokes_to_hole"), "every considered club has perceived expected strokes")
 	_assert_near(float(chosen.get("perceived_expected_strokes_to_hole", INF)), best_perceived, 0.0001, "golfer chooses the option believed to minimize strokes")
 
-	# Course Management must change perception without changing objective reality.
+	# Course Management changes perception, not objective reality. Decision Point's
+	# current centerline targets do not guarantee that a risk-bearing club exists,
+	# so this selector test verifies invariant objective scoring for every club.
+	# Risk-specific optimistic miscalibration is tested deterministically in
+	# course_management_model_test.gd rather than depending on incidental geometry.
 	var high_management_decision: Dictionary = decision
 	golfer.set_meta("course_management", 25.0)
 	var low_management_decision: Dictionary = playable.choose_course_strategy(golfer, state)
 	var high_options: Array = high_management_decision.get("evaluated", [])
 	var low_options: Array = low_management_decision.get("evaluated", [])
-	var comparable_found: bool = false
+	var comparable_count: int = 0
 	for high_option in high_options:
 		var club_id: String = str(high_option.get("club_id", ""))
 		var low_option: Dictionary = _find_club(low_options, club_id)
 		if low_option.is_empty():
 			continue
+		comparable_count += 1
 		_assert_near(float(high_option.get("expected_strokes_to_hole", 0.0)), float(low_option.get("expected_strokes_to_hole", 0.0)), 0.0001, "%s objective scoring stays golfer-independent" % club_id)
 		if float(high_option.get("expected_penalty_strokes", 0.0)) + float(high_option.get("expected_recovery_strokes", 0.0)) > 0.001:
-			comparable_found = true
-			_assert_true(float(low_option.get("perceived_expected_strokes_to_hole", INF)) <= float(high_option.get("perceived_expected_strokes_to_hole", INF)), "lower Course Management is at least as optimistic about a risky %s" % club_id)
-			break
-	_assert_true(comparable_found, "Decision Point exposes at least one risk-bearing club for perception validation")
+			_assert_true(float(low_option.get("perceived_expected_strokes_to_hole", INF)) <= float(high_option.get("perceived_expected_strokes_to_hole", INF)), "lower Course Management is at least as optimistic about risky %s" % club_id)
+	_assert_true(comparable_count == high_options.size(), "Course Management comparison preserves the same feasible club menu")
 
 	golfer.free()
 	if failures == 0:
