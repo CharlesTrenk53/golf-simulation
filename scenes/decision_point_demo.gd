@@ -66,7 +66,7 @@ func _build_environment() -> void:
 	add_child(ui)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18.0, 18.0)
-	panel.size = Vector2(700.0, 285.0)
+	panel.size = Vector2(760.0, 300.0)
 	ui.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
@@ -195,21 +195,22 @@ func play_visible_hole() -> void:
 			return
 		var option: Dictionary = result.get("selected_option", {})
 		var club_name := str(result.get("club_name", option.get("club_name", "Club")))
+		var target_variant := str(option.get("target_variant", "CENTER"))
 		var option_name := str(option.get("name", "SHOT"))
 		var perceived: float = float(result.get("perceived_expected_strokes", option.get("perceived_expected_strokes_to_hole", INF)))
 		_set_status(
-			"Stroke %d — %s" % [int(result.get("shot_number", 0)), club_name],
-			"%s lie | %.1f yards remaining | chosen from %d clubs | perceived %.2f strokes to hole" % [str(result.get("surface_before", "")), before_distance, int(result.get("strategy_candidates", []).size()), perceived]
+			"Stroke %d — %s / %s" % [int(result.get("shot_number", 0)), club_name, target_variant],
+			"%s lie | %.1f yards remaining | chosen from %d club-target options | perceived %.2f strokes to hole" % [str(result.get("surface_before", "")), before_distance, int(result.get("strategy_candidates", []).size()), perceived]
 		)
 		await _animate_ball(result.get("start_position", state.ball_position), result.get("landing_position", state.ball_position))
 		ball_visual.position = result.get("relief_position", state.ball_position) + Vector3(0.0, 0.9, 0.0)
 		golfer_visual.position = state.ball_position + Vector3(-3.0, 2.8, 2.0)
-		shot_lines.append("%d. %s [%s] → %s" % [int(result.get("shot_number", 0)), option_name, club_name, str(result.get("surface_after", ""))])
+		shot_lines.append("%d. %s [%s/%s] → %s" % [int(result.get("shot_number", 0)), option_name, club_name, target_variant, str(result.get("surface_after", ""))])
 		shot_log_label.text = "SHOT HISTORY\n" + "\n".join(shot_lines.slice(max(0, shot_lines.size() - 4), shot_lines.size()))
 		await get_tree().create_timer(decision_pause).timeout
 
 	if state != null and state.finished:
-		_set_status("HOLED OUT — %s" % golfer_logic.golfer_name, "%d strokes on the par-%d Decision Point. Club choice came from the bag-wide expected-strokes strategy system." % [state.strokes, state.par])
+		_set_status("HOLED OUT — %s" % golfer_logic.golfer_name, "%d strokes on the par-%d Decision Point. Club and target both came from the expected-strokes strategy system." % [state.strokes, state.par])
 	else:
 		_set_status("ROUND STOPPED", "Stroke limit reached before holing out.")
 
@@ -223,15 +224,17 @@ func _show_strategy_preview(preview: Dictionary) -> void:
 		return
 	var chosen: Dictionary = preview.get("chosen", {})
 	var lines: Array[String] = []
-	lines.append("STRATEGY MENU — bag-wide stock shots, ranked by golfer-perceived expected strokes")
-	var limit: int = min(4, evaluated.size())
+	lines.append("STRATEGY MENU — club + spatial target, ranked by golfer-perceived expected strokes")
+	var limit: int = min(6, evaluated.size())
 	for index in range(limit):
 		var candidate: Dictionary = evaluated[index]
-		var marker := "→" if str(candidate.get("club_id", "")) == str(chosen.get("club_id", "")) else " "
+		var same_club := str(candidate.get("club_id", "")) == str(chosen.get("club_id", ""))
+		var same_target := str(candidate.get("target_variant", "")) == str(chosen.get("target_variant", ""))
+		var marker := "→" if same_club and same_target else " "
 		var perceived := float(candidate.get("perceived_expected_strokes_to_hole", INF))
 		var objective := float(candidate.get("expected_strokes_to_hole", INF))
 		var hazard_pct := 100.0 * float(candidate.get("hazard_probability", 0.0))
-		lines.append("%s %s | target %s | perceived %.2f | objective %.2f | hazard %.0f%%" % [marker, str(candidate.get("club_name", "Club")), str(candidate.get("expected_surface", "UNKNOWN")), perceived, objective, hazard_pct])
+		lines.append("%s %s / %s | land %s | perceived %.2f | objective %.2f | hazard %.0f%%" % [marker, str(candidate.get("club_name", "Club")), str(candidate.get("target_variant", "CENTER")), str(candidate.get("expected_surface", "UNKNOWN")), perceived, objective, hazard_pct])
 	strategy_label.text = "\n".join(lines)
 
 
