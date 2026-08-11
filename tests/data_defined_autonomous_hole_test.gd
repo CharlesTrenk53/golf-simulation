@@ -50,6 +50,26 @@ func _init() -> void:
 		_assert_true(state.strokes >= 1, "executed shot advances course state")
 		_assert_true(str(result.get("surface_after", "")).length() > 0, "landing lie is resolved from hole geometry")
 
+	print("POC-11C: reachable green switches from layup vocabulary to approach vocabulary")
+	var approach_state = playable.create_state(19)
+	approach_state.ball_position = Vector3(6.0, 0.0, 123.0)
+	approach_state._refresh_lie()
+	_assert_true(approach_state.surface_name() == "FAIRWAY", "115-yard proving position is fairway")
+	_assert_near(approach_state.remaining_distance(), 115.0, 0.01, "proving position is 115 yards from pin")
+	var approach_options: Array = playable.autonomous.option_generator.generate_options(golfer, approach_state, playable._legacy_water_hazards())
+	var option_names: Array[String] = []
+	for option in approach_options:
+		option_names.append(str(option.get("name", "")))
+	_assert_true("GREEN_APPROACH" in option_names, "reachable green offers normal green approach")
+	_assert_true("SAFE_GREEN_APPROACH" in option_names, "reachable green offers safer green target")
+	_assert_true("PIN_ATTACK" in option_names, "reachable green offers aggressive pin target")
+	_assert_true(not "LAYUP" in option_names, "reachable green no longer offers generic layup")
+	var normal_approach: Dictionary = _find_option(approach_options, "GREEN_APPROACH")
+	_assert_true(not normal_approach.is_empty(), "normal green approach is inspectable")
+	if not normal_approach.is_empty():
+		_assert_true(str(normal_approach.get("club_id", "")) == "9_IRON", "115-yard normal approach selects the provisional 9-iron baseline")
+		_assert_true(not bool(normal_approach.get("is_aggressive", true)), "normal green approach is not inherently aggressive")
+
 	golfer.free()
 
 	if failures == 0:
@@ -58,6 +78,13 @@ func _init() -> void:
 	else:
 		push_error("POC-11C DATA-DEFINED AUTONOMOUS INTEGRATION TESTS FAILED: %d" % failures)
 		quit(1)
+
+
+func _find_option(options: Array, option_name: String) -> Dictionary:
+	for option in options:
+		if str(option.get("name", "")) == option_name:
+			return option
+	return {}
 
 
 func _assert_true(value: bool, label: String) -> void:
