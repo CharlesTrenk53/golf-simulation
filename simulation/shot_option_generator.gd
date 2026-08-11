@@ -26,6 +26,16 @@ func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
 			_clubbed_direct_option("SAFE_PITCH", golfer, SHORT_GAME, state, 58.0 * lie_quality, _lie_risk(5.0, state))
 		]
 
+	# On a real yard-based course, a reachable green is normal approach golf, not
+	# an inherently aggressive ATTACK and not another generic LAYUP. Once the
+	# golfer has a plausible club for the green, switch the decision vocabulary to
+	# green-target choices so personality can govern target/risk rather than
+	# repeatedly stepping forward with shorter wedges.
+	if yard_mode:
+		var reachable_club: Dictionary = _green_reachable_club(golfer, state, distance)
+		if not reachable_club.is_empty():
+			return _green_approach_options(golfer, state, hazards, reachable_club)
+
 	var options: Array = []
 	var direction: Vector3 = _direction_to_hole(state)
 	var lateral: Vector3 = Vector3(-direction.z, 0.0, direction.x)
@@ -89,6 +99,54 @@ func generate_options(golfer: Node, state, hazards: Array = []) -> Array:
 			options.append(fairway_recovery)
 
 	return options
+
+
+func _green_reachable_club(golfer: Node, state, distance: float) -> Dictionary:
+	var surface: String = state.surface_name()
+	var club: Dictionary = bag.best_distance_match(golfer, surface, state.current_lie_quality, distance)
+	if club.is_empty() or int(club.get("shot_type", APPROACH)) == PUTT:
+		return {}
+	var carry: float = bag.effective_carry(club, golfer, surface, state.current_lie_quality)
+	var dispersion: float = bag.effective_dispersion(club, golfer, surface, state.current_lie_quality)
+	# A golfer does not need the stock carry to equal the flag exactly. Allow a
+	# modest normal-shot window for a club that can plausibly cover the target
+	# through ordinary strike/roll variation, while excluding obvious layup range.
+	var reach_tolerance: float = max(10.0, dispersion * 0.75)
+	if carry + reach_tolerance < distance:
+		return {}
+	return club
+
+
+func _green_approach_options(golfer: Node, state, hazards: Array, club: Dictionary) -> Array:
+	var distance: float = state.remaining_distance()
+	var surface: String = state.surface_name()
+	var lie_quality: float = state.current_lie_quality
+	var center_target: Vector3 = _green_center_target(state)
+	var direct_risk: float = _estimate_attack_risk(golfer, state, state.hole_position, hazards, club)
+	var normal_risk: float = _lie_risk(max(12.0, direct_risk * 0.55), state)
+	var safe_risk: float = _lie_risk(max(7.0, direct_risk * 0.35), state)
+	var success_chance: float = _estimate_club_success(golfer, state, distance, club)
+	var normal: Dictionary = _option("GREEN_APPROACH", APPROACH, state.hole_position, 76.0 * lie_quality, normal_risk, false, success_chance, club)
+	var safe_club: Dictionary = bag.best_distance_match(golfer, surface, lie_quality, state.ball_position.distance_to(center_target))
+	if safe_club.is_empty():
+		safe_club = club
+	var safe: Dictionary = _option("SAFE_GREEN_APPROACH", APPROACH, center_target, 70.0 * lie_quality, safe_risk, false, _safe_success_chance(88.0, lie_quality), safe_club)
+	var pin_attack: Dictionary = _option("PIN_ATTACK", APPROACH, state.hole_position, 82.0 * lie_quality, _lie_risk(max(22.0, direct_risk), state), true, success_chance, club)
+	return [normal, safe, pin_attack]
+
+
+func _green_center_target(state) -> Vector3:
+	if state.course_context == null or state.course_context.get("hole_definition") == null:
+		return state.hole_position
+	var definition = state.course_context.hole_definition
+	var polygon: PackedVector2Array = definition.green_polygon
+	if polygon.is_empty():
+		return state.hole_position
+	var center: Vector2 = Vector2.ZERO
+	for point in polygon:
+		center += point
+	center /= float(polygon.size())
+	return Vector3(center.x, state.ball_position.y, center.y)
 
 
 func _named_club_distance(club_id: String, golfer: Node, surface: String, lie_quality: float, fallback: float) -> float:
