@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "course_id": "poc12_proving_course",
+  "hole_number": 1,
+  "hole_name": "Decision Point",
+  "par": 4,
+  "nominal_yardage": 425,
+  "coordinate_units": "yards",
+  "tees": [
+    {"id":"default","name":"Back Tee","position":[0,0,425],"yardage":425},
+    {"id":"forward","name":"Forward Tee","position":[0,0,385],"yardage":385}
+  ],
+  "pin_position": [6,0,8],
+  "green_polygon": [[-18,-4],[-13,18],[3,27],[20,16],[22,-5],[5,-16]],
+  "surface_regions": [
+    {"id":"fairway_main","name":"Main Fairway","surface":"FAIRWAY","polygon":[[-18,385],[-25,320],[-20,265],[-11,210],[-17,145],[-13,70],[-8,25],[17,25],[22,80],[16,150],[14,210],[21,265],[27,325],[18,385]]},
+    {"id":"teeing_ground","name":"Back Teeing Ground","surface":"TEE","polygon":[[-10,435],[-10,415],[10,415],[10,435]]}
+  ],
+  "hazards": [
+    {"id":"water_left","name":"Left Water","type":"WATER","penalty_strokes":1,"relief_rule":"PENALTY_AREA","polygon":[[-60,300],[-28,300],[-20,225],[-55,215]]},
+    {"id":"right_fairway_bunker","name":"Right Fairway Bunker","type":"BUNKER","polygon":[[17,175],[30,180],[32,205],[19,210],[13,195]]},
+    {"id":"front_left_green_bunker","name":"Front Left Green Bunker","type":"BUNKER","polygon":[[-24,0],[-15,-6],[-9,4],[-13,13],[-25,11]]}
+  ],
+  "out_of_bounds_regions": [
+    {"id":"right_ob","name":"Right Boundary","type":"OUT_OF_BOUNDS","penalty_strokes":1,"relief_rule":"STROKE_AND_DISTANCE","polygon":[[55,440],[80,440],[80,-30],[50,-30]]}
+  ],
+  "elevation_points": [
+    {"position":[0,0,425],"elevation":0.0},
+    {"position":[0,0,250],"elevation":-4.0},
+    {"position":[0,0,100],"elevation":2.0},
+    {"position":[6,0,8],"elevation":5.0}
+  ]
+}
