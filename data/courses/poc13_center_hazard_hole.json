@@ -30,7 +30,7 @@
       "id": "center_bunker_complex",
       "name": "Center Bunker Complex",
       "type": "BUNKER",
-      "polygon": [[-16,150],[-16,230],[16,230],[16,150]]
+      "polygon": [[-10,215],[-10,260],[10,260],[10,215]]
     }
   ],
   "out_of_bounds_regions": [],
