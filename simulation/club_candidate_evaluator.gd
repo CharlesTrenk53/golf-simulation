@@ -107,22 +107,27 @@ func _expected_strokes_from_landing(golfer: Node, surface: String, remaining_dis
 
 
 func _distance_baseline(distance: float) -> float:
-	# Provisional POC expectation curve. It is deliberately monotonic and expressed
-	# in strokes so empirical calibration can later replace these anchors without
-	# changing the architecture.
+	# Provisional POC expectation curve expressed in strokes. Earlier POC-13 builds
+	# used hard buckets, which made materially different clubs tie whenever their
+	# leaves landed inside the same distance band. Interpolating between the same
+	# anchors preserves the calibration scale while allowing a 15-yard improvement
+	# in position to actually matter to strategy selection.
+	if distance <= 2.0:
+		return 1.0
 	if distance <= 25.0:
-		return 1.75
+		return lerp(1.0, 1.75, clamp((distance - 2.0) / 23.0, 0.0, 1.0))
 	if distance <= 75.0:
-		return 2.15
+		return lerp(1.75, 2.15, (distance - 25.0) / 50.0)
 	if distance <= 125.0:
-		return 2.45
+		return lerp(2.15, 2.45, (distance - 75.0) / 50.0)
 	if distance <= 175.0:
-		return 2.70
+		return lerp(2.45, 2.70, (distance - 125.0) / 50.0)
 	if distance <= 225.0:
-		return 2.95
+		return lerp(2.70, 2.95, (distance - 175.0) / 50.0)
 	if distance <= 300.0:
-		return 3.25
-	return 3.65
+		return lerp(2.95, 3.25, (distance - 225.0) / 75.0)
+	# Long-hole continuation remains monotonic instead of flattening completely.
+	return 3.25 + clamp((distance - 300.0) / 200.0, 0.0, 1.0) * 0.40
 
 
 func _expected_putts(distance: float, golfer: Node) -> float:
