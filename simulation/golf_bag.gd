@@ -129,6 +129,27 @@ func clubs_for_surface(surface: String) -> Array[Dictionary]:
 	return available
 
 
+# Some clubs remain physically possible from a surface while becoming substantially
+# harder to execute. Driver from a clean fairway is the important first example:
+# it is not forbidden, but the missing tee makes center-face launch far less reliable.
+# This is deliberately a feasibility/skill penalty rather than an arbitrary strategy
+# penalty so an exceptional golfer can still choose the shot when the geometry warrants it.
+func surface_execution_penalty(club: Dictionary, surface: String, lie_quality: float = 1.0) -> float:
+	var club_id: String = str(club.get("id", ""))
+	var family: String = str(club.get("family", ""))
+	var normalized_surface: String = surface.to_upper()
+	var penalty: float = 0.0
+
+	if club_id == "DRIVER" and normalized_surface != "TEE":
+		penalty += 0.35
+	elif family == "WOOD" and normalized_surface == "FAIRWAY":
+		penalty += 0.05
+
+	# Poorer lies amplify clubs that are already difficult from the surface.
+	penalty += max(0.0, 1.0 - lie_quality) * 0.25
+	return clamp(penalty, 0.0, 1.0)
+
+
 func effective_carry(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
 	var base_carry: float = baseline_distance(club)
 	var shot_type: int = int(club["shot_type"])
@@ -156,7 +177,9 @@ func effective_dispersion(club: Dictionary, golfer: Node, surface: String, lie_q
 		lie_penalty *= 1.15
 	elif surface == "BUNKER":
 		lie_penalty *= 1.30
-	return base_dispersion * ability_factor * lie_penalty
+	var execution_penalty: float = surface_execution_penalty(club, surface, lie_quality)
+	var surface_dispersion_factor: float = 1.0 + execution_penalty * 1.10
+	return base_dispersion * ability_factor * lie_penalty * surface_dispersion_factor
 
 
 func best_distance_match(golfer: Node, surface: String, lie_quality: float, desired_distance: float) -> Dictionary:

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "course_id": "poc13_strategy_lab",
+  "hole_number": 5,
+  "hole_name": "Thread the Needle",
+  "par": 4,
+  "nominal_yardage": 405,
+  "coordinate_units": "yards",
+  "tees": [
+    {"id": "default", "name": "Back Tee", "position": [0, 0, 405], "yardage": 405}
+  ],
+  "pin_position": [0, 0, 8],
+  "green_polygon": [[-18,-8],[-18,22],[18,22],[18,-8]],
+  "surface_regions": [
+    {
+      "id": "narrow_fairway",
+      "name": "Narrow Fairway",
+      "surface": "FAIRWAY",
+      "polygon": [[-18,380],[-18,55],[18,55],[18,380]]
+    },
+    {
+      "id": "teeing_ground",
+      "name": "Tee",
+      "surface": "TEE",
+      "polygon": [[-10,415],[-10,395],[10,395],[10,415]]
+    }
+  ],
+  "hazards": [
+    {
+      "id": "left_trees",
+      "name": "Left Trouble",
+      "type": "BUNKER",
+      "polygon": [[-55,145],[-55,285],[-20,285],[-20,145]]
+    },
+    {
+      "id": "right_trees",
+      "name": "Right Trouble",
+      "type": "BUNKER",
+      "polygon": [[20,145],[20,285],[55,285],[55,145]]
+    }
+  ],
+  "out_of_bounds_regions": [],
+  "elevation_points": [
+    {"position": [0,0,405], "elevation": 0.0},
+    {"position": [0,0,205], "elevation": 0.0},
+    {"position": [0,0,8], "elevation": 0.0}
+  ]
+}

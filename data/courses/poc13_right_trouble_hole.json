@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "course_id": "poc13_strategy_lab",
+  "hole_number": 4,
+  "hole_name": "Trouble Right",
+  "par": 4,
+  "nominal_yardage": 425,
+  "coordinate_units": "yards",
+  "tees": [
+    {"id": "default", "name": "Back Tee", "position": [0, 0, 425], "yardage": 425}
+  ],
+  "pin_position": [0, 0, 8],
+  "green_polygon": [[-20,-8],[-20,22],[20,22],[20,-8]],
+  "surface_regions": [
+    {
+      "id": "fairway",
+      "name": "Fairway",
+      "surface": "FAIRWAY",
+      "polygon": [[-52,395],[-52,35],[52,35],[52,395]]
+    },
+    {
+      "id": "teeing_ground",
+      "name": "Tee",
+      "surface": "TEE",
+      "polygon": [[-10,435],[-10,415],[10,415],[10,435]]
+    }
+  ],
+  "hazards": [
+    {
+      "id": "right_water",
+      "name": "Right Water",
+      "type": "WATER",
+      "polygon": [[14,145],[14,275],[58,275],[58,145]]
+    }
+  ],
+  "out_of_bounds_regions": [],
+  "elevation_points": [
+    {"position": [0,0,425], "elevation": 0.0},
+    {"position": [0,0,210], "elevation": 0.0},
+    {"position": [0,0,8], "elevation": 0.0}
+  ]
+}
