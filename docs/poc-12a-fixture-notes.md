@@ -1,0 +1,1 @@
+The three-hole proving course deliberately mixes a par 4, par 3, and par 5 so later round orchestration must handle materially different hole lengths and strategy contexts rather than replaying one geometry three times.

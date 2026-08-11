@@ -1,0 +1,36 @@
+name: POC-12 Course and Round Checks
+
+on:
+  push:
+    branches:
+      - poc-12-autonomous-multi-hole-round
+
+jobs:
+  course-round:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Run POC-12A course definition tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/course_definition_test.gd
+
+      - name: Run POC-12B round state tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/round_state_test.gd
+
+      - name: Run POC-12C autonomous round tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/autonomous_round_test.gd
+
+      - name: Run POC-12D watchable round demo tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/poc12_round_demo_test.gd

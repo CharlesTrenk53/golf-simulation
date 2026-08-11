@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "course_id": "poc12_proving_course",
+  "hole_number": 3,
+  "hole_name": "Long Way Home",
+  "par": 5,
+  "nominal_yardage": 510,
+  "coordinate_units": "yards",
+  "tees": [
+    {"id":"default","name":"Back Tee","position":[0,0,510],"yardage":510},
+    {"id":"forward","name":"Forward Tee","position":[0,0,455],"yardage":455}
+  ],
+  "pin_position": [-5,0,10],
+  "green_polygon": [[-24,-6],[-22,19],[-5,31],[18,22],[20,0],[7,-16],[-10,-18]],
+  "surface_regions": [
+    {"id":"teeing_ground","name":"Par 5 Tee","surface":"TEE","polygon":[[-11,520],[-11,500],[11,500],[11,520]]},
+    {"id":"fairway_main","name":"Main Fairway","surface":"FAIRWAY","polygon":[[-20,480],[-28,410],[-18,335],[-30,260],[-18,190],[-12,115],[-14,35],[16,35],[22,115],[14,190],[25,260],[16,335],[28,410],[19,480]]}
+  ],
+  "hazards": [
+    {"id":"cross_bunker_left","name":"Cross Bunker Left","type":"BUNKER","polygon":[[-31,285],[-10,275],[-8,252],[-29,246],[-38,262]]},
+    {"id":"cross_bunker_right","name":"Cross Bunker Right","type":"BUNKER","polygon":[[8,250],[31,253],[38,273],[29,290],[10,282]]},
+    {"id":"creek_front","name":"Front Creek","type":"WATER","penalty_strokes":1,"relief_rule":"PENALTY_AREA","polygon":[[-45,92],[-38,72],[35,65],[44,84],[36,100],[-36,105]]}
+  ],
+  "out_of_bounds_regions": [
+    {"id":"right_ob","name":"Right Boundary","type":"OUT_OF_BOUNDS","penalty_strokes":1,"relief_rule":"STROKE_AND_DISTANCE","polygon":[[58,540],[85,540],[85,-35],[55,-35]]}
+  ],
+  "elevation_points": [
+    {"position":[0,0,510],"elevation":0.0},
+    {"position":[0,0,330],"elevation":-5.0},
+    {"position":[0,0,170],"elevation":1.0},
+    {"position":[-5,0,10],"elevation":4.0}
+  ]
+}
