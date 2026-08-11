@@ -25,3 +25,9 @@ jobs:
 
       - name: Run POC-13A club candidate tests
         run: timeout 90s ./godot --headless --path . --script res://tests/club_candidate_generator_test.gd
+
+      - name: Run POC-13B expected-strokes evaluator tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/club_candidate_evaluator_test.gd
+
+      - name: Run POC-13C course management tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/course_management_model_test.gd
