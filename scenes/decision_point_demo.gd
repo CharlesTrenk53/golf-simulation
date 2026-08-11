@@ -4,11 +4,43 @@ const HoleDefinition = preload("res://simulation/hole_definition.gd")
 const DataDefinedAutonomousHole = preload("res://simulation/data_defined_autonomous_hole.gd")
 const GolferScript = preload("res://scenes/golfer.gd")
 
+enum DiagnosticHole {
+	DECISION_POINT,
+	GREEN_LIGHT,
+	SPLIT_DECISION,
+	TROUBLE_RIGHT,
+	THREAD_THE_NEEDLE
+}
+
+const DIAGNOSTIC_HOLES := {
+	DiagnosticHole.DECISION_POINT: {
+		"name": "Decision Point",
+		"path": "res://data/courses/poc11_test_hole.json"
+	},
+	DiagnosticHole.GREEN_LIGHT: {
+		"name": "Green Light",
+		"path": "res://data/courses/poc13_open_fairway_hole.json"
+	},
+	DiagnosticHole.SPLIT_DECISION: {
+		"name": "Split Decision",
+		"path": "res://data/courses/poc13_center_hazard_hole.json"
+	},
+	DiagnosticHole.TROUBLE_RIGHT: {
+		"name": "Trouble Right",
+		"path": "res://data/courses/poc13_right_trouble_hole.json"
+	},
+	DiagnosticHole.THREAD_THE_NEEDLE: {
+		"name": "Thread the Needle",
+		"path": "res://data/courses/poc13_narrow_fairway_hole.json"
+	}
+}
+
 @export var autoplay: bool = true
 @export var seed_value: int = 42
 @export var shot_duration: float = 1.1
 @export var decision_pause: float = 0.8
 @export var use_reckless_rick: bool = false
+@export var diagnostic_hole: DiagnosticHole = DiagnosticHole.DECISION_POINT
 
 var hole_definition = null
 var simulation = null
@@ -21,20 +53,24 @@ var detail_label: Label = null
 var strategy_label: Label = null
 var shot_log_label: Label = null
 var shot_lines: Array[String] = []
+var diagnostic_hole_name: String = "Decision Point"
 
 
 func _ready() -> void:
 	_build_environment()
-	hole_definition = HoleDefinition.load_json("res://data/courses/poc11_test_hole.json")
+	var hole_config: Dictionary = DIAGNOSTIC_HOLES.get(diagnostic_hole, DIAGNOSTIC_HOLES[DiagnosticHole.DECISION_POINT])
+	diagnostic_hole_name = str(hole_config.get("name", "Decision Point"))
+	var hole_path: String = str(hole_config.get("path", "res://data/courses/poc11_test_hole.json"))
+	hole_definition = HoleDefinition.load_json(hole_path)
 	if hole_definition == null:
-		_set_status("COURSE LOAD FAILED", "Decision Point could not be loaded.")
+		_set_status("COURSE LOAD FAILED", "%s could not be loaded." % diagnostic_hole_name)
 		return
 	_render_hole()
 	_build_golfer()
 	simulation = DataDefinedAutonomousHole.new(hole_definition, "default")
 	state = simulation.create_state(seed_value)
 	_sync_player_visuals(state.ball_position)
-	_set_status("DECISION POINT — POC-13", "%s | Par %d | %.0f yards" % [golfer_logic.golfer_name, hole_definition.par, hole_definition.tee_yardage("default")])
+	_set_status("%s — POC-13" % diagnostic_hole_name.to_upper(), "%s | Par %d | %.0f yards" % [golfer_logic.golfer_name, hole_definition.par, hole_definition.tee_yardage("default")])
 	if autoplay:
 		await get_tree().create_timer(0.8).timeout
 		await play_visible_hole()
@@ -210,7 +246,7 @@ func play_visible_hole() -> void:
 		await get_tree().create_timer(decision_pause).timeout
 
 	if state != null and state.finished:
-		_set_status("HOLED OUT — %s" % golfer_logic.golfer_name, "%d strokes on the par-%d Decision Point. Club and target both came from the expected-strokes strategy system." % [state.strokes, state.par])
+		_set_status("HOLED OUT — %s" % golfer_logic.golfer_name, "%d strokes on the par-%d %s. Club and target both came from the expected-strokes strategy system." % [state.strokes, state.par, diagnostic_hole_name])
 	else:
 		_set_status("ROUND STOPPED", "Stroke limit reached before holing out.")
 
