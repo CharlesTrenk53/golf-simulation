@@ -35,6 +35,7 @@ func evaluate(golfer: Node, state, candidate: Dictionary) -> Dictionary:
 	var remaining_before: float = max(0.0, state.remaining_distance())
 	var remaining_after: float = max(0.0, float(candidate.get("remaining_after_target", remaining_before)))
 	var dispersion: float = max(0.0, float(candidate.get("dispersion", 0.0)))
+	var surface_execution_penalty: float = clamp(float(candidate.get("surface_execution_penalty", 0.0)), 0.0, 1.0)
 	var hazard_count: int = int(candidate.get("corridor_hazard_count", 0))
 	var out_of_bounds: bool = bool(candidate.get("out_of_bounds", false))
 	var ability: float = clamp(float(golfer.get_shot_ability(int(candidate.get("shot_type", 1)))), 0.0, 100.0)
@@ -48,13 +49,21 @@ func evaluate(golfer: Node, state, candidate: Dictionary) -> Dictionary:
 	if out_of_bounds:
 		ob_probability = clamp(0.35 * max(0.45, dispersion_factor) * ability_error_factor, 0.0, 0.80)
 
+	# A physically awkward club/surface combination can cost strokes even when the
+	# center-line target itself avoids a named hazard. This captures thin/heavy/offline
+	# strikes such as driver from the deck without banning the shot outright.
+	var strike_miss_probability: float = clamp(surface_execution_penalty * 0.42 * ability_error_factor, 0.0, 0.45)
+	var expected_strike_cost: float = strike_miss_probability * 0.55
+
 	var expected_penalty_strokes: float = hazard_probability * 1.0 + ob_probability * 1.0
-	var expected_recovery_strokes: float = hazard_probability * 0.55 + ob_probability * 0.85
+	var expected_recovery_strokes: float = hazard_probability * 0.55 + ob_probability * 0.85 + expected_strike_cost
 	var continuation_strokes: float = _expected_strokes_from_landing(golfer, expected_surface, remaining_after)
 	var true_expected_strokes: float = 1.0 + expected_penalty_strokes + expected_recovery_strokes + continuation_strokes
 
 	result["hazard_probability"] = hazard_probability
 	result["out_of_bounds_probability"] = ob_probability
+	result["strike_miss_probability"] = strike_miss_probability
+	result["expected_strike_cost"] = expected_strike_cost
 	result["expected_penalty_strokes"] = expected_penalty_strokes
 	result["expected_recovery_strokes"] = expected_recovery_strokes
 	result["expected_continuation_strokes"] = continuation_strokes
