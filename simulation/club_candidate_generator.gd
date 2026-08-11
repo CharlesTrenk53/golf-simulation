@@ -30,7 +30,7 @@ func generate(golfer: Node, state) -> Array:
 	if direction.length() <= 0.001:
 		return candidates
 	direction = direction.normalized()
-	var lateral := Vector3(-direction.z, 0.0, direction.x)
+	var lateral: Vector3 = Vector3(-direction.z, 0.0, direction.x)
 
 	for club in bag.clubs_for_surface(surface):
 		if str(club.get("id", "")) == "PUTTER":
@@ -75,8 +75,8 @@ func generate(golfer: Node, state) -> Array:
 	# Generation order remains useful for diagnostics only. Final choice is made by
 	# expected-strokes evaluation, not by this order.
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var carry_a := float(a.get("effective_carry", 0.0))
-		var carry_b := float(b.get("effective_carry", 0.0))
+		var carry_a: float = float(a.get("effective_carry", 0.0))
+		var carry_b: float = float(b.get("effective_carry", 0.0))
 		if abs(carry_a - carry_b) > 0.001:
 			return carry_a > carry_b
 		return abs(float(a.get("lateral_offset", 0.0))) < abs(float(b.get("lateral_offset", 0.0)))
@@ -88,11 +88,11 @@ func _target_offset_for(dispersion: float, intended_distance: float, remaining: 
 	# Target choices should be meaningfully distinct without becoming trick-shot
 	# directions. Wider-dispersion clubs naturally inspect a wider strategic band.
 	# Near the hole the band contracts so approach targets remain plausible.
-	var offset := clamp(max(8.0, dispersion * 1.6), 8.0, 18.0)
+	var offset: float = clampf(max(8.0, dispersion * 1.6), 8.0, 18.0)
 	if intended_distance >= remaining - 0.5:
-		offset = min(offset, 10.0)
+		offset = minf(offset, 10.0)
 	elif intended_distance < 100.0:
-		offset = min(offset, 8.0)
+		offset = minf(offset, 8.0)
 	return offset
 
 
