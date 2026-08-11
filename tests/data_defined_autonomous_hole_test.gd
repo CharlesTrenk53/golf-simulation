@@ -22,6 +22,8 @@ func _init() -> void:
 		quit(1)
 		return
 
+	_assert_true(playable.autonomous.option_generator.bag.is_using_literal_yardages(), "data-defined option generation uses literal yards")
+	_assert_true(playable.autonomous.bag.is_using_literal_yardages(), "data-defined shot execution uses literal yards")
 	_assert_true(state.ball_position == hole.tee_position("default"), "state starts at data-defined tee")
 	_assert_true(state.hole_position == hole.pin_position, "state targets data-defined pin")
 	_assert_true(state.par == hole.par, "state inherits data-defined par")
@@ -42,6 +44,9 @@ func _init() -> void:
 	if not result.is_empty():
 		_assert_true(str(result.get("surface_before", "")) == "TEE", "first shot context comes from data-defined tee")
 		_assert_true(not str(result.get("option", "")).is_empty(), "autonomous golfer selects an option")
+		_assert_true(not str(result.get("club_id", "")).is_empty(), "opening shot selects a real club")
+		_assert_true(float(result.get("intended_distance", 0.0)) > 100.0, "full-length opening strategy advances a realistic distance")
+		_assert_true(float(result.get("club_effective_carry", 0.0)) > 100.0, "selected club executes on literal-yard scale")
 		_assert_true(state.strokes >= 1, "executed shot advances course state")
 		_assert_true(str(result.get("surface_after", "")).length() > 0, "landing lie is resolved from hole geometry")
 
