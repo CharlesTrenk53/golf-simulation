@@ -1,0 +1,36 @@
+name: POC-11 Course Architecture Checks
+
+on:
+  push:
+    branches:
+      - poc-11-playable-course-architecture
+
+jobs:
+  course-architecture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Run POC-11A hole definition tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/hole_definition_test.gd
+
+      - name: Run POC-11B spatial query tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/hole_spatial_query_test.gd
+
+      - name: Run POC-11C course-to-decision integration tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/data_defined_autonomous_hole_test.gd
+
+      - name: Run POC-11D/E watchable Decision Point demo tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/decision_point_demo_test.gd
