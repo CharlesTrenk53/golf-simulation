@@ -2,11 +2,12 @@ extends RefCounted
 
 # POC-08: club catalog + default 14-club bag.
 # Distances are simulation units matching the existing POC scale, not literal yards.
-# The catalog is deliberately broader than the active bag so later bag-selection logic
-# can swap long irons, hybrids, and fairway woods without rewriting club physics.
+# POC-11 adds a configurable distance scale so data-defined courses can keep
+# literal yard coordinates without rewriting the legacy club calibration.
 
 var clubs: Array[Dictionary] = []
 var club_catalog: Array[Dictionary] = []
+var distance_scale: float = 1.0
 
 const DEFAULT_BAG_IDS := [
 	"DRIVER", "3_WOOD", "5_WOOD", "4_HYBRID",
@@ -89,15 +90,9 @@ func clubs_for_surface(surface: String) -> Array[Dictionary]:
 func effective_carry(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
 	var base_carry: float = club["carry_distance"]
 	var shot_type = int(club["shot_type"])
-	# Technical skill has only a modest carry effect: centered, efficient contact
-	# matters, but raw distance comes primarily from physical capacity.
 	var ability: float = golfer.get_shot_ability(shot_type)
 	var strike_factor = lerp(0.94, 1.04, ability / 100.0)
 	var raw_physical_factor = golfer.physical_distance_factor(shot_type) if golfer.has_method("physical_distance_factor") else 1.0
-	# Club sensitivity controls how strongly the golfer's physical-distance change
-	# reaches this club. Long clubs/long irons are more demanding; wedges and the
-	# putter are progressively insulated. Driver remains 1.0 to preserve the
-	# already calibrated Driver aging curve.
 	var physical_sensitivity: float = float(club.get("physical_sensitivity", 1.0))
 	var physical_factor: float = 1.0 + ((raw_physical_factor - 1.0) * physical_sensitivity)
 	var lie_factor = clamp(lie_quality, 0.45, 1.0)
@@ -107,7 +102,7 @@ func effective_carry(club: Dictionary, golfer: Node, surface: String, lie_qualit
 	elif surface == "BUNKER":
 		lie_factor *= 0.78
 
-	return base_carry * strike_factor * physical_factor * lie_factor
+	return base_carry * strike_factor * physical_factor * lie_factor * distance_scale
 
 
 func effective_dispersion(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
@@ -119,7 +114,7 @@ func effective_dispersion(club: Dictionary, golfer: Node, surface: String, lie_q
 		lie_penalty *= 1.15
 	elif surface == "BUNKER":
 		lie_penalty *= 1.30
-	return base_dispersion * ability_factor * lie_penalty
+	return base_dispersion * ability_factor * lie_penalty * distance_scale
 
 
 func best_distance_match(golfer: Node, surface: String, lie_quality: float, desired_distance: float) -> Dictionary:
