@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "course_id": "poc12_proving_course",
+  "hole_number": 2,
+  "hole_name": "Carry Question",
+  "par": 3,
+  "nominal_yardage": 165,
+  "coordinate_units": "yards",
+  "tees": [
+    {"id": "default", "name": "Back Tee", "position": [0, 0, 165], "yardage": 165},
+    {"id": "forward", "name": "Forward Tee", "position": [0, 0, 135], "yardage": 135}
+  ],
+  "pin_position": [4, 0, 8],
+  "green_polygon": [[-18,-5],[-16,18],[-2,28],[18,20],[22,2],[12,-14],[-5,-18]],
+  "surface_regions": [
+    {"id":"teeing_ground","name":"Par 3 Tee","surface":"TEE","polygon":[[-10,175],[-10,155],[10,155],[10,175]]},
+    {"id":"approach_short","name":"Short Approach","surface":"FAIRWAY","polygon":[[-18,75],[-15,28],[17,28],[20,78]]}
+  ],
+  "hazards": [
+    {"id":"front_water","name":"Fronting Water","type":"WATER","penalty_strokes":1,"relief_rule":"PENALTY_AREA","polygon":[[-38,120],[-28,68],[31,66],[40,118]]},
+    {"id":"right_green_bunker","name":"Right Green Bunker","type":"BUNKER","polygon":[[16,-4],[30,0],[30,19],[18,23],[13,12]]}
+  ],
+  "out_of_bounds_regions": [
+    {"id":"left_ob","name":"Left Boundary","type":"OUT_OF_BOUNDS","penalty_strokes":1,"relief_rule":"STROKE_AND_DISTANCE","polygon":[[-75,190],[-50,190],[-45,-30],[-75,-30]]}
+  ],
+  "elevation_points": [
+    {"position":[0,0,165],"elevation":2.0},
+    {"position":[0,0,95],"elevation":-3.0},
+    {"position":[4,0,8],"elevation":1.0}
+  ]
+}
