@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "course_id": "poc12_proving_course",
+  "course_name": "POC-12 Proving Course",
+  "holes": [
+    "res://data/courses/poc12_hole_1.json",
+    "res://data/courses/poc12_hole_2.json",
+    "res://data/courses/poc12_hole_3.json"
+  ]
+}
