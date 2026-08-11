@@ -26,7 +26,7 @@ func _init() -> void:
 	generator.bag.use_literal_yardages(true)
 	var candidates: Array = generator.generate(golfer, state)
 
-	_assert_true(candidates.size() >= 18, "tee produces a real menu of club-target combinations")
+	_assert_true(candidates.size() >= 30, "tee produces a wide menu of club-target combinations")
 	_assert_true(_has_club(candidates, "DRIVER"), "driver is independently considered")
 	_assert_true(_has_club(candidates, "3_WOOD"), "3 wood is independently considered")
 	_assert_true(_has_club(candidates, "5_WOOD"), "5 wood is independently considered")
@@ -55,21 +55,29 @@ func _init() -> void:
 	_assert_true(unique_ids.size() >= 6, "multiple feasible bag clubs survive target expansion")
 
 	var driver_targets: Array = _candidates_for(candidates, "DRIVER")
-	_assert_true(driver_targets.size() == 3, "driver receives center, left, and right spatial targets")
-	_assert_true(_has_variant(driver_targets, "CENTER"), "driver has center target")
-	_assert_true(_has_variant(driver_targets, "LEFT"), "driver has left target")
-	_assert_true(_has_variant(driver_targets, "RIGHT"), "driver has right target")
-	if driver_targets.size() == 3:
-		var center := _variant(driver_targets, "CENTER")
-		var left := _variant(driver_targets, "LEFT")
-		var right := _variant(driver_targets, "RIGHT")
-		_assert_true(Vector3(left.get("target", Vector3.ZERO)).distance_to(Vector3(center.get("target", Vector3.ZERO))) > 5.0, "left target is spatially distinct from center")
-		_assert_true(Vector3(right.get("target", Vector3.ZERO)).distance_to(Vector3(center.get("target", Vector3.ZERO))) > 5.0, "right target is spatially distinct from center")
+	_assert_true(driver_targets.size() == 5, "driver receives center, inner, and outer aiming lanes")
+	for variant_id in ["CENTER", "LEFT", "RIGHT", "FAR_LEFT", "FAR_RIGHT"]:
+		_assert_true(_has_variant(driver_targets, variant_id), "driver has %s target" % variant_id)
+
+	if driver_targets.size() == 5:
+		var center: Dictionary = _variant(driver_targets, "CENTER")
+		var left: Dictionary = _variant(driver_targets, "LEFT")
+		var right: Dictionary = _variant(driver_targets, "RIGHT")
+		var far_left: Dictionary = _variant(driver_targets, "FAR_LEFT")
+		var far_right: Dictionary = _variant(driver_targets, "FAR_RIGHT")
+		_assert_true(absf(float(far_left.get("lateral_offset", 0.0))) > absf(float(left.get("lateral_offset", 0.0))), "far-left lane is wider than ordinary left aim")
+		_assert_true(absf(float(far_right.get("lateral_offset", 0.0))) > absf(float(right.get("lateral_offset", 0.0))), "far-right lane is wider than ordinary right aim")
+		_assert_true(Vector3(far_left.get("target", Vector3.ZERO)).distance_to(Vector3(center.get("target", Vector3.ZERO))) >= 25.0, "far-left target is a genuinely strategic lane")
+		_assert_true(Vector3(far_right.get("target", Vector3.ZERO)).distance_to(Vector3(center.get("target", Vector3.ZERO))) >= 25.0, "far-right target is a genuinely strategic lane")
 		var consequence_signatures: Dictionary = {}
+		var hazard_bearing_targets: int = 0
 		for option in driver_targets:
-			var signature := "%s|%d|%s" % [str(option.get("expected_surface", "")), int(option.get("corridor_hazard_count", 0)), str(option.get("out_of_bounds", false))]
+			var signature: String = "%s|%d|%s" % [str(option.get("expected_surface", "")), int(option.get("corridor_hazard_count", 0)), str(option.get("out_of_bounds", false))]
 			consequence_signatures[signature] = true
-		_assert_true(consequence_signatures.size() >= 2, "Decision Point geometry gives driver targets different spatial consequences")
+			if int(option.get("corridor_hazard_count", 0)) > 0:
+				hazard_bearing_targets += 1
+		_assert_true(consequence_signatures.size() >= 2, "Decision Point geometry gives driver lanes different spatial consequences")
+		_assert_true(hazard_bearing_targets >= 1, "at least one outer driver lane brings a real hazard corridor into play")
 
 	var driver: Dictionary = _variant(driver_targets, "CENTER")
 	var five_iron: Dictionary = _variant(_candidates_for(candidates, "5_IRON"), "CENTER")
