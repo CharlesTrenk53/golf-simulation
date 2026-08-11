@@ -31,3 +31,6 @@ jobs:
 
       - name: Run POC-12C autonomous round tests
         run: timeout 90s ./godot --headless --path . --script res://tests/autonomous_round_test.gd
+
+      - name: Run POC-12D watchable round demo tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/poc12_round_demo_test.gd
