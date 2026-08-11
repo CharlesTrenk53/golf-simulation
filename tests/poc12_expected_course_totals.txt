@@ -1,0 +1,5 @@
+POC-12 proving course expected totals
+holes=3
+par=12
+default_yardage=1100
+forward_yardage=975
