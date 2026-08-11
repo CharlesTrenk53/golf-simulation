@@ -7,13 +7,18 @@ extends RefCounted
 # wrapper builds only the compatibility inputs still required by AutonomousHole.
 # Data-defined course coordinates are literal yards, so both option generation
 # and shot execution use the same literal-yard club profile.
+#
+# POC-13D adds the new course-strategy selection seam. Selection can now be proven
+# independently from execution before the legacy play_step path is replaced.
 
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
 const HoleCourseContext = preload("res://simulation/hole_course_context.gd")
+const CourseStrategySelector = preload("res://simulation/course_strategy_selector.gd")
 
 var hole_definition = null
 var course_context = null
 var autonomous = AutonomousHole.new()
+var strategy_selector = CourseStrategySelector.new()
 var tee_id: String = "default"
 
 
@@ -26,6 +31,7 @@ func _init(definition = null, selected_tee_id: String = "default") -> void:
 	# distance can diverge.
 	autonomous.option_generator.bag.use_literal_yardages(true)
 	autonomous.bag.use_literal_yardages(true)
+	strategy_selector.use_literal_yardages(true)
 
 
 func create_state(seed_value: int = 1):
@@ -38,6 +44,12 @@ func create_state(seed_value: int = 1):
 		seed_value,
 		course_context
 	)
+
+
+func choose_course_strategy(golfer: Node, state) -> Dictionary:
+	if golfer == null or state == null:
+		return {"chosen": {}, "evaluated": []}
+	return strategy_selector.choose(golfer, state)
 
 
 func play_step(golfer: Node, state) -> Dictionary:
