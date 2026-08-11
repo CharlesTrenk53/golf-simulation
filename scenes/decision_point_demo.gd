@@ -66,7 +66,7 @@ func _build_environment() -> void:
 	add_child(ui)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18.0, 18.0)
-	panel.size = Vector2(760.0, 300.0)
+	panel.size = Vector2(820.0, 400.0)
 	ui.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
@@ -223,19 +223,55 @@ func _show_strategy_preview(preview: Dictionary) -> void:
 		strategy_label.text = "STRATEGY MENU\nLegacy/short-game path — no bag-wide club menu required."
 		return
 	var chosen: Dictionary = preview.get("chosen", {})
+	var chosen_club_id: String = str(chosen.get("club_id", ""))
+	var chosen_target: String = str(chosen.get("target_variant", ""))
 	var lines: Array[String] = []
-	lines.append("STRATEGY MENU — club + spatial target, ranked by golfer-perceived expected strokes")
-	var limit: int = min(6, evaluated.size())
+	lines.append("STRATEGY MENU — best club + target options")
+	var limit: int = min(5, evaluated.size())
 	for index in range(limit):
 		var candidate: Dictionary = evaluated[index]
-		var same_club := str(candidate.get("club_id", "")) == str(chosen.get("club_id", ""))
-		var same_target := str(candidate.get("target_variant", "")) == str(chosen.get("target_variant", ""))
-		var marker := "→" if same_club and same_target else " "
-		var perceived := float(candidate.get("perceived_expected_strokes_to_hole", INF))
-		var objective := float(candidate.get("expected_strokes_to_hole", INF))
-		var hazard_pct := 100.0 * float(candidate.get("hazard_probability", 0.0))
-		lines.append("%s %s / %s | land %s | perceived %.2f | objective %.2f | hazard %.0f%%" % [marker, str(candidate.get("club_name", "Club")), str(candidate.get("target_variant", "CENTER")), str(candidate.get("expected_surface", "UNKNOWN")), perceived, objective, hazard_pct])
+		var same_club: bool = str(candidate.get("club_id", "")) == chosen_club_id
+		var same_target: bool = str(candidate.get("target_variant", "")) == chosen_target
+		var marker: String = "→" if same_club and same_target else " "
+		lines.append(_strategy_line(candidate, marker))
+
+	lines.append("%s LANES — geometry tradeoff for selected club" % str(chosen.get("club_name", "Club")))
+	var chosen_club_options: Array = []
+	for candidate in evaluated:
+		if str(candidate.get("club_id", "")) == chosen_club_id:
+			chosen_club_options.append(candidate)
+	chosen_club_options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return _lane_order(str(a.get("target_variant", ""))) < _lane_order(str(b.get("target_variant", "")))
+	)
+	for candidate in chosen_club_options:
+		var marker: String = "→" if str(candidate.get("target_variant", "")) == chosen_target else " "
+		lines.append(_strategy_line(candidate, marker))
 	strategy_label.text = "\n".join(lines)
+
+
+func _strategy_line(candidate: Dictionary, marker: String) -> String:
+	var perceived: float = float(candidate.get("perceived_expected_strokes_to_hole", INF))
+	var objective: float = float(candidate.get("expected_strokes_to_hole", INF))
+	var hazard_pct: float = 100.0 * float(candidate.get("hazard_probability", 0.0))
+	return "%s %s / %s | land %s | perceived %.2f | objective %.2f | hazard %.0f%%" % [
+		marker,
+		str(candidate.get("club_name", "Club")),
+		str(candidate.get("target_variant", "CENTER")),
+		str(candidate.get("expected_surface", "UNKNOWN")),
+		perceived,
+		objective,
+		hazard_pct
+	]
+
+
+func _lane_order(variant_id: String) -> int:
+	match variant_id:
+		"FAR_LEFT": return 0
+		"LEFT": return 1
+		"CENTER": return 2
+		"RIGHT": return 3
+		"FAR_RIGHT": return 4
+		_: return 5
 
 
 func _animate_ball(start: Vector3, finish: Vector3) -> void:
