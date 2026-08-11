@@ -1,0 +1,27 @@
+name: POC-13 Course Strategy Checks
+
+on:
+  push:
+    branches:
+      - poc-13-emergent-club-target-selection
+
+jobs:
+  course-strategy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Run POC-13A club candidate tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/club_candidate_generator_test.gd
