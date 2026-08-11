@@ -42,6 +42,13 @@ func _init() -> void:
 		_assert_true(perceived + 0.0001 >= last_perceived, "candidates rank lowest perceived expected strokes first")
 		last_perceived = perceived
 
+	# The visible POC-13 demo exposed an important calibration flaw: several clubs
+	# with materially different leaves could tie because the old continuation model
+	# used coarse distance buckets. Exact leave distance must now matter continuously.
+	_assert_true(evaluator._distance_baseline(205.0) < evaluator._distance_baseline(225.0), "20-yard improvement inside former 175-225 bucket saves expected strokes")
+	_assert_true(evaluator._distance_baseline(225.0) < evaluator._distance_baseline(245.0), "distance curve remains monotonic across former bucket boundary")
+	_assert_true(evaluator._distance_baseline(245.0) < evaluator._distance_baseline(285.0), "different long-approach leaves remain distinguishable")
+
 	var driver_candidate: Dictionary = _candidate(candidates, "DRIVER")
 	_assert_true(not driver_candidate.is_empty(), "driver candidate available for calibration comparison")
 	if not driver_candidate.is_empty():
@@ -51,6 +58,14 @@ func _init() -> void:
 		var low_management: Dictionary = evaluator.evaluate(golfer, state, driver_candidate)
 		_assert_near(float(high_management["true_expected_strokes_to_hole"]), float(low_management["true_expected_strokes_to_hole"]), 0.0001, "course management does not change objective shot consequence")
 		_assert_true(float(low_management["perceived_expected_strokes_to_hole"]) <= float(high_management["perceived_expected_strokes_to_hole"]), "lower management is at least as optimistic about the same long shot")
+
+	var three_wood_candidate: Dictionary = _candidate(candidates, "3_WOOD")
+	if not driver_candidate.is_empty() and not three_wood_candidate.is_empty():
+		golfer.set_meta("course_management", 90.0)
+		var driver_eval: Dictionary = evaluator.evaluate(golfer, state, driver_candidate)
+		var three_wood_eval: Dictionary = evaluator.evaluate(golfer, state, three_wood_candidate)
+		if str(driver_candidate.get("expected_surface", "")) == str(three_wood_candidate.get("expected_surface", "")) and int(driver_candidate.get("corridor_hazard_count", 0)) == 0 and int(three_wood_candidate.get("corridor_hazard_count", 0)) == 0:
+			_assert_true(abs(float(driver_eval["true_expected_strokes_to_hole"]) - float(three_wood_eval["true_expected_strokes_to_hole"])) > 0.001, "distinct same-surface club leaves no longer collapse to an exact expected-strokes tie")
 
 	golfer.free()
 	if failures == 0:
