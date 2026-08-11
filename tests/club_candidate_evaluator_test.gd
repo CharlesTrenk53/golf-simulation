@@ -67,6 +67,26 @@ func _init() -> void:
 		if str(driver_candidate.get("expected_surface", "")) == str(three_wood_candidate.get("expected_surface", "")) and int(driver_candidate.get("corridor_hazard_count", 0)) == 0 and int(three_wood_candidate.get("corridor_hazard_count", 0)) == 0:
 			_assert_true(abs(float(driver_eval["true_expected_strokes_to_hole"]) - float(three_wood_eval["true_expected_strokes_to_hole"])) > 0.001, "distinct same-surface club leaves no longer collapse to an exact expected-strokes tie")
 
+	# Driver remains a legal fairway shot, but hitting it without a tee should be a
+	# distinctly harder physical task rather than a free source of extra distance.
+	var driver_club: Dictionary = generator.bag.get_club("DRIVER")
+	var tee_dispersion: float = generator.bag.effective_dispersion(driver_club, golfer, "TEE", 1.0)
+	var fairway_dispersion: float = generator.bag.effective_dispersion(driver_club, golfer, "FAIRWAY", 0.95)
+	_assert_true(fairway_dispersion > tee_dispersion * 1.25, "driver dispersion widens substantially when hit from the fairway")
+	_assert_true(generator.bag.surface_execution_penalty(driver_club, "TEE", 1.0) == 0.0, "driver has no off-tee execution penalty from a tee")
+	_assert_true(generator.bag.surface_execution_penalty(driver_club, "FAIRWAY", 0.95) > 0.30, "driver from the fairway carries explicit execution difficulty")
+
+	var fairway_state = playable.create_state(1314)
+	fairway_state.advance_to(Vector3(0.0, 0.0, 205.0), "SUCCESS", 0)
+	_assert_true(fairway_state.surface_name() == "FAIRWAY", "calibration position is a fairway lie")
+	var fairway_candidates: Array = generator.generate(golfer, fairway_state)
+	var fairway_driver: Dictionary = _candidate(fairway_candidates, "DRIVER")
+	_assert_true(not fairway_driver.is_empty(), "driver remains physically available from a clean fairway lie")
+	if not fairway_driver.is_empty():
+		var fairway_driver_eval: Dictionary = evaluator.evaluate(golfer, fairway_state, fairway_driver)
+		_assert_true(float(fairway_driver_eval.get("strike_miss_probability", 0.0)) > 0.0, "driver from deck creates a nonzero strike-miss probability")
+		_assert_true(float(fairway_driver_eval.get("expected_strike_cost", 0.0)) > 0.0, "driver from deck difficulty is priced into expected strokes")
+
 	golfer.free()
 	if failures == 0:
 		print("POC-13B/C CLUB CANDIDATE EVALUATOR TESTS PASSED")
