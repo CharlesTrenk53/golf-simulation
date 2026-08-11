@@ -38,6 +38,7 @@ func generate(golfer: Node, state) -> Array:
 		var intended_distance: float = min(carry, remaining)
 		var target: Vector3 = state.ball_position + direction * intended_distance
 		var dispersion: float = bag.effective_dispersion(club, golfer, surface, lie_quality)
+		var execution_penalty: float = bag.surface_execution_penalty(club, surface, lie_quality)
 		var expected_surface: String = _surface_name_at(state, target)
 		var corridor_hazards: Array = _corridor_hazards(state, target, dispersion)
 		var out_of_bounds: bool = _is_out_of_bounds(state, target)
@@ -51,6 +52,7 @@ func generate(golfer: Node, state) -> Array:
 			"effective_carry": carry,
 			"intended_distance": intended_distance,
 			"dispersion": dispersion,
+			"surface_execution_penalty": execution_penalty,
 			"remaining_after_target": target.distance_to(state.hole_position),
 			"expected_surface": expected_surface,
 			"corridor_hazards": corridor_hazards,
