@@ -4,10 +4,10 @@ extends RefCounted
 # ----------------------------------------------------------
 # The golfer's bag and the live course geometry define what can be attempted.
 # Each feasible club now produces multiple spatial targets at the same stock-shot
-# distance. The generator does not decide that LEFT is "safe" or RIGHT is
-# "aggressive"; authoritative geometry supplies the actual landing surface,
-# hazards, OB, and leave for each point, and the evaluator decides what those
-# consequences mean. This keeps target strategy emergent instead of label-driven.
+# distance. The generator does not decide that a lane is "safe" or "aggressive";
+# authoritative geometry supplies the actual landing surface, hazards, OB, and
+# leave for each point, and the evaluator decides what those consequences mean.
+# This keeps target strategy emergent instead of label-driven.
 
 const GolfBag = preload("res://simulation/golf_bag.gd")
 
@@ -38,13 +38,13 @@ func generate(golfer: Node, state) -> Array:
 		var carry: float = bag.effective_carry(club, golfer, surface, lie_quality)
 		if carry <= 0.0:
 			continue
-		var intended_distance: float = min(carry, remaining)
+		var intended_distance: float = minf(carry, remaining)
 		var center_target: Vector3 = state.ball_position + direction * intended_distance
 		var dispersion: float = bag.effective_dispersion(club, golfer, surface, lie_quality)
 		var execution_penalty: float = bag.surface_execution_penalty(club, surface, lie_quality)
-		var target_offset: float = _target_offset_for(dispersion, intended_distance, remaining)
+		var lane_widths: Dictionary = _target_widths_for(dispersion, intended_distance, remaining)
 
-		for variant in _target_variants(center_target, lateral, target_offset):
+		for variant in _target_variants(center_target, lateral, lane_widths):
 			var target: Vector3 = variant["target"]
 			var expected_surface: String = _surface_name_at(state, target)
 			var corridor_hazards: Array = _corridor_hazards(state, target, dispersion)
@@ -77,30 +77,39 @@ func generate(golfer: Node, state) -> Array:
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var carry_a: float = float(a.get("effective_carry", 0.0))
 		var carry_b: float = float(b.get("effective_carry", 0.0))
-		if abs(carry_a - carry_b) > 0.001:
+		if absf(carry_a - carry_b) > 0.001:
 			return carry_a > carry_b
-		return abs(float(a.get("lateral_offset", 0.0))) < abs(float(b.get("lateral_offset", 0.0)))
+		return absf(float(a.get("lateral_offset", 0.0))) < absf(float(b.get("lateral_offset", 0.0)))
 	)
 	return candidates
 
 
-func _target_offset_for(dispersion: float, intended_distance: float, remaining: float) -> float:
-	# Target choices should be meaningfully distinct without becoming trick-shot
-	# directions. Wider-dispersion clubs naturally inspect a wider strategic band.
-	# Near the hole the band contracts so approach targets remain plausible.
-	var offset: float = clampf(max(8.0, dispersion * 1.6), 8.0, 18.0)
+func _target_widths_for(dispersion: float, intended_distance: float, remaining: float) -> Dictionary:
+	# Two bands let the golfer inspect both ordinary aiming adjustments and genuine
+	# strategic lanes near course features. Long shots can consider an outer lane
+	# around 26-36 yards from center; approaches contract so targets remain plausible.
+	var inner: float = clampf(maxf(9.0, dispersion * 1.35), 9.0, 15.0)
+	var outer: float = clampf(maxf(26.0, dispersion * 3.2), 26.0, 36.0)
 	if intended_distance >= remaining - 0.5:
-		offset = minf(offset, 10.0)
+		inner = minf(inner, 8.0)
+		outer = minf(outer, 16.0)
 	elif intended_distance < 100.0:
-		offset = minf(offset, 8.0)
-	return offset
+		inner = minf(inner, 7.0)
+		outer = minf(outer, 12.0)
+	elif intended_distance < 150.0:
+		outer = minf(outer, 20.0)
+	return {"inner": inner, "outer": outer}
 
 
-func _target_variants(center: Vector3, lateral: Vector3, offset: float) -> Array:
+func _target_variants(center: Vector3, lateral: Vector3, widths: Dictionary) -> Array:
+	var inner: float = float(widths.get("inner", 10.0))
+	var outer: float = float(widths.get("outer", 28.0))
 	return [
 		{"id": "CENTER", "offset": 0.0, "target": center},
-		{"id": "LEFT", "offset": -offset, "target": center - lateral * offset},
-		{"id": "RIGHT", "offset": offset, "target": center + lateral * offset}
+		{"id": "LEFT", "offset": -inner, "target": center - lateral * inner},
+		{"id": "RIGHT", "offset": inner, "target": center + lateral * inner},
+		{"id": "FAR_LEFT", "offset": -outer, "target": center - lateral * outer},
+		{"id": "FAR_RIGHT", "offset": outer, "target": center + lateral * outer}
 	]
 
 
@@ -114,7 +123,7 @@ func _surface_name_at(state, position: Vector3) -> String:
 func _corridor_hazards(state, target: Vector3, dispersion: float) -> Array:
 	if state.course_context == null or not state.course_context.has_method("hazards_in_corridor"):
 		return []
-	return state.course_context.hazards_in_corridor(state.ball_position, target, max(1.0, dispersion))
+	return state.course_context.hazards_in_corridor(state.ball_position, target, maxf(1.0, dispersion))
 
 
 func _is_out_of_bounds(state, target: Vector3) -> bool:
