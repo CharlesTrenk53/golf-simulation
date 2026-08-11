@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "course_id": "poc13_strategy_lab",
+  "hole_number": 3,
+  "hole_name": "Green Light",
+  "par": 4,
+  "nominal_yardage": 425,
+  "coordinate_units": "yards",
+  "tees": [
+    {"id": "default", "name": "Back Tee", "position": [0, 0, 425], "yardage": 425}
+  ],
+  "pin_position": [0, 0, 8],
+  "green_polygon": [[-22,-8],[-22,24],[22,24],[22,-8]],
+  "surface_regions": [
+    {
+      "id": "very_wide_fairway",
+      "name": "Very Wide Fairway",
+      "surface": "FAIRWAY",
+      "polygon": [[-65,395],[-65,30],[65,30],[65,395]]
+    },
+    {
+      "id": "teeing_ground",
+      "name": "Tee",
+      "surface": "TEE",
+      "polygon": [[-10,435],[-10,415],[10,415],[10,435]]
+    }
+  ],
+  "hazards": [],
+  "out_of_bounds_regions": [],
+  "elevation_points": [
+    {"position": [0,0,425], "elevation": 0.0},
+    {"position": [0,0,210], "elevation": 0.0},
+    {"position": [0,0,8], "elevation": 0.0}
+  ]
+}
