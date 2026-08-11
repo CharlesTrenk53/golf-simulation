@@ -27,7 +27,7 @@ func _init() -> void:
 	var evaluated: Array = decision.get("evaluated", [])
 
 	_assert_true(not chosen.is_empty(), "data-defined hole produces an autonomous course-management choice")
-	_assert_true(evaluated.size() >= 18, "strategy considers a real menu of club-target combinations")
+	_assert_true(evaluated.size() >= 30, "strategy considers a wide menu of club-target combinations")
 	_assert_true(not str(chosen.get("club_id", "")).is_empty(), "chosen strategy names a real club")
 	_assert_true(not str(chosen.get("target_variant", "")).is_empty(), "chosen strategy names a spatial target variant")
 	_assert_true(str(chosen.get("name", "")).begins_with("EMERGENT_"), "choice no longer depends on LAYUP/BAILOUT/ATTACK labels")
@@ -38,16 +38,21 @@ func _init() -> void:
 
 	var best_perceived: float = INF
 	var variants_seen: Dictionary = {}
+	var hazard_bearing_options: int = 0
 	for option in evaluated:
 		best_perceived = min(best_perceived, float(option.get("perceived_expected_strokes_to_hole", INF)))
 		variants_seen[str(option.get("target_variant", ""))] = true
+		if int(option.get("corridor_hazard_count", 0)) > 0:
+			hazard_bearing_options += 1
 		_assert_true(option.has("expected_strokes_to_hole"), "every considered target has objective expected strokes")
 		_assert_true(option.has("perceived_expected_strokes_to_hole"), "every considered target has perceived expected strokes")
-	_assert_true(variants_seen.has("LEFT") and variants_seen.has("CENTER") and variants_seen.has("RIGHT"), "selector sees left, center, and right targets")
+	for variant_id in ["FAR_LEFT", "LEFT", "CENTER", "RIGHT", "FAR_RIGHT"]:
+		_assert_true(variants_seen.has(variant_id), "selector sees %s aiming lane" % variant_id)
+	_assert_true(hazard_bearing_options >= 1, "strategy menu contains at least one geometry-defined hazard-bearing lane")
 	_assert_near(float(chosen.get("perceived_expected_strokes_to_hole", INF)), best_perceived, 0.0001, "golfer chooses the club-target option believed to minimize strokes")
 
 	# Course Management changes perception, not objective reality. Compare every
-	# exact club-target combination rather than collapsing three targets into one club.
+	# exact club-target combination rather than collapsing targets into one club.
 	var high_management_decision: Dictionary = decision
 	golfer.set_meta("course_management", 25.0)
 	var low_management_decision: Dictionary = playable.choose_course_strategy(golfer, state)
@@ -59,7 +64,7 @@ func _init() -> void:
 		if low_option.is_empty():
 			continue
 		comparable_count += 1
-		var label := "%s/%s" % [str(high_option.get("club_id", "")), str(high_option.get("target_variant", ""))]
+		var label: String = "%s/%s" % [str(high_option.get("club_id", "")), str(high_option.get("target_variant", ""))]
 		_assert_near(float(high_option.get("expected_strokes_to_hole", 0.0)), float(low_option.get("expected_strokes_to_hole", 0.0)), 0.0001, "%s objective scoring stays golfer-independent" % label)
 		if float(high_option.get("expected_penalty_strokes", 0.0)) + float(high_option.get("expected_recovery_strokes", 0.0)) > 0.001:
 			_assert_true(float(low_option.get("perceived_expected_strokes_to_hole", INF)) <= float(high_option.get("perceived_expected_strokes_to_hole", INF)), "lower Course Management is at least as optimistic about risky %s" % label)
