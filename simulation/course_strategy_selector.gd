@@ -4,8 +4,9 @@ extends RefCounted
 # ---------------------------------------------
 # Feasibility comes from ClubCandidateGenerator. Objective scoring comes from
 # ClubCandidateEvaluator. CourseManagementModel converts objective consequences
-# into the golfer's perceived consequences. The chosen shot is the candidate the
-# golfer believes minimizes expected strokes to hole out.
+# into the golfer's perceived consequences. Personality then affects willingness
+# to accept strategic risk without changing objective reality or the golfer's
+# underlying perception of expected strokes.
 
 const ClubCandidateGenerator = preload("res://simulation/club_candidate_generator.gd")
 const ClubCandidateEvaluator = preload("res://simulation/club_candidate_evaluator.gd")
@@ -27,7 +28,7 @@ func choose(golfer: Node, state) -> Dictionary:
 		return {"chosen": {}, "evaluated": []}
 
 	var objective_ranked: Array = evaluator.evaluate_all(golfer, state, candidates)
-	var perceived_ranked: Array = []
+	var decision_ranked: Array = []
 	for objective in objective_ranked:
 		var candidate: Dictionary = objective.duplicate(true)
 		var perception: Dictionary = course_management.perception_for(
@@ -38,16 +39,52 @@ func choose(golfer: Node, state) -> Dictionary:
 		)
 		for key in perception.keys():
 			candidate[key] = perception[key]
+		var personality: Dictionary = _personality_strategy_adjustment(golfer, candidate)
+		for key in personality.keys():
+			candidate[key] = personality[key]
 		candidate = _execution_option(candidate)
-		perceived_ranked.append(candidate)
+		decision_ranked.append(candidate)
 
-	perceived_ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return float(a.get("perceived_expected_strokes_to_hole", INF)) < float(b.get("perceived_expected_strokes_to_hole", INF))
+	decision_ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("decision_expected_strokes", INF)) < float(b.get("decision_expected_strokes", INF))
 	)
 
 	return {
-		"chosen": perceived_ranked[0].duplicate(true),
-		"evaluated": perceived_ranked
+		"chosen": decision_ranked[0].duplicate(true),
+		"evaluated": decision_ranked
+	}
+
+
+func _personality_strategy_adjustment(golfer: Node, candidate: Dictionary) -> Dictionary:
+	# Course Management answers "what do I think this shot will cost?" Personality
+	# answers "how willing am I to accept variance around that expectation?" This
+	# keeps objective golf scoring and perceived scoring separate from temperament.
+	var perceived: float = float(candidate.get("perceived_expected_strokes_to_hole", INF))
+	var risk_tolerance: float = 50.0
+	if golfer != null:
+		var raw_risk = golfer.get("risk_tolerance")
+		if raw_risk != null:
+			risk_tolerance = clamp(float(raw_risk), 0.0, 100.0)
+
+	var hazard_probability: float = clamp(float(candidate.get("hazard_probability", 0.0)), 0.0, 1.0)
+	var ob_probability: float = clamp(float(candidate.get("out_of_bounds_probability", 0.0)), 0.0, 1.0)
+	var strike_miss_probability: float = clamp(float(candidate.get("strike_miss_probability", 0.0)), 0.0, 1.0)
+	var downside_exposure: float = clamp(hazard_probability + ob_probability + strike_miss_probability * 0.35, 0.0, 1.0)
+
+	# At 50 risk tolerance, personality is neutral. A cautious golfer adds up to
+	# roughly three tenths of a stroke to highly volatile choices; a very bold
+	# golfer discounts that same volatility by a similar amount. The adjustment is
+	# intentionally modest: it can break close strategic ties, but should not make
+	# obviously poor shots attractive merely because a golfer is reckless.
+	var risk_preference: float = (50.0 - risk_tolerance) / 50.0
+	var personality_risk_adjustment: float = downside_exposure * risk_preference * 0.30
+	var decision_expected: float = perceived + personality_risk_adjustment
+
+	return {
+		"risk_tolerance": risk_tolerance,
+		"downside_exposure": downside_exposure,
+		"personality_risk_adjustment": personality_risk_adjustment,
+		"decision_expected_strokes": decision_expected
 	}
 
 
