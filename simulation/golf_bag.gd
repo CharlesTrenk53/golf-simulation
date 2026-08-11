@@ -1,19 +1,45 @@
 extends RefCounted
 
 # POC-08: club catalog + default 14-club bag.
-# Distances are simulation units matching the existing POC scale, not literal yards.
-# POC-11 adds a configurable distance scale so data-defined courses can keep
-# literal yard coordinates without rewriting the legacy club calibration.
+# Legacy distances remain in the original compact POC simulation units.
+# POC-11 adds an opt-in literal-yardage profile for data-defined courses so
+# full-length holes can use realistic golf distances without disturbing legacy tests.
 
 var clubs: Array[Dictionary] = []
 var club_catalog: Array[Dictionary] = []
-var distance_scale: float = 1.0
+var literal_yardages_enabled: bool = false
 
 const DEFAULT_BAG_IDS := [
 	"DRIVER", "3_WOOD", "5_WOOD", "4_HYBRID",
 	"5_IRON", "6_IRON", "7_IRON", "8_IRON", "9_IRON",
 	"PITCHING_WEDGE", "GAP_WEDGE", "SAND_WEDGE", "LOB_WEDGE", "PUTTER"
 ]
+
+# Provisional POC-11 average-golfer yardages. These are intentionally treated as
+# one practical distance number for now; carry-versus-total separation belongs in
+# later shot-physics work. Interpolated clubs fill gaps in the reference chart.
+const AVERAGE_YARDAGE_BASELINES := {
+	"DRIVER": 220.0,
+	"3_WOOD": 210.0,
+	"5_WOOD": 195.0,
+	"7_WOOD": 185.0,
+	"2_HYBRID": 190.0,
+	"3_HYBRID": 185.0,
+	"4_HYBRID": 180.0,
+	"2_IRON": 180.0,
+	"3_IRON": 170.0,
+	"4_IRON": 160.0,
+	"5_IRON": 155.0,
+	"6_IRON": 145.0,
+	"7_IRON": 140.0,
+	"8_IRON": 130.0,
+	"9_IRON": 115.0,
+	"PITCHING_WEDGE": 100.0,
+	"GAP_WEDGE": 90.0,
+	"SAND_WEDGE": 80.0,
+	"LOB_WEDGE": 60.0,
+	"PUTTER": 8.0
+}
 
 
 func _init() -> void:
@@ -44,6 +70,22 @@ func _init() -> void:
 		var club := _find_catalog_club(club_id)
 		if not club.is_empty():
 			clubs.append(club)
+
+
+func use_literal_yardages(enabled: bool = true) -> void:
+	literal_yardages_enabled = enabled
+
+
+func is_using_literal_yardages() -> bool:
+	return literal_yardages_enabled
+
+
+func baseline_distance(club: Dictionary) -> float:
+	if literal_yardages_enabled:
+		var club_id := str(club.get("id", ""))
+		if AVERAGE_YARDAGE_BASELINES.has(club_id):
+			return float(AVERAGE_YARDAGE_BASELINES[club_id])
+	return float(club.get("carry_distance", 0.0))
 
 
 func _club(id: String, display_name: String, family: String, carry_distance: float, dispersion: float, shot_type: int, allowed_surfaces: Array[String], physical_sensitivity: float, forgiveness: float) -> Dictionary:
@@ -88,44 +130,44 @@ func clubs_for_surface(surface: String) -> Array[Dictionary]:
 
 
 func effective_carry(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
-	var base_carry: float = club["carry_distance"]
-	var shot_type = int(club["shot_type"])
+	var base_carry: float = baseline_distance(club)
+	var shot_type: int = int(club["shot_type"])
 	var ability: float = golfer.get_shot_ability(shot_type)
-	var strike_factor = lerp(0.94, 1.04, ability / 100.0)
-	var raw_physical_factor = golfer.physical_distance_factor(shot_type) if golfer.has_method("physical_distance_factor") else 1.0
+	var strike_factor: float = lerp(0.94, 1.04, ability / 100.0)
+	var raw_physical_factor: float = golfer.physical_distance_factor(shot_type) if golfer.has_method("physical_distance_factor") else 1.0
 	var physical_sensitivity: float = float(club.get("physical_sensitivity", 1.0))
 	var physical_factor: float = 1.0 + ((raw_physical_factor - 1.0) * physical_sensitivity)
-	var lie_factor = clamp(lie_quality, 0.45, 1.0)
+	var lie_factor: float = clamp(lie_quality, 0.45, 1.0)
 
 	if surface == "ROUGH":
 		lie_factor *= 0.90
 	elif surface == "BUNKER":
 		lie_factor *= 0.78
 
-	return base_carry * strike_factor * physical_factor * lie_factor * distance_scale
+	return base_carry * strike_factor * physical_factor * lie_factor
 
 
 func effective_dispersion(club: Dictionary, golfer: Node, surface: String, lie_quality: float = 1.0) -> float:
-	var base_dispersion: float = club["dispersion"]
+	var base_dispersion: float = float(club["dispersion"])
 	var ability: float = golfer.get_shot_ability(int(club["shot_type"]))
-	var ability_factor = lerp(1.45, 0.65, ability / 100.0)
-	var lie_penalty = 1.0 + (1.0 - lie_quality)
+	var ability_factor: float = lerp(1.45, 0.65, ability / 100.0)
+	var lie_penalty: float = 1.0 + (1.0 - lie_quality)
 	if surface == "ROUGH":
 		lie_penalty *= 1.15
 	elif surface == "BUNKER":
 		lie_penalty *= 1.30
-	return base_dispersion * ability_factor * lie_penalty * distance_scale
+	return base_dispersion * ability_factor * lie_penalty
 
 
 func best_distance_match(golfer: Node, surface: String, lie_quality: float, desired_distance: float) -> Dictionary:
-	var available = clubs_for_surface(surface)
+	var available: Array[Dictionary] = clubs_for_surface(surface)
 	if available.is_empty():
 		return {}
 	var best: Dictionary = available[0]
-	var best_gap = INF
+	var best_gap: float = INF
 	for club in available:
-		var carry = effective_carry(club, golfer, surface, lie_quality)
-		var gap = abs(carry - desired_distance)
+		var carry: float = effective_carry(club, golfer, surface, lie_quality)
+		var gap: float = abs(carry - desired_distance)
 		if gap < best_gap:
 			best_gap = gap
 			best = club
