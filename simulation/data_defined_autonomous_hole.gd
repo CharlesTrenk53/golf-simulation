@@ -5,6 +5,8 @@ extends RefCounted
 # Thin integration layer that lets the existing autonomous golfer play directly
 # from a HoleDefinition. Geometry remains authoritative in the hole model; this
 # wrapper builds only the compatibility inputs still required by AutonomousHole.
+# Data-defined course coordinates are literal yards, so both option generation
+# and shot execution use the same literal-yard club profile.
 
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
 const HoleCourseContext = preload("res://simulation/hole_course_context.gd")
@@ -19,6 +21,11 @@ func _init(definition = null, selected_tee_id: String = "default") -> void:
 	hole_definition = definition
 	tee_id = selected_tee_id
 	course_context = HoleCourseContext.new(definition) if definition != null else null
+	# AutonomousHole owns two GolfBag instances: one in the option generator and
+	# one in the executor. They must agree or the selected club and actual flight
+	# distance can diverge.
+	autonomous.option_generator.bag.use_literal_yardages(true)
+	autonomous.bag.use_literal_yardages(true)
 
 
 func create_state(seed_value: int = 1):
@@ -69,7 +76,7 @@ func _legacy_water_hazards() -> Array:
 		var polygon: PackedVector2Array = hazard.get("polygon", PackedVector2Array())
 		if polygon.is_empty():
 			continue
-		var center_2d := Vector2.ZERO
+		var center_2d: Vector2 = Vector2.ZERO
 		for point in polygon:
 			center_2d += point
 		center_2d /= float(polygon.size())
