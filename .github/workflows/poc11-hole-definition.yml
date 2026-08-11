@@ -31,3 +31,6 @@ jobs:
 
       - name: Run POC-11C course-to-decision integration tests
         run: timeout 90s ./godot --headless --path . --script res://tests/data_defined_autonomous_hole_test.gd
+
+      - name: Run POC-11D/E watchable Decision Point demo tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/decision_point_demo_test.gd
