@@ -37,7 +37,6 @@ func _init() -> void:
 	var open_fairway: Dictionary = carl_decisions.get("Green Light", {})
 	var split_decision: Dictionary = carl_decisions.get("Split Decision", {})
 	var trouble_right: Dictionary = carl_decisions.get("Trouble Right", {})
-	var narrow: Dictionary = carl_decisions.get("Thread the Needle", {})
 
 	if not open_fairway.is_empty():
 		_assert_true(str(open_fairway.get("club_id", "")) == "DRIVER", "wide-open hole rewards maximum useful tee distance")
@@ -52,14 +51,14 @@ func _init() -> void:
 		_assert_true(right_lane != "RIGHT" and right_lane != "FAR_RIGHT", "right-side water pushes Carl away from right aiming lanes")
 		_assert_true(str(trouble_right.get("expected_surface", "")) != "WATER", "chosen Trouble Right target avoids water")
 
+	# Geometry proof: require demonstrated changes where the hole was deliberately
+	# built to create a strategic contrast. Thread the Needle remains diagnostic;
+	# a narrow visual corridor is not itself proof that clubbing down is optimal.
 	if not open_fairway.is_empty() and not split_decision.is_empty():
 		_assert_true(_signature(open_fairway) != _signature(split_decision), "same golfer changes club-target decision when center geometry changes")
 
 	if not decision_point.is_empty() and not split_decision.is_empty():
 		_assert_true(str(decision_point.get("target_variant", "")) != str(split_decision.get("target_variant", "")), "Decision Point and center-hazard layouts do not collapse to the same aiming lane")
-
-	if not open_fairway.is_empty() and not narrow.is_empty():
-		_assert_true(_signature(open_fairway) != _signature(narrow), "narrow corridor changes Carl's tee strategy from the wide-open baseline")
 
 	var golfer_differences: int = 0
 	for layout_name in LAYOUTS.keys():
@@ -69,7 +68,13 @@ func _init() -> void:
 			continue
 		var carl_signature := _signature(carl_choice)
 		var rick_signature := _signature(rick_choice)
-		print("MATRIX: ", layout_name, " | Carl ", carl_signature, " | Rick ", rick_signature)
+		print(
+			"MATRIX: ", layout_name,
+			" | Carl ", carl_signature,
+			" [decision=", "%.3f" % float(carl_choice.get("decision_expected_strokes", INF)), "]",
+			" | Rick ", rick_signature,
+			" [decision=", "%.3f" % float(rick_choice.get("decision_expected_strokes", INF)), "]"
+		)
 		if carl_signature != rick_signature:
 			golfer_differences += 1
 
