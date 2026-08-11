@@ -67,7 +67,18 @@ func _init() -> void:
 	var normal_approach: Dictionary = _find_option(approach_options, "GREEN_APPROACH")
 	_assert_true(not normal_approach.is_empty(), "normal green approach is inspectable")
 	if not normal_approach.is_empty():
-		_assert_true(str(normal_approach.get("club_id", "")) == "9_IRON", "115-yard normal approach selects the provisional 9-iron baseline")
+		var approach_club: Dictionary = normal_approach.get("club", {})
+		var club_id: String = str(normal_approach.get("club_id", ""))
+		_assert_true(not approach_club.is_empty(), "normal green approach selects a real club")
+		_assert_true(club_id != "SAND_WEDGE" and club_id != "LOB_WEDGE", "115-yard normal approach does not collapse into short-wedge layup behavior")
+		if not approach_club.is_empty():
+			var approach_carry: float = playable.autonomous.option_generator.bag.effective_carry(
+				approach_club,
+				golfer,
+				approach_state.surface_name(),
+				approach_state.current_lie_quality
+			)
+			_assert_true(abs(approach_carry - approach_state.remaining_distance()) <= 20.0, "normal approach club reflects golfer-specific distance rather than a fixed club label")
 		_assert_true(not bool(normal_approach.get("is_aggressive", true)), "normal green approach is not inherently aggressive")
 
 	golfer.free()
