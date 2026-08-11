@@ -8,6 +8,7 @@ const GolferScript = preload("res://scenes/golfer.gd")
 @export var seed_value: int = 42
 @export var shot_duration: float = 1.1
 @export var decision_pause: float = 0.8
+@export var use_reckless_rick: bool = false
 
 var hole_definition = null
 var simulation = null
@@ -17,6 +18,7 @@ var ball_visual: MeshInstance3D = null
 var golfer_visual: MeshInstance3D = null
 var status_label: Label = null
 var detail_label: Label = null
+var strategy_label: Label = null
 var shot_log_label: Label = null
 var shot_lines: Array[String] = []
 
@@ -32,7 +34,7 @@ func _ready() -> void:
 	simulation = DataDefinedAutonomousHole.new(hole_definition, "default")
 	state = simulation.create_state(seed_value)
 	_sync_player_visuals(state.ball_position)
-	_set_status("DECISION POINT — HOLE 1", "%s | Par %d | %.0f yards" % [golfer_logic.golfer_name, hole_definition.par, hole_definition.tee_yardage("default")])
+	_set_status("DECISION POINT — POC-13", "%s | Par %d | %.0f yards" % [golfer_logic.golfer_name, hole_definition.par, hole_definition.tee_yardage("default")])
 	if autoplay:
 		await get_tree().create_timer(0.8).timeout
 		await play_visible_hole()
@@ -64,7 +66,7 @@ func _build_environment() -> void:
 	add_child(ui)
 	var panel := PanelContainer.new()
 	panel.position = Vector2(18.0, 18.0)
-	panel.size = Vector2(620.0, 170.0)
+	panel.size = Vector2(700.0, 285.0)
 	ui.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
@@ -74,6 +76,10 @@ func _build_environment() -> void:
 	detail_label = Label.new()
 	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(detail_label)
+	strategy_label = Label.new()
+	strategy_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	strategy_label.add_theme_font_size_override("font_size", 14)
+	box.add_child(strategy_label)
 	shot_log_label = Label.new()
 	shot_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(shot_log_label)
@@ -155,7 +161,7 @@ func _build_pin() -> void:
 
 func _build_golfer() -> void:
 	golfer_logic = GolferScript.new()
-	golfer_logic.profile = golfer_logic.GolferProfile.CAREFUL_CARL
+	golfer_logic.profile = golfer_logic.GolferProfile.RECKLESS_RICK if use_reckless_rick else golfer_logic.GolferProfile.CAREFUL_CARL
 	add_child(golfer_logic)
 	golfer_logic.apply_profile()
 
@@ -181,28 +187,52 @@ func _build_golfer() -> void:
 func play_visible_hole() -> void:
 	while state != null and state.can_continue():
 		var before_distance: float = state.remaining_distance()
+		var preview: Dictionary = simulation.choose_course_strategy(golfer_logic, state)
+		_show_strategy_preview(preview)
 		var result: Dictionary = simulation.play_step(golfer_logic, state)
 		if result.is_empty():
 			_set_status("PLAY STOPPED", "No valid shot option was available.")
 			return
 		var option: Dictionary = result.get("selected_option", {})
-		var club_name := str(result.get("club_name", "Club"))
+		var club_name := str(result.get("club_name", option.get("club_name", "Club")))
 		var option_name := str(option.get("name", "SHOT"))
+		var perceived: float = float(result.get("perceived_expected_strokes", option.get("perceived_expected_strokes_to_hole", INF)))
 		_set_status(
-			"Stroke %d — %s [%s]" % [int(result.get("shot_number", 0)), option_name, club_name],
-			"%s lie | %.1f yards remaining | Decision %s" % [str(result.get("surface_before", "")), before_distance, str(result.get("decision_quality", ""))]
+			"Stroke %d — %s" % [int(result.get("shot_number", 0)), club_name],
+			"%s lie | %.1f yards remaining | chosen from %d clubs | perceived %.2f strokes to hole" % [str(result.get("surface_before", "")), before_distance, int(result.get("strategy_candidates", []).size()), perceived]
 		)
 		await _animate_ball(result.get("start_position", state.ball_position), result.get("landing_position", state.ball_position))
 		ball_visual.position = result.get("relief_position", state.ball_position) + Vector3(0.0, 0.9, 0.0)
 		golfer_visual.position = state.ball_position + Vector3(-3.0, 2.8, 2.0)
 		shot_lines.append("%d. %s [%s] → %s" % [int(result.get("shot_number", 0)), option_name, club_name, str(result.get("surface_after", ""))])
-		shot_log_label.text = "\n".join(shot_lines.slice(max(0, shot_lines.size() - 4), shot_lines.size()))
+		shot_log_label.text = "SHOT HISTORY\n" + "\n".join(shot_lines.slice(max(0, shot_lines.size() - 4), shot_lines.size()))
 		await get_tree().create_timer(decision_pause).timeout
 
 	if state != null and state.finished:
-		_set_status("HOLED OUT — %s" % golfer_logic.golfer_name, "%d strokes on the par-%d Decision Point." % [state.strokes, state.par])
+		_set_status("HOLED OUT — %s" % golfer_logic.golfer_name, "%d strokes on the par-%d Decision Point. Club choice came from the bag-wide expected-strokes strategy system." % [state.strokes, state.par])
 	else:
 		_set_status("ROUND STOPPED", "Stroke limit reached before holing out.")
+
+
+func _show_strategy_preview(preview: Dictionary) -> void:
+	if strategy_label == null:
+		return
+	var evaluated: Array = preview.get("evaluated", [])
+	if evaluated.is_empty():
+		strategy_label.text = "STRATEGY MENU\nLegacy/short-game path — no bag-wide club menu required."
+		return
+	var chosen: Dictionary = preview.get("chosen", {})
+	var lines: Array[String] = []
+	lines.append("STRATEGY MENU — bag-wide stock shots, ranked by golfer-perceived expected strokes")
+	var limit: int = min(4, evaluated.size())
+	for index in range(limit):
+		var candidate: Dictionary = evaluated[index]
+		var marker := "→" if str(candidate.get("club_id", "")) == str(chosen.get("club_id", "")) else " "
+		var perceived := float(candidate.get("perceived_expected_strokes_to_hole", INF))
+		var objective := float(candidate.get("expected_strokes_to_hole", INF))
+		var hazard_pct := 100.0 * float(candidate.get("hazard_probability", 0.0))
+		lines.append("%s %s | target %s | perceived %.2f | objective %.2f | hazard %.0f%%" % [marker, str(candidate.get("club_name", "Club")), str(candidate.get("expected_surface", "UNKNOWN")), perceived, objective, hazard_pct])
+	strategy_label.text = "\n".join(lines)
 
 
 func _animate_ball(start: Vector3, finish: Vector3) -> void:
