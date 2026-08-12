@@ -1,0 +1,56 @@
+name: POC-14 Shot Intent Checks
+
+on:
+  push:
+    branches:
+      - poc-14-shot-intent-shotmaking
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  shot-intent:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+
+      - name: Run POC-14A shot intent catalog tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_catalog_test.gd
+
+      - name: Run POC-14B predicted flight tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_flight_model_test.gd
+
+      - name: Run POC-14C shotmaking proficiency tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shotmaking_proficiency_model_test.gd
+
+      - name: Run POC-14D shot execution tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_execution_model_test.gd
+
+      - name: Run POC-14E autonomous shot intent strategy tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_strategy_model_test.gd
+
+      - name: Run POC-14F course-space intent execution bridge tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_execution_bridge_test.gd
+
+      - name: Run POC-14F live autonomous intent execution tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_live_execution_test.gd
+
+      - name: Run POC-14G shotmaking range visual diagnostic contract
+        run: timeout 90s ./godot --headless --path . --script res://tests/shotmaking_range_demo_test.gd
+
+      - name: Re-run POC-13 course strategy selector regression tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/course_strategy_selector_test.gd
+
+      - name: Re-run POC-13 live course strategy execution regression tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/course_strategy_execution_test.gd
