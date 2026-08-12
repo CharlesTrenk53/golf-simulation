@@ -11,16 +11,21 @@ extends RefCounted
 # POC-13D added the course-strategy selection seam.
 # POC-13E routes live data-defined play through that selected club/target while
 # preserving the legacy AutonomousHole path for greens and as a safety fallback.
+# POC-14F now executes the selected shot intent rather than silently reverting to
+# a generic stock-flight engine after the HOW decision has been made.
 
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
 const HoleCourseContext = preload("res://simulation/hole_course_context.gd")
 const CourseStrategySelector = preload("res://simulation/course_strategy_selector.gd")
+const ShotIntentExecutionBridge = preload("res://simulation/shot_intent_execution_bridge.gd")
 
 var hole_definition = null
 var course_context = null
 var autonomous = AutonomousHole.new()
 var strategy_selector = CourseStrategySelector.new()
+var intent_execution = ShotIntentExecutionBridge.new()
 var tee_id: String = "default"
+var _seed_base: int = 1
 
 
 func _init(definition = null, selected_tee_id: String = "default") -> void:
@@ -38,6 +43,7 @@ func _init(definition = null, selected_tee_id: String = "default") -> void:
 func create_state(seed_value: int = 1):
 	if hole_definition == null:
 		return null
+	_seed_base = seed_value
 	return autonomous.create_state(
 		hole_definition.tee_position(tee_id),
 		hole_definition.pin_position,
@@ -76,10 +82,17 @@ func _execute_course_strategy_choice(golfer: Node, state, chosen: Dictionary, ev
 	var lie_quality_before: float = state.current_lie_quality
 	var hazards: Array = _legacy_water_hazards()
 
-	# The selector has already produced the execution-compatible option contract.
-	# Execution remains the existing stochastic club-flight engine so POC-13 changes
-	# decision-making, not the physical meaning of the selected club.
-	var result: Dictionary = autonomous._execute_option(golfer, state, chosen, hazards, {})
+	# POC-14F: if the selector supplied a concrete shot intent plus its predicted
+	# flight and golfer proficiency, that exact plan must drive the physical shot.
+	# Fallback preserves the POC-13 execution contract for any legacy caller.
+	var result: Dictionary
+	var predicted: Dictionary = chosen.get("chosen_predicted_flight", {})
+	var proficiency: Dictionary = chosen.get("chosen_proficiency", {})
+	if not predicted.is_empty() and not proficiency.is_empty():
+		result = _execute_selected_intent(state, chosen, predicted, proficiency)
+	else:
+		result = autonomous._execute_option(golfer, state, chosen, hazards, {})
+
 	result["selected_option"] = chosen.duplicate(true)
 	result["surface_before"] = surface_before
 	result["lie_quality_before"] = lie_quality_before
@@ -118,6 +131,44 @@ func _execute_course_strategy_choice(golfer: Node, state, chosen: Dictionary, ev
 	autonomous.shot_history.append(result)
 	golfer.record_shot_result(result["outcome"], false)
 	return result
+
+
+func _execute_selected_intent(state, chosen: Dictionary, predicted: Dictionary, proficiency: Dictionary) -> Dictionary:
+	var start: Vector3 = state.ball_position
+	var target: Vector3 = chosen.get("target_position", chosen.get("target", state.hole_position))
+	var shot_seed: int = _seed_base * 1009 + (state.strokes + 1) * 7919
+	var realized: Dictionary = intent_execution.execute(start, target, predicted, proficiency, shot_seed)
+	var landing: Vector3 = realized.get("landing_position", target)
+	var intended_distance: float = start.distance_to(target)
+	var planned_carry: float = float(predicted.get("carry_yards", intended_distance))
+	var predicted_dispersion: float = float(predicted.get("dispersion_yards", chosen.get("dispersion", 1.0)))
+	var proficiency_dispersion: float = float(proficiency.get("expected_dispersion_multiplier", 1.0))
+
+	return {
+		"shot_number": state.strokes + 1,
+		"option": chosen.get("name", "EMERGENT_INTENT"),
+		"shot_type": int(chosen.get("shot_type", 1)),
+		"club_id": chosen.get("club_id", ""),
+		"club_name": chosen.get("club_name", ""),
+		"club_effective_carry": planned_carry,
+		"club_dispersion": max(0.25, predicted_dispersion * proficiency_dispersion),
+		"start_position": start,
+		"target_position": target,
+		"landing_position": landing,
+		"intended_distance": intended_distance,
+		"outcome": "SUCCESS",
+		"penalty_strokes": 0,
+		"execution_roll": -1.0,
+		"remaining_after_shot": landing.distance_to(state.hole_position),
+		"lateral_error": float(realized.get("target_line_lateral_yards", 0.0)),
+		"distance_error": float(realized.get("actual_total_yards", intended_distance)) - intended_distance,
+		"shot_intent": chosen.get("chosen_intent", {}).duplicate(true),
+		"predicted_flight": predicted.duplicate(true),
+		"shotmaking_proficiency": proficiency.duplicate(true),
+		"shot_execution": realized.duplicate(true),
+		"intent_signature": str(realized.get("intent_signature", "")),
+		"execution_seed": shot_seed
+	}
 
 
 func play_hole(golfer: Node, seed_value: int = 1) -> Dictionary:
