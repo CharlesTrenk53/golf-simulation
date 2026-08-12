@@ -1,12 +1,15 @@
 name: POC-15 Putting Checks
 
 on:
-  push:
-    branches:
-      - poc-15-putting-decision-execution
+  # Focused POC-15 tests run locally during draft development via run-test.ps1.
+  # GitHub independently validates the complete POC-15 slice when the PR is
+  # promoted to ready-for-review, with workflow_dispatch available on demand.
   pull_request:
     branches:
       - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
 
 jobs:
   putting-models:
@@ -15,10 +18,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Godot
+      - name: Install Godot 4.7.1
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: 4.4.1
+          version: 4.7.1
           use-dotnet: false
           include-templates: false
 
