@@ -26,3 +26,12 @@ jobs:
 
       - name: Run POC-16A full-hole scoring integration
         run: godot --headless --path . --script res://tests/full_hole_scoring_integration_test.gd
+
+      - name: Run POC-16B repeated scoring stress test
+        run: godot --headless --path . --script res://tests/full_hole_scoring_stress_test.gd
+
+      - name: Run POC-16C hole-type scoring stress test
+        run: godot --headless --path . --script res://tests/hole_type_scoring_stress_test.gd
+
+      - name: Run POC-16D penalty scoring integration
+        run: godot --headless --path . --script res://tests/penalty_scoring_integration_test.gd
