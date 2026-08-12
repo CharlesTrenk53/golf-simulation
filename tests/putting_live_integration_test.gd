@@ -3,6 +3,17 @@ extends SceneTree
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
 const QuietGolfer = preload("res://tests/quiet_golfer.gd")
 
+class FakeGreenContext:
+	extends RefCounted
+	func surface_at(_position: Vector3) -> int:
+		return 5
+	func surface_name(_surface: int) -> String:
+		return "GREEN"
+	func lie_quality(_surface: int) -> float:
+		return 1.0
+	func risk_modifier(_surface: int) -> float:
+		return 0.0
+
 var failures: int = 0
 
 
@@ -17,8 +28,9 @@ func _init() -> void:
 	golfer.risk_tolerance = 35.0
 	get_root().add_child(golfer)
 
+	var green = FakeGreenContext.new()
 	var sim = AutonomousHole.new()
-	var state = sim.create_state(Vector3.ZERO, Vector3(6.0, 0.0, 0.0), 4, 15015)
+	var state = sim.create_state(Vector3.ZERO, Vector3(6.0, 0.0, 0.0), 4, 15015, green)
 	var result: Dictionary = sim.play_step(golfer, state)
 
 	_assert_true(not result.is_empty(), "autonomous hole produces a live putt result")
@@ -36,7 +48,7 @@ func _init() -> void:
 	# A miss inside the old two-yard auto-finish radius must remain a live ball.
 	var found_close_miss: bool = false
 	for seed_value in range(1, 500):
-		var retry_state = sim.create_state(Vector3.ZERO, Vector3(6.0, 0.0, 0.0), 4, seed_value)
+		var retry_state = sim.create_state(Vector3.ZERO, Vector3(6.0, 0.0, 0.0), 4, seed_value, green)
 		var retry: Dictionary = sim.play_step(golfer, retry_state)
 		if retry.is_empty() or bool(retry.get("putting_holed", false)):
 			continue
