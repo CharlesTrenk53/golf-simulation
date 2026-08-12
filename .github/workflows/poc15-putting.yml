@@ -1,0 +1,26 @@
+name: POC-15 Putting Checks
+
+on:
+  push:
+    branches:
+      - poc-15-putting-decision-execution
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  putting-read-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run POC-15A putting read tests
+        run: godot --headless --path . --script res://tests/putting_read_model_test.gd
