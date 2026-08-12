@@ -117,24 +117,26 @@ func _build_risk_reward_hole():
 	author.set_pin(Vector3(0, 0, 0))
 	author.set_green(_rect(-21, -16, 21, 18))
 
-	# The bailout is intentionally shorter and well left. Its longitudinal window
-	# is tuned around the real hybrid/wood carries produced by the current golfer
-	# profiles, so choosing safety genuinely means accepting a longer second shot.
+	# Safety is a deliberately shorter, left-side landing area. Its front edge is
+	# placed around hybrid distance, so the low-skill profiles must surrender real
+	# position to make the water irrelevant rather than getting a free 3-wood at
+	# nearly the same leave as driver.
 	author.add_surface_region("bailout_fairway", "Bailout Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-78, 265), Vector2(-24, 265), Vector2(-24, 325), Vector2(-78, 325)
+		Vector2(-78, 255), Vector2(-22, 255), Vector2(-22, 325), Vector2(-78, 325)
 	]))
-	# The attack landing strip is materially farther down the hole. Driver CENTER
-	# reaches it, but the adjacent water begins just inside Rick/Carl's ~10.9-yard
-	# driver dispersion corridor. The target itself remains fairway.
+	# The attack fairway is intentionally narrow in both width and depth. Rick/Carl
+	# driver CENTER reaches this fairway, while their slightly shorter 3-wood CENTER
+	# finishes beyond its back edge in rough. That forces the safe strategy toward
+	# the true bailout lane rather than giving it almost the same position for free.
 	author.add_surface_region("attack_fairway", "Attack Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-10, 205), Vector2(10, 205), Vector2(10, 260), Vector2(-10, 260)
+		Vector2(-10, 205), Vector2(10, 205), Vector2(10, 247), Vector2(-10, 247)
 	]))
 	author.add_surface_region("approach_fairway", "Approach Fairway", "FAIRWAY", _rect(-34, 24, 34, 205))
 	author.add_surface_region("tee", "Tee", "TEE", _rect(-10, 420, 10, 440))
 
-	# Ten yards from center is deliberately close enough to be inside the low-skill
-	# driver's dispersion corridor while still leaving the intended center target
-	# dry. This makes risk emerge from real club dispersion rather than a label.
+	# Ten yards from center is inside Rick/Carl's driver dispersion corridor, while
+	# the intended center target itself remains dry. Risk therefore comes from the
+	# player's real dispersion around a better landing position.
 	author.add_hazard("decision_lake", "Decision Lake", "WATER", PackedVector2Array([
 		Vector2(10.0, 205), Vector2(56, 205), Vector2(56, 275), Vector2(10.0, 275)
 	]), 1, "lateral")
