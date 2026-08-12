@@ -27,3 +27,6 @@ jobs:
 
       - name: Run POC-14A shot intent catalog tests
         run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_catalog_test.gd
+
+      - name: Run POC-14B predicted flight tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_flight_model_test.gd
