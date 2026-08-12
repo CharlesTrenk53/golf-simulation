@@ -45,6 +45,9 @@ func _init() -> void:
 
 func _build_par4_context() -> RefCounted:
 	var context = CourseContext.new()
+	# Full-length scoring requires an actual cup outcome. A close approach must
+	# transition to putting rather than being auto-holed by legacy proximity rules.
+	context.explicit_hole_out_required = true
 	# Straight, representative par-4 used to prove the entire tee-to-cup chain.
 	# The first POC-16 slice intentionally avoids forced hazards so failures expose
 	# integration problems rather than course-design difficulty.
