@@ -36,3 +36,6 @@ jobs:
 
       - name: Run POC-15C.5 putting development policy tests
         run: godot --headless --path . --script res://tests/putting_development_policy_test.gd
+
+      - name: Run POC-15D putting decision strategy tests
+        run: godot --headless --path . --script res://tests/putting_strategy_model_test.gd
