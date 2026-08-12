@@ -21,6 +21,16 @@ func _init(course_definition = null, selected_tee_id: String = "default") -> voi
 	round_state = RoundState.new(course_definition, selected_tee_id)
 
 
+func restore_snapshot(saved: Dictionary) -> bool:
+	if round_state == null or not round_state.restore_snapshot(saved):
+		return false
+	var saved_results: Array = saved.get("hole_results", [])
+	if saved_results.size() < round_state.holes_completed():
+		return false
+	hole_results = saved_results.duplicate(true)
+	return true
+
+
 func play_current_hole(golfer: Node, seed_value: int = 1) -> Dictionary:
 	if golfer == null or round_state == null or round_state.complete:
 		return {}
