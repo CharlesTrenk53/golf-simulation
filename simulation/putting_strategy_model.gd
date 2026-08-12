@@ -41,7 +41,7 @@ func choose_strategy(golfer: Node, planned_putt: Dictionary) -> Dictionary:
 	pace_adjustment_feet -= long_lag_pressure * 0.20
 
 	var strategy: String = STRATEGY_NEUTRAL
-	if assertive_tendency >= 0.68 and distance_feet <= 28.0:
+	if assertive_tendency >= 0.88 and distance_feet <= 28.0:
 		strategy = STRATEGY_ATTACK
 	elif assertive_tendency <= 0.34 or distance_feet >= 35.0:
 		strategy = STRATEGY_LAG
