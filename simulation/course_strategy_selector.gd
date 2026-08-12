@@ -52,8 +52,15 @@ func choose(golfer: Node, state) -> Dictionary:
 		for key in intent_choice.keys():
 			candidate[key] = intent_choice[key]
 
-		candidate = _execution_option(candidate)
 		decision_ranked.append(candidate)
+
+	# Aggression is relational, not a label attached to a club. A candidate is an
+	# aggressive course-management choice only when a safer feasible alternative
+	# exists and this candidate accepts meaningfully more downside in exchange for
+	# meaningful advancement toward the hole.
+	_annotate_strategy_posture(decision_ranked)
+	for index in range(decision_ranked.size()):
+		decision_ranked[index] = _execution_option(decision_ranked[index])
 
 	decision_ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a.get("decision_expected_strokes", INF)) < float(b.get("decision_expected_strokes", INF))
@@ -98,6 +105,35 @@ func _personality_strategy_adjustment(golfer: Node, candidate: Dictionary) -> Di
 	}
 
 
+func _annotate_strategy_posture(candidates: Array) -> void:
+	for candidate in candidates:
+		var candidate_downside: float = float(candidate.get("downside_exposure", 0.0))
+		var candidate_leave: float = float(candidate.get("remaining_after_target", INF))
+		var aggressive: bool = false
+		var safer_reference: Dictionary = {}
+		for alternative in candidates:
+			if alternative == candidate:
+				continue
+			var alternative_downside: float = float(alternative.get("downside_exposure", 0.0))
+			var alternative_leave: float = float(alternative.get("remaining_after_target", INF))
+			var extra_downside: float = candidate_downside - alternative_downside
+			var advancement_gain: float = alternative_leave - candidate_leave
+			# Require both a real risk difference and a real strategic payoff. This is
+			# deliberately expressed in observable golf consequences rather than club IDs.
+			if extra_downside >= 0.05 and advancement_gain >= 8.0:
+				aggressive = true
+				if safer_reference.is_empty() or alternative_downside < float(safer_reference.get("downside_exposure", INF)):
+					safer_reference = alternative
+		candidate["is_aggressive"] = aggressive
+		candidate["strategy_posture"] = "AGGRESSIVE" if aggressive else "STANDARD"
+		candidate["safer_alternative_exists"] = not safer_reference.is_empty()
+		if not safer_reference.is_empty():
+			candidate["safer_alternative_club_id"] = str(safer_reference.get("club_id", ""))
+			candidate["safer_alternative_target_variant"] = str(safer_reference.get("target_variant", ""))
+			candidate["safer_alternative_downside"] = float(safer_reference.get("downside_exposure", 0.0))
+			candidate["safer_alternative_leave"] = float(safer_reference.get("remaining_after_target", INF))
+
+
 func _execution_option(candidate: Dictionary) -> Dictionary:
 	var result: Dictionary = candidate.duplicate(true)
 	var hazard_probability: float = float(result.get("hazard_probability", 0.0))
@@ -108,7 +144,7 @@ func _execution_option(candidate: Dictionary) -> Dictionary:
 	result["target_position"] = result.get("target", Vector3.ZERO)
 	result["reward"] = 0.0
 	result["risk"] = failure_probability * 100.0
-	result["is_aggressive"] = false
+	result["is_aggressive"] = bool(result.get("is_aggressive", false))
 	result["model_success_chance"] = (1.0 - failure_probability) * 100.0
 	result["assessment"] = {}
 	return result
