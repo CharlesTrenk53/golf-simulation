@@ -39,7 +39,7 @@ func advance_to(
 	strokes += 1 + penalty_strokes
 	last_outcome = outcome
 	_refresh_lie()
-	var requires_explicit_hole_out: bool = course_context != null and bool(course_context.get("explicit_hole_out_required"))
+	var requires_explicit_hole_out: bool = course_context != null and course_context.get("explicit_hole_out_required") == true
 	if requires_explicit_hole_out:
 		finished = outcome == "HOLED"
 	else:

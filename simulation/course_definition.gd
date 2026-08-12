@@ -4,6 +4,10 @@ extends RefCounted
 # --------------------------
 # Owns an ordered set of independently playable HoleDefinitions. Course totals
 # are derived from the holes so par and yardage have one source of truth.
+#
+# POC-17D adds an in-memory construction path so a course-authoring layer can
+# produce a CourseDefinition before the authored holes have been persisted to
+# individual JSON files. Existing path-backed JSON loading remains unchanged.
 
 const HoleDefinition = preload("res://simulation/hole_definition.gd")
 const SUPPORTED_SCHEMA_VERSION := 1
@@ -33,6 +37,17 @@ static func load_json(path: String):
 static func from_dictionary(data: Dictionary):
 	var definition = new()
 	if not definition._apply_dictionary(data):
+		return null
+	return definition
+
+
+static func from_holes(new_course_id: String, new_course_name: String, authored_holes: Array):
+	var definition = new()
+	definition.course_id = new_course_id
+	definition.course_name = new_course_name
+	definition.holes = authored_holes.duplicate()
+	definition.hole_paths.clear()
+	if not definition.is_valid():
 		return null
 	return definition
 
@@ -75,7 +90,9 @@ func is_valid() -> bool:
 	if holes.is_empty():
 		push_error("CourseDefinition requires at least one hole")
 		return false
-	if holes.size() != hole_paths.size():
+	# Path-backed courses still require one path per loaded hole. In-memory authored
+	# courses intentionally have no paths until persistence is requested.
+	if not hole_paths.is_empty() and holes.size() != hole_paths.size():
 		push_error("CourseDefinition hole path count must match loaded hole count")
 		return false
 

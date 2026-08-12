@@ -1,0 +1,40 @@
+name: POC-17 Course Authoring Checks
+
+on:
+  # During active POC-17 development, focused tests run locally via run-test.ps1.
+  # GitHub validates the integrated authoring slice when the draft PR is promoted.
+  pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  course-authoring:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run POC-17A hole authoring model
+        run: godot --headless --path . --script res://tests/hole_authoring_model_test.gd
+
+      - name: Run POC-17B authored hole playability bridge
+        run: godot --headless --path . --script res://tests/authored_hole_playability_test.gd
+
+      - name: Run POC-17C authored course variety
+        run: godot --headless --path . --script res://tests/authored_course_variety_test.gd
+
+      - name: Run POC-17D course authoring model
+        run: godot --headless --path . --script res://tests/course_authoring_model_test.gd
+
+      - name: Run POC-17E developer course builder prototype
+        run: godot --headless --path . --script res://tests/course_builder_prototype_test.gd

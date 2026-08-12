@@ -23,7 +23,11 @@ func choose_for_candidate(golfer: Node, candidate: Dictionary, surface: String) 
 	if intents.is_empty():
 		return {"chosen_intent": {}, "evaluated_intents": []}
 
-	var baseline_carry: float = float(candidate.get("effective_carry", candidate.get("stock_forward_distance", 0.0)))
+	# The club+target candidate is already a concrete distance plan. When a stock
+	# club carries farther than the selected target, execution must honor the
+	# candidate's shortened forward distance rather than silently reverting to the
+	# club's full carry. This keeps POC-14 HOW execution faithful to POC-13 WHAT/WHERE.
+	var baseline_carry: float = float(candidate.get("stock_forward_distance", candidate.get("intended_distance", candidate.get("effective_carry", 0.0))))
 	var baseline_dispersion: float = float(candidate.get("dispersion", club.get("dispersion", 1.0)))
 	var expected_surface: String = str(candidate.get("expected_surface", "FAIRWAY")).to_upper()
 	var hazard_count: int = int(candidate.get("corridor_hazard_count", 0))
