@@ -38,7 +38,9 @@ func choose_strategy(golfer: Node, planned_putt: Dictionary) -> Dictionary:
 	if attack_margin >= 0.38 and distance_feet <= 25.0:
 		strategy = STRATEGY_ATTACK
 		pace_multiplier = 1.06
-	elif attack_margin <= 0.02 or distance_feet >= 45.0:
+	elif attack_margin <= 0.02 or distance_feet >= 35.0:
+		# From roughly 35 feet, even confident players should primarily manage the
+		# next putt rather than behave as if this were a normal make-range attempt.
 		strategy = STRATEGY_LAG
 		pace_multiplier = 0.94
 
