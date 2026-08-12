@@ -133,11 +133,15 @@ func _segment_intersects_polygon(a: Vector2, b: Vector2, polygon: PackedVector2A
 	if half_width <= 0.0:
 		return false
 
-	# A practical corridor-width approximation for option generation: a hazard
-	# counts when any polygon vertex lies within the requested distance of the
-	# intended shot centerline.
-	for vertex in polygon:
-		if _distance_to_segment(vertex, a, b) <= half_width:
+	# Corridor width represents lateral shot dispersion, so proximity to any part
+	# of a hazard boundary matters. The earlier vertex-only approximation missed
+	# long hazard edges that ran alongside the intended shot while every corner sat
+	# beyond the finite shot segment. Measure segment-to-segment distance for each
+	# polygon edge instead.
+	for i in range(polygon.size()):
+		var edge_a := polygon[i]
+		var edge_b := polygon[(i + 1) % polygon.size()]
+		if _distance_between_segments(a, b, edge_a, edge_b) <= half_width:
 			return true
 	return false
 
@@ -163,6 +167,15 @@ func _segments_intersect(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool
 	var t := _cross_2d(c_minus_a, s) / denominator
 	var u := _cross_2d(c_minus_a, r) / denominator
 	return t >= -GEOMETRY_EPSILON and t <= 1.0 + GEOMETRY_EPSILON and u >= -GEOMETRY_EPSILON and u <= 1.0 + GEOMETRY_EPSILON
+
+
+func _distance_between_segments(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
+	if _segments_intersect(a, b, c, d):
+		return 0.0
+	return minf(
+		minf(_distance_to_segment(a, c, d), _distance_to_segment(b, c, d)),
+		minf(_distance_to_segment(c, a, b), _distance_to_segment(d, a, b))
+	)
 
 
 func _cross_2d(a: Vector2, b: Vector2) -> float:
