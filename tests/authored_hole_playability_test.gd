@@ -10,7 +10,7 @@ var failures: int = 0
 func _init() -> void:
 	print("POC-17B: authored hole playability bridge")
 	var author = _build_hole()
-	var definition = author.to_hole_definition()
+	var definition = author.build_definition()
 	_assert_true(definition != null, "authored hole produces a valid HoleDefinition")
 	if definition == null:
 		_finish()
@@ -43,10 +43,10 @@ func _init() -> void:
 
 func _build_hole():
 	var author = HoleAuthoringModel.new()
-	author.set_identity("poc17_playable", 1, "Builder Bridge", 4, 410.0)
+	author.configure_identity("poc17_playable", 1, "Builder Bridge", 4, 410.0)
 	author.add_tee("back", "Back", Vector3(0, 0, 410), 410.0)
 	author.set_pin(Vector3(0, 0, 0))
-	author.set_green_polygon(PackedVector2Array([
+	author.set_green(PackedVector2Array([
 		Vector2(-16, -14), Vector2(16, -14), Vector2(16, 14), Vector2(-16, 14)
 	]))
 	author.add_surface_region("fairway", "Fairway", "FAIRWAY", PackedVector2Array([
