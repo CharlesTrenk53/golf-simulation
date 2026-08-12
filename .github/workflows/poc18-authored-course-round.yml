@@ -36,3 +36,12 @@ jobs:
 
       - name: Run POC-18D full 18-hole authored round
         run: godot --headless --path . --script res://tests/authored_full_round_stress_test.gd
+
+      - name: Run POC-18F personality strategy diagnostic
+        run: godot --headless --path . --script res://tests/course_strategy_personality_diagnostic.gd
+
+      - name: Run POC-18F hazard corridor edge regression
+        run: godot --headless --path . --script res://tests/hazard_corridor_edge_proximity_test.gd
+
+      - name: Run POC-18F aggressive strategy memory propagation
+        run: godot --headless --path . --script res://tests/aggressive_strategy_memory_propagation_test.gd
