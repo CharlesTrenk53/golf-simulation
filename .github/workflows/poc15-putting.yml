@@ -42,3 +42,9 @@ jobs:
 
       - name: Run POC-15E live autonomous putting integration tests
         run: godot --headless --path . --script res://tests/putting_live_integration_test.gd
+
+      - name: Run POC-15F putting behavioral stress test
+        run: godot --headless --path . --script res://tests/putting_behavior_stress_test.gd
+
+      - name: Run POC-15G multi-putt hole-out stress test
+        run: godot --headless --path . --script res://tests/putting_holeout_stress_test.gd
