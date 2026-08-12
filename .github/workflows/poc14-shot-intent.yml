@@ -1,12 +1,9 @@
 name: POC-14 Shot Intent Checks
 
 on:
-  push:
-    branches:
-      - poc-14-shot-intent-shotmaking
-  pull_request:
-    branches:
-      - main
+  # POC-14 is complete. Keep its focused regression suite available on demand
+  # without launching it automatically for every future POC pull request.
+  workflow_dispatch:
 
 jobs:
   shot-intent:
