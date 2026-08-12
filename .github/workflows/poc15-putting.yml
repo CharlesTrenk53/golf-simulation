@@ -39,3 +39,6 @@ jobs:
 
       - name: Run POC-15D putting decision strategy tests
         run: godot --headless --path . --script res://tests/putting_strategy_model_test.gd
+
+      - name: Run POC-15E live autonomous putting integration tests
+        run: godot --headless --path . --script res://tests/putting_live_integration_test.gd
