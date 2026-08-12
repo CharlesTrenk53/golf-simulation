@@ -1,20 +1,21 @@
 extends RefCounted
 
-# POC-13D: autonomous course-strategy selector.
-# ---------------------------------------------
-# Feasibility comes from ClubCandidateGenerator. Objective scoring comes from
-# ClubCandidateEvaluator. CourseManagementModel converts objective consequences
-# into the golfer's perceived consequences. Personality then affects willingness
-# to accept strategic risk without changing objective reality or the golfer's
-# underlying perception of expected strokes.
+# POC-13D / POC-14E: autonomous course-strategy selector.
+# -------------------------------------------------------
+# POC-13 chooses club + target from golfer, bag and geometry. POC-14 now layers a
+# separate HOW decision onto each feasible plan: trajectory, shape, swing length
+# and technique. The ordering remains intentional:
+# club + target -> shot intent -> execution.
 
 const ClubCandidateGenerator = preload("res://simulation/club_candidate_generator.gd")
 const ClubCandidateEvaluator = preload("res://simulation/club_candidate_evaluator.gd")
 const CourseManagementModel = preload("res://simulation/course_management_model.gd")
+const ShotIntentStrategyModel = preload("res://simulation/shot_intent_strategy_model.gd")
 
 var generator = ClubCandidateGenerator.new()
 var evaluator = ClubCandidateEvaluator.new()
 var course_management = CourseManagementModel.new()
+var shot_intent_strategy = ShotIntentStrategyModel.new()
 
 
 func use_literal_yardages(enabled: bool = true) -> void:
@@ -29,6 +30,7 @@ func choose(golfer: Node, state) -> Dictionary:
 
 	var objective_ranked: Array = evaluator.evaluate_all(golfer, state, candidates)
 	var decision_ranked: Array = []
+	var current_surface: String = state.surface_name()
 	for objective in objective_ranked:
 		var candidate: Dictionary = objective.duplicate(true)
 		var perception: Dictionary = course_management.perception_for(
@@ -42,6 +44,14 @@ func choose(golfer: Node, state) -> Dictionary:
 		var personality: Dictionary = _personality_strategy_adjustment(golfer, candidate)
 		for key in personality.keys():
 			candidate[key] = personality[key]
+
+		# POC-14E deliberately chooses intent after club + target have been evaluated.
+		# This preserves the proven POC-13 strategy architecture while making HOW the
+		# shot is played an autonomous golfer decision rather than a fixed stock shot.
+		var intent_choice: Dictionary = shot_intent_strategy.choose_for_candidate(golfer, candidate, current_surface)
+		for key in intent_choice.keys():
+			candidate[key] = intent_choice[key]
+
 		candidate = _execution_option(candidate)
 		decision_ranked.append(candidate)
 
