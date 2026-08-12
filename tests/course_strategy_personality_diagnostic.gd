@@ -88,6 +88,7 @@ func _run_profile(hole, profile: int) -> void:
 				best_standard = candidate
 	_print_candidate(golfer.golfer_name, "BEST_AGGRESSIVE", best_aggressive)
 	_print_candidate(golfer.golfer_name, "BEST_STANDARD", best_standard)
+	_print_bailout_geometry(golfer.golfer_name, evaluated)
 	golfer.free()
 
 
@@ -108,6 +109,26 @@ func _print_candidate(golfer_name: String, label: String, candidate: Dictionary)
 		float(candidate.get("personality_risk_adjustment", 0.0)),
 		float(candidate.get("decision_expected_strokes", 0.0))
 	])
+
+
+func _print_bailout_geometry(golfer_name: String, evaluated: Array) -> void:
+	for candidate in evaluated:
+		var club_id: String = str(candidate.get("club_id", ""))
+		if club_id not in ["3_WOOD", "5_WOOD", "4_HYBRID"]:
+			continue
+		var target: Vector3 = candidate.get("target", Vector3.ZERO)
+		print("STRATEGY_GEOMETRY,%s,club=%s,target=%s,x=%.1f,z=%.1f,surface=%s,posture=%s,downside=%.3f,leave=%.1f,decision_expected=%.3f" % [
+			golfer_name,
+			str(candidate.get("club_name", "")),
+			str(candidate.get("target_variant", "")),
+			target.x,
+			target.z,
+			str(candidate.get("expected_surface", "")),
+			str(candidate.get("strategy_posture", "")),
+			float(candidate.get("downside_exposure", 0.0)),
+			float(candidate.get("remaining_after_target", 0.0)),
+			float(candidate.get("decision_expected_strokes", 0.0))
+		])
 
 
 func _build_risk_reward_hole():
