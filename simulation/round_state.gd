@@ -63,6 +63,48 @@ func record_current_hole(strokes: int) -> bool:
 	return true
 
 
+func restore_snapshot(saved: Dictionary) -> bool:
+	if course == null or saved.is_empty():
+		return false
+	if str(saved.get("course_id", "")) != str(course.course_id):
+		return false
+	if str(saved.get("tee_id", tee_id)) != tee_id:
+		return false
+
+	var rows: Array = saved.get("scorecard", [])
+	if rows.size() != course.hole_count():
+		return false
+
+	var restored_scores: Array[int] = []
+	var completed_count: int = 0
+	var encountered_incomplete: bool = false
+	for index in range(rows.size()):
+		var row: Dictionary = rows[index]
+		var hole = course.hole_at(index)
+		if hole == null or int(row.get("hole_number", 0)) != int(hole.hole_number):
+			return false
+		var row_completed: bool = bool(row.get("completed", false))
+		if row_completed:
+			if encountered_incomplete:
+				return false
+			var strokes: int = int(row.get("strokes", -1))
+			if strokes <= 0:
+				return false
+			restored_scores.append(strokes)
+			completed_count += 1
+		else:
+			encountered_incomplete = true
+			restored_scores.append(-1)
+
+	hole_scores = restored_scores
+	complete = completed_count == course.hole_count()
+	if complete:
+		current_hole_index = maxi(0, course.hole_count() - 1)
+	else:
+		current_hole_index = completed_count
+	return true
+
+
 func score_for_hole(hole_number: int) -> int:
 	if course == null:
 		return -1
