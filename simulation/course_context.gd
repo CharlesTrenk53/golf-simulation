@@ -10,6 +10,7 @@ enum Surface {
 }
 
 var zones: Array = []
+var explicit_hole_out_required: bool = false
 
 
 func add_zone(
