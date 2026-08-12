@@ -12,8 +12,8 @@ const ShotIntent = preload("res://simulation/shot_intent.gd")
 func assess(golfer: Node, club: Dictionary, intent: Dictionary, predicted_flight: Dictionary) -> Dictionary:
 	var shot_type: int = int(club.get("shot_type", 1))
 	var base_ability: float = _shot_ability(golfer, shot_type)
-	var coordination: float = clamp(float(golfer.get("coordination")) if "coordination" in golfer else 70.0, 0.0, 100.0)
-	var general_confidence: float = clamp(float(golfer.get("confidence")) if "confidence" in golfer else 70.0, 0.0, 100.0)
+	var coordination: float = clamp(float(golfer.get("coordination")), 0.0, 100.0)
+	var general_confidence: float = clamp(float(golfer.get("confidence")), 0.0, 100.0)
 	var difficulty: float = clamp(float(predicted_flight.get("execution_difficulty", 0.0)), 0.0, 1.0)
 
 	# Technical ability drives most of true proficiency; coordination matters more
