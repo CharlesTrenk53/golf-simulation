@@ -139,7 +139,7 @@ func _validate_directional_behavior(rows: Array) -> void:
 		var low: Dictionary = _find_row(rows, 30.0, distance)
 		var high: Dictionary = _find_row(rows, 95.0, distance)
 		_expect(float(high["make_pct"]) >= float(low["make_pct"]), "ability 95 make rate is at least ability 30 at %.0f ft" % distance)
-		_expect(float(high["avg_miss_leave_feet"]) <= float(low["avg_miss_leave_feet"]) + 0.25, "ability 95 miss leave is no worse than ability 30 at %.0f ft" % distance)
+		_expect(float(high["difficult_comeback_pct"]) <= float(low["difficult_comeback_pct"]) + 0.50, "ability 95 creates no more difficult comebacks than ability 30 at %.0f ft" % distance)
 
 	var skill_70_3: Dictionary = _find_row(rows, 70.0, 3.0)
 	var skill_70_10: Dictionary = _find_row(rows, 70.0, 10.0)
