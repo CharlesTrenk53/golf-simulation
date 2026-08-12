@@ -69,13 +69,14 @@ func _run_profile(hole, profile: int) -> void:
 		"standard_candidates": standard_candidates
 	}
 
-	print("STRATEGY_PROFILE,%s,risk_tolerance=%.0f,choice=%s,club=%s,target=%s,posture=%s,downside=%.3f,leave=%.1f,decision_expected=%.3f,aggressive_candidates=%d,standard_candidates=%d" % [
+	print("STRATEGY_PROFILE,%s,risk_tolerance=%.0f,choice=%s,club=%s,target=%s,posture=%s,surface=%s,downside=%.3f,leave=%.1f,decision_expected=%.3f,aggressive_candidates=%d,standard_candidates=%d" % [
 		golfer.golfer_name,
 		float(golfer.risk_tolerance),
 		str(chosen.get("name", "")),
 		str(chosen.get("club_name", "")),
 		str(chosen.get("target_variant", "")),
 		str(chosen.get("strategy_posture", "")),
+		str(chosen.get("expected_surface", "")),
 		float(chosen.get("downside_exposure", 0.0)),
 		float(chosen.get("remaining_after_target", 0.0)),
 		float(chosen.get("decision_expected_strokes", 0.0)),
@@ -101,12 +102,13 @@ func _print_candidate(golfer_name: String, label: String, candidate: Dictionary)
 	if candidate.is_empty():
 		print("STRATEGY_CANDIDATE,%s,%s,NONE" % [golfer_name, label])
 		return
-	print("STRATEGY_CANDIDATE,%s,%s,club=%s,target=%s,posture=%s,downside=%.3f,leave=%.1f,perceived=%.3f,personality_adjustment=%+.3f,decision_expected=%.3f" % [
+	print("STRATEGY_CANDIDATE,%s,%s,club=%s,target=%s,posture=%s,surface=%s,downside=%.3f,leave=%.1f,perceived=%.3f,personality_adjustment=%+.3f,decision_expected=%.3f" % [
 		golfer_name,
 		label,
 		str(candidate.get("club_name", "")),
 		str(candidate.get("target_variant", "")),
 		str(candidate.get("strategy_posture", "")),
+		str(candidate.get("expected_surface", "")),
 		float(candidate.get("downside_exposure", 0.0)),
 		float(candidate.get("remaining_after_target", 0.0)),
 		float(candidate.get("perceived_expected_strokes_to_hole", 0.0)),
@@ -122,21 +124,23 @@ func _build_risk_reward_hole():
 	author.set_pin(Vector3(0, 0, 0))
 	author.set_green(_rect(-21, -16, 21, 18))
 
-	# The left bailout fairway sits at a shorter-club landing distance. A player
-	# choosing more club can gain roughly 15-25 yards, but the longer central/right
-	# landing zone is pinched by water. This creates advancement that is actually
-	# purchased with downside rather than a free same-distance lateral escape.
+	# A broad but shorter bailout sits well left. The central landing strip begins
+	# farther down the hole, so more club earns a materially better leave rather
+	# than merely shifting sideways at the same distance.
 	author.add_surface_region("bailout_fairway", "Bailout Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-72, 250), Vector2(-18, 250), Vector2(-18, 305), Vector2(-72, 305)
+		Vector2(-78, 258), Vector2(-28, 258), Vector2(-28, 325), Vector2(-78, 325)
 	]))
-	author.add_surface_region("approach_fairway", "Approach Fairway", "FAIRWAY", _rect(-34, 24, 34, 225))
+	author.add_surface_region("attack_fairway", "Attack Fairway", "FAIRWAY", PackedVector2Array([
+		Vector2(-16, 205), Vector2(28, 205), Vector2(28, 260), Vector2(-16, 260)
+	]))
+	author.add_surface_region("approach_fairway", "Approach Fairway", "FAIRWAY", _rect(-34, 24, 34, 205))
 	author.add_surface_region("tee", "Tee", "TEE", _rect(-10, 420, 10, 440))
 
-	# Water guards the longer driver landing window. Far-left bailout geometry is
-	# deliberately behind this window, so a shorter club can find fairway while a
-	# driver that tries to gain the extra distance must challenge the hazard.
+	# The lake is beside the attack fairway rather than underneath the intended
+	# target. A driver can therefore finish on fairway while its dispersion corridor
+	# still clips water. The bailout lane remains genuinely hazard-free.
 	author.add_hazard("decision_lake", "Decision Lake", "WATER", PackedVector2Array([
-		Vector2(-12, 225), Vector2(58, 225), Vector2(58, 260), Vector2(-4, 260)
+		Vector2(30, 205), Vector2(72, 205), Vector2(72, 275), Vector2(30, 275)
 	]), 1, "lateral")
 	return author.build_definition()
 
