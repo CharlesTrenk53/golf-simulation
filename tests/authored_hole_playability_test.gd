@@ -20,6 +20,7 @@ func _init() -> void:
 	var simulation = DataDefinedAutonomousHole.new(definition, "back")
 	var result: Dictionary = simulation.play_hole(golfer, 170201)
 	var history: Array = result.get("history", [])
+	_print_trace(history)
 
 	print("PLAYABILITY_SUMMARY finished=%s strokes=%d par=%d final_surface=%s remaining=%.3f shots=%d" % [
 		str(bool(result.get("finished", false))),
@@ -75,6 +76,23 @@ func _build_golfer() -> Node:
 	golfer.coordination = 70.0
 	golfer.endurance = 70.0
 	return golfer
+
+
+func _print_trace(history: Array) -> void:
+	print("TRACE shot,surface_before,club,option,target_distance,landing_surface,remaining,outcome")
+	for shot in history:
+		var start: Vector3 = shot.get("start_position", Vector3.ZERO)
+		var target: Vector3 = shot.get("target_position", start)
+		print("TRACE %d,%s,%s,%s,%.2f,%s,%.2f,%s" % [
+			int(shot.get("shot_number", 0)),
+			str(shot.get("surface_before", "UNKNOWN")),
+			str(shot.get("club_name", shot.get("club_id", ""))),
+			str(shot.get("option", "")),
+			start.distance_to(target),
+			str(shot.get("surface_after", "UNKNOWN")),
+			float(shot.get("remaining_after_shot", INF)),
+			str(shot.get("outcome", ""))
+		])
 
 
 func _history_starts_on_tee(history: Array) -> bool:
