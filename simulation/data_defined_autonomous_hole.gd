@@ -129,7 +129,9 @@ func _execute_course_strategy_choice(golfer: Node, state, chosen: Dictionary, ev
 	result["execution_reason"] = execution_assessment["reason"]
 
 	autonomous.shot_history.append(result)
-	golfer.record_shot_result(result["outcome"], false)
+	var was_aggressive: bool = bool(chosen.get("is_aggressive", false))
+	result["was_aggressive"] = was_aggressive
+	golfer.record_shot_result(result["outcome"], was_aggressive)
 	return result
 
 
