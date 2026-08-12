@@ -3,7 +3,8 @@ extends RefCounted
 const PuttingIntent = preload("res://simulation/putting_intent.gd")
 
 # POC-15A deterministic putting read. The model converts simple green context
-# into an intended start line and pace. Execution error belongs in a later layer.
+# into an intended start line and neutral capture pace. Golfer strategy and
+# execution error belong to downstream layers.
 #
 # slope_across_percent:
 #   positive = ball tends to break right during the putt
@@ -28,9 +29,10 @@ func plan_putt(
 	var distance_factor: float = pow(maxf(distance, 1.0) / 10.0, 1.35)
 	var aim_offset: float = slope_across_percent * distance_factor * speed_factor * 0.42
 
-	# Baseline pace is enough to finish modestly past the cup on a level green.
-	# Uphill putts require more delivered distance; downhill putts require less.
-	var baseline_past: float = lerpf(1.0, 2.5, clampf(distance / 40.0, 0.0, 1.0))
+	# Neutral capture pace should keep the ball moving through the cup without
+	# guaranteeing that virtually every miss finishes long. Strategy can then
+	# make this pace more assertive or more defensive downstream.
+	var baseline_past: float = lerpf(0.45, 1.00, clampf(distance / 40.0, 0.0, 1.0))
 	var slope_pace_adjustment: float = slope_along_percent * distance * 0.045
 	var speed_pace_adjustment: float = (10.0 - speed) * distance * 0.012
 	var intended_distance: float = maxf(0.0, distance + baseline_past + slope_pace_adjustment + speed_pace_adjustment)
