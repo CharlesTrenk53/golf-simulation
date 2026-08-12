@@ -22,6 +22,7 @@ const DEVELOPMENT_RESISTANCE_POWER := 1.35
 const BASELINE_RECOVERY_EXPERIENCE_MAX := 1.75
 const BASELINE_REGRESSION_MIN := 0.0008
 const BASELINE_REGRESSION_MAX := 0.0018
+const PUTTING_SHOT_TYPE := 3
 
 # Age plasticity is deliberately separate from physical aging. It modifies only
 # acquisition of genuinely new above-baseline skill. It does not accelerate a
@@ -104,14 +105,13 @@ func record_experience_only(shot_type: int, repetitions: int) -> void:
 
 func advance_year() -> void:
 	# Technical retention is a time-based annual effect, deliberately separate
-	# from per-shot learning. Age-related retention pressure applies only to
-	# acquired above-baseline skill; it does not punish additional practice by
-	# making deterioration occur once per shot.
-	var retention_rate = age_retention_rate()
-	if retention_rate <= 0.0:
-		return
-
+	# from per-shot learning. Putting is exempt from chronological age-retention
+	# erosion: putting can still change through learning, inactivity, slumps, and
+	# recovery evidence, but age by itself does not subtract putting skill.
 	for shot_type in [0, 1, 2, 3]:
+		var retention_rate: float = age_retention_rate_for(shot_type)
+		if retention_rate <= 0.0:
+			continue
 		var current_delta = float(skill_delta.get(shot_type, 0.0))
 		if current_delta <= 0.0:
 			continue
@@ -144,6 +144,11 @@ func age_retention_rate(age: float = -1.0) -> float:
 			var weight = inverse_lerp(younger_age, older_age, resolved_age)
 			return lerp(younger_rate, older_rate, weight)
 	return float(AGE_RETENTION_POINTS[AGE_RETENTION_POINTS.size() - 1][1])
+
+func age_retention_rate_for(shot_type: int, age: float = -1.0) -> float:
+	if shot_type == PUTTING_SHOT_TYPE:
+		return 0.0
+	return age_retention_rate(age)
 
 func record_execution(shot_type: int, execution_score: float, lateral_error: float, distance_error: float, persistent_execution_score: float = -1.0) -> Dictionary:
 	if not evidence.has(shot_type):

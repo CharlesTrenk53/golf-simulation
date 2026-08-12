@@ -1,14 +1,19 @@
 name: Godot Headless Tests
 
 on:
+  # During active POC development we use the repository-local run-test.ps1
+  # helper for immediate focused feedback. The comprehensive regression suite
+  # runs once when a draft PR is promoted to ready-for-review, then again on
+  # main after merge as an independent post-merge confirmation.
   push:
     branches:
       - main
-      - poc-05-autonomous-hole
-      - poc-06-course-context
-      - poc-07-shot-club-selection
-      - poc-08-shot-assessment
   pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
 
 jobs:
   test:

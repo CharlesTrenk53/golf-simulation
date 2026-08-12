@@ -1,0 +1,47 @@
+extends RefCounted
+
+const PuttingIntent = preload("res://simulation/putting_intent.gd")
+
+# POC-15A deterministic putting read. The model converts simple green context
+# into an intended start line and neutral capture pace. Golfer strategy and
+# execution error belong to downstream layers.
+#
+# slope_across_percent:
+#   positive = ball tends to break right during the putt
+#   negative = ball tends to break left
+# slope_along_percent:
+#   positive = uphill toward the hole
+#   negative = downhill toward the hole
+
+
+func plan_putt(
+	distance_feet: float,
+	slope_across_percent: float = 0.0,
+	slope_along_percent: float = 0.0,
+	green_speed: float = 10.0
+) -> Dictionary:
+	var distance: float = maxf(0.0, distance_feet)
+	var speed: float = clampf(green_speed, 7.0, 14.0)
+
+	# Faster greens and longer travel both allow cross-slope to act longer. The
+	# coefficient is intentionally modest for POC-15A; calibration comes later.
+	var speed_factor: float = lerpf(0.80, 1.25, (speed - 7.0) / 7.0)
+	var distance_factor: float = pow(maxf(distance, 1.0) / 10.0, 1.35)
+	var aim_offset: float = slope_across_percent * distance_factor * speed_factor * 0.42
+
+	# Neutral capture pace should keep the ball moving through the cup without
+	# guaranteeing that virtually every miss finishes long. Strategy can then
+	# make this pace more assertive or more defensive downstream.
+	var baseline_past: float = lerpf(0.45, 1.00, clampf(distance / 40.0, 0.0, 1.0))
+	var slope_pace_adjustment: float = slope_along_percent * distance * 0.045
+	var speed_pace_adjustment: float = (10.0 - speed) * distance * 0.012
+	var intended_distance: float = maxf(0.0, distance + baseline_past + slope_pace_adjustment + speed_pace_adjustment)
+	var pace_past: float = maxf(0.0, intended_distance - distance)
+
+	var intent = PuttingIntent.new(aim_offset, pace_past, intended_distance)
+	var result: Dictionary = intent.as_dictionary()
+	result["distance_feet"] = distance
+	result["slope_across_percent"] = slope_across_percent
+	result["slope_along_percent"] = slope_along_percent
+	result["green_speed"] = speed
+	return result

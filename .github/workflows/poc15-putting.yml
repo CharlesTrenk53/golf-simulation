@@ -1,0 +1,50 @@
+name: POC-15 Putting Checks
+
+on:
+  # Focused POC-15 tests run locally during draft development via run-test.ps1.
+  # GitHub independently validates the complete POC-15 slice when the PR is
+  # promoted to ready-for-review, with workflow_dispatch available on demand.
+  pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  putting-models:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run POC-15A putting read tests
+        run: godot --headless --path . --script res://tests/putting_read_model_test.gd
+
+      - name: Run POC-15B putting execution tests
+        run: godot --headless --path . --script res://tests/putting_execution_model_test.gd
+
+      - name: Run POC-15C putting roll and outcome tests
+        run: godot --headless --path . --script res://tests/putting_roll_model_test.gd
+
+      - name: Run POC-15C.5 putting development policy tests
+        run: godot --headless --path . --script res://tests/putting_development_policy_test.gd
+
+      - name: Run POC-15D putting decision strategy tests
+        run: godot --headless --path . --script res://tests/putting_strategy_model_test.gd
+
+      - name: Run POC-15E live autonomous putting integration tests
+        run: godot --headless --path . --script res://tests/putting_live_integration_test.gd
+
+      - name: Run POC-15F putting behavioral stress test
+        run: godot --headless --path . --script res://tests/putting_behavior_stress_test.gd
+
+      - name: Run POC-15G multi-putt hole-out stress test
+        run: godot --headless --path . --script res://tests/putting_holeout_stress_test.gd
