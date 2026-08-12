@@ -23,10 +23,6 @@ func _init() -> void:
 	]:
 		_run_profile(hole, profile)
 
-	# Rick and Carl have nearly identical playing skill but radically different
-	# risk tolerance. On this purpose-built decision, both must see a genuine
-	# risk/reward choice. We then expect personality, rather than arbitrary labels,
-	# to be capable of separating their preferred strategy.
 	var rick: Dictionary = profile_choices.get("Reckless Rick", {})
 	var carl: Dictionary = profile_choices.get("Careful Carl", {})
 	_assert_true(int(rick.get("aggressive_candidates", 0)) > 0, "Reckless Rick sees aggressive alternatives")
@@ -58,9 +54,6 @@ func _run_profile(hole, profile: int) -> void:
 		else:
 			standard_candidates += 1
 
-	# Wild Bill's much greater driving ability can legitimately erase the exact
-	# tradeoff faced by Rick/Carl, so his candidate mix is diagnostic rather than
-	# a pass/fail requirement.
 	_assert_true(standard_candidates > 0, "%s sees at least one playable standard alternative" % golfer.golfer_name)
 
 	profile_choices[golfer.golfer_name] = {
@@ -124,23 +117,26 @@ func _build_risk_reward_hole():
 	author.set_pin(Vector3(0, 0, 0))
 	author.set_green(_rect(-21, -16, 21, 18))
 
-	# A broad but shorter bailout sits well left. The central landing strip begins
-	# farther down the hole, so more club earns a materially better leave rather
-	# than merely shifting sideways at the same distance.
+	# The bailout is intentionally shorter and well left. Its longitudinal window
+	# is tuned around the real hybrid/wood carries produced by the current golfer
+	# profiles, so choosing safety genuinely means accepting a longer second shot.
 	author.add_surface_region("bailout_fairway", "Bailout Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-78, 258), Vector2(-28, 258), Vector2(-28, 325), Vector2(-78, 325)
+		Vector2(-78, 265), Vector2(-24, 265), Vector2(-24, 325), Vector2(-78, 325)
 	]))
+	# The attack landing strip is materially farther down the hole. Driver CENTER
+	# reaches it, but the adjacent water begins just inside Rick/Carl's ~10.9-yard
+	# driver dispersion corridor. The target itself remains fairway.
 	author.add_surface_region("attack_fairway", "Attack Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-16, 205), Vector2(28, 205), Vector2(28, 260), Vector2(-16, 260)
+		Vector2(-10, 205), Vector2(10, 205), Vector2(10, 260), Vector2(-10, 260)
 	]))
 	author.add_surface_region("approach_fairway", "Approach Fairway", "FAIRWAY", _rect(-34, 24, 34, 205))
 	author.add_surface_region("tee", "Tee", "TEE", _rect(-10, 420, 10, 440))
 
-	# The lake is beside the attack fairway rather than underneath the intended
-	# target. A driver can therefore finish on fairway while its dispersion corridor
-	# still clips water. The bailout lane remains genuinely hazard-free.
+	# Ten yards from center is deliberately close enough to be inside the low-skill
+	# driver's dispersion corridor while still leaving the intended center target
+	# dry. This makes risk emerge from real club dispersion rather than a label.
 	author.add_hazard("decision_lake", "Decision Lake", "WATER", PackedVector2Array([
-		Vector2(30, 205), Vector2(72, 205), Vector2(72, 275), Vector2(30, 275)
+		Vector2(10.0, 205), Vector2(56, 205), Vector2(56, 275), Vector2(10.0, 275)
 	]), 1, "lateral")
 	return author.build_definition()
 
