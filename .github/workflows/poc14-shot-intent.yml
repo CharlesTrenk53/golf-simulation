@@ -36,3 +36,9 @@ jobs:
 
       - name: Run POC-14D shot execution tests
         run: timeout 90s ./godot --headless --path . --script res://tests/shot_execution_model_test.gd
+
+      - name: Run POC-14E autonomous shot intent strategy tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_strategy_model_test.gd
+
+      - name: Re-run POC-13 course strategy selector regression tests
+        run: timeout 90s ./godot --headless --path . --script res://tests/course_strategy_selector_test.gd
