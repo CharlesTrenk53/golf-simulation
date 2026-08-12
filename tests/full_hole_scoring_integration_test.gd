@@ -16,6 +16,11 @@ func _init() -> void:
 
 	var context = _build_par4_context()
 	var simulation = AutonomousHole.new()
+	# POC-16A uses a literal 410-yard hole. Preserve legacy compact-distance defaults
+	# elsewhere, but explicitly put both autonomous club-distance consumers into the
+	# literal-yardage profile for this full-length integration run.
+	simulation.bag.use_literal_yardages(true)
+	simulation.option_generator.bag.use_literal_yardages(true)
 	var result: Dictionary = simulation.play_hole(
 		golfer,
 		Vector3(0, 0, 410),
