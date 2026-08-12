@@ -158,12 +158,12 @@ func _build_risk_reward_hole():
 		Vector2(10.0, 205), Vector2(56, 205), Vector2(56, 275), Vector2(10.0, 275)
 	]), 1, "lateral")
 
-	# A bunker lies beside the bailout rather than under its intended target. The
-	# FAR_LEFT wood/hybrid target remains fairway, but its dispersion corridor can
-	# reach the bunker. That makes the bailout materially safer than the water line
-	# without making it a zero-risk free lunch.
+	# The bailout bunker begins four yards left of the intended x=-26 landing line.
+	# That is inside Rick/Carl's roughly five-yard 4-hybrid dispersion corridor but
+	# leaves the target itself on fairway. The bailout therefore carries modest
+	# bunker exposure while remaining substantially safer than challenging water.
 	author.add_hazard("bailout_bunker", "Bailout Bunker", "BUNKER", PackedVector2Array([
-		Vector2(-40, 252), Vector2(-32, 252), Vector2(-32, 270), Vector2(-40, 270)
+		Vector2(-38, 252), Vector2(-30, 252), Vector2(-30, 270), Vector2(-38, 270)
 	]), 1, "standard")
 	return author.build_definition()
 
