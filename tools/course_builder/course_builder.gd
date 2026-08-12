@@ -108,6 +108,11 @@ func finish_shape() -> bool:
 
 
 func authored_definition():
+	# The visual editor routinely has incomplete geometry while a user is drawing.
+	# Do not invoke authoritative HoleDefinition validation until the minimum green
+	# geometry exists; incomplete authoring state is expected, not an engine error.
+	if author.green_polygon.size() < 3:
+		return null
 	return author.build_definition()
 
 
@@ -185,7 +190,7 @@ func _refresh_summary() -> void:
 		return
 	var definition = authored_definition()
 	if definition == null:
-		summary_label.text = "Hole invalid/incomplete"
+		summary_label.text = "Hole incomplete — draw a green to validate"
 		return
 	summary_label.text = "Hole %d  Par %d  %.0f yd\nSurfaces: %d  Hazards: %d\nGreen points: %d" % [
 		definition.hole_number,
