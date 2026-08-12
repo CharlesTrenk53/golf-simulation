@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  putting-read-model:
+  putting-models:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,3 +24,6 @@ jobs:
 
       - name: Run POC-15A putting read tests
         run: godot --headless --path . --script res://tests/putting_read_model_test.gd
+
+      - name: Run POC-15B putting execution tests
+        run: godot --headless --path . --script res://tests/putting_execution_model_test.gd
