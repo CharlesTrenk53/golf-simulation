@@ -30,3 +30,6 @@ jobs:
 
       - name: Run POC-15B putting execution tests
         run: godot --headless --path . --script res://tests/putting_execution_model_test.gd
+
+      - name: Run POC-15C putting roll and outcome tests
+        run: godot --headless --path . --script res://tests/putting_roll_model_test.gd
