@@ -117,17 +117,16 @@ func _build_risk_reward_hole():
 	author.set_pin(Vector3(0, 0, 0))
 	author.set_green(_rect(-21, -16, 21, 18))
 
-	# Safety is a deliberately shorter, left-side landing area. Its front edge is
-	# placed around hybrid distance, so the low-skill profiles must surrender real
-	# position to make the water irrelevant rather than getting a free 3-wood at
-	# nearly the same leave as driver.
+	# Safety is a deliberately shorter, left-side landing area. Its front edge now
+	# begins just beyond Rick's 5-wood landing point, so the safe route requires a
+	# genuinely shorter club and a modestly longer second shot without changing any
+	# golfer or personality coefficients.
 	author.add_surface_region("bailout_fairway", "Bailout Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-78, 255), Vector2(-22, 255), Vector2(-22, 325), Vector2(-78, 325)
+		Vector2(-78, 266), Vector2(-22, 266), Vector2(-22, 325), Vector2(-78, 325)
 	]))
 	# The attack fairway is intentionally narrow in both width and depth. Rick/Carl
-	# driver CENTER reaches this fairway, while their slightly shorter 3-wood CENTER
-	# finishes beyond its back edge in rough. That forces the safe strategy toward
-	# the true bailout lane rather than giving it almost the same position for free.
+	# driver CENTER reaches this fairway, while their shorter clubs must use the
+	# true bailout lane to remove the water from play.
 	author.add_surface_region("attack_fairway", "Attack Fairway", "FAIRWAY", PackedVector2Array([
 		Vector2(-10, 205), Vector2(10, 205), Vector2(10, 247), Vector2(-10, 247)
 	]))
