@@ -46,6 +46,9 @@ jobs:
       - name: Run POC-14F live autonomous intent execution tests
         run: timeout 90s ./godot --headless --path . --script res://tests/shot_intent_live_execution_test.gd
 
+      - name: Run POC-14G shotmaking range visual diagnostic contract
+        run: timeout 90s ./godot --headless --path . --script res://tests/shotmaking_range_demo_test.gd
+
       - name: Re-run POC-13 course strategy selector regression tests
         run: timeout 90s ./godot --headless --path . --script res://tests/course_strategy_selector_test.gd
 
