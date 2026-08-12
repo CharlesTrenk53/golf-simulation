@@ -20,6 +20,7 @@ enum Surface {
 
 var hole_definition = null
 var spatial_query = null
+var explicit_hole_out_required: bool = true
 # Kept for legacy callers that inspect rectangular zones. Polygon-defined holes
 # intentionally do not synthesize fake rectangles.
 var zones: Array = []
