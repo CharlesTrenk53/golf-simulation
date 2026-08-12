@@ -138,28 +138,33 @@ func _build_risk_reward_hole():
 	author.set_pin(Vector3(0, 0, 0))
 	author.set_green(_rect(-21, -16, 21, 18))
 
-	# Safety is a deliberately shorter, left-side landing area. Its front edge now
-	# begins just beyond Rick's 5-wood landing point, so the safe route requires a
-	# genuinely shorter club and a modestly longer second shot without changing any
-	# golfer or personality coefficients.
+	# The bailout is a real fairway centered on the FAR_LEFT 5-wood / 4-hybrid
+	# landing cluster for Rick and Carl (roughly x=-26, z=260-264). It gives up
+	# meaningful position versus driver but stays well away from the water line.
 	author.add_surface_region("bailout_fairway", "Bailout Fairway", "FAIRWAY", PackedVector2Array([
-		Vector2(-78, 266), Vector2(-22, 266), Vector2(-22, 325), Vector2(-78, 325)
+		Vector2(-34, 256), Vector2(-18, 256), Vector2(-18, 266), Vector2(-34, 266)
 	]))
-	# The attack fairway is intentionally narrow in both width and depth. Rick/Carl
-	# driver CENTER reaches this fairway, while their shorter clubs must use the
-	# true bailout lane to remove the water from play.
+	# The attack fairway is intentionally narrow in both width and depth. Driver
+	# CENTER reaches it while shorter central lines finish in rough.
 	author.add_surface_region("attack_fairway", "Attack Fairway", "FAIRWAY", PackedVector2Array([
 		Vector2(-10, 205), Vector2(10, 205), Vector2(10, 247), Vector2(-10, 247)
 	]))
 	author.add_surface_region("approach_fairway", "Approach Fairway", "FAIRWAY", _rect(-34, 24, 34, 205))
 	author.add_surface_region("tee", "Tee", "TEE", _rect(-10, 420, 10, 440))
 
-	# Ten yards from center is inside Rick/Carl's driver dispersion corridor, while
-	# the intended center target itself remains dry. Risk therefore comes from the
-	# player's real dispersion around a better landing position.
+	# Water sits just inside the low-skill driver's dispersion corridor, so the
+	# aggressive line buys position by accepting meaningful penalty exposure.
 	author.add_hazard("decision_lake", "Decision Lake", "WATER", PackedVector2Array([
 		Vector2(10.0, 205), Vector2(56, 205), Vector2(56, 275), Vector2(10.0, 275)
 	]), 1, "lateral")
+
+	# A bunker lies beside the bailout rather than under its intended target. The
+	# FAR_LEFT wood/hybrid target remains fairway, but its dispersion corridor can
+	# reach the bunker. That makes the bailout materially safer than the water line
+	# without making it a zero-risk free lunch.
+	author.add_hazard("bailout_bunker", "Bailout Bunker", "BUNKER", PackedVector2Array([
+		Vector2(-40, 252), Vector2(-32, 252), Vector2(-32, 270), Vector2(-40, 270)
+	]), 1, "standard")
 	return author.build_definition()
 
 
