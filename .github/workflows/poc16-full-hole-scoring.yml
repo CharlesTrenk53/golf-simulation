@@ -1,0 +1,28 @@
+name: POC-16 Full-Hole Scoring Checks
+
+on:
+  # During active POC-16 development, focused tests run locally via run-test.ps1.
+  # GitHub validates the integrated scoring slice when the draft PR is promoted.
+  pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  full-hole-scoring:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Run POC-16A full-hole scoring integration
+        run: godot --headless --path . --script res://tests/full_hole_scoring_integration_test.gd
