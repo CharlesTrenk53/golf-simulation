@@ -5,14 +5,18 @@ const ShotOptionGenerator = preload("res://simulation/shot_option_generator.gd")
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const ShotAssessmentPipeline = preload("res://simulation/shot_assessment_pipeline.gd")
 const DecisionQualityEvaluator = preload("res://simulation/decision_quality_evaluator.gd")
+const PuttingPipeline = preload("res://simulation/putting_pipeline.gd")
 
 const WATER_BOUNDARY_STEPS := 80
 const LATERAL_RELIEF_DISTANCE := 4.0
+const PUTT := 3
+const FEET_PER_YARD := 3.0
 
 var option_generator = ShotOptionGenerator.new()
 var bag = GolfBag.new()
 var assessment_pipeline = ShotAssessmentPipeline.new()
 var decision_evaluator = DecisionQualityEvaluator.new()
+var putting_pipeline = PuttingPipeline.new()
 var shot_history: Array = []
 
 func create_state(start_position: Vector3, hole_position: Vector3, par: int = 4, seed_value: int = 1, course_context = null):
@@ -47,7 +51,7 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	result["commitment_quality"] = commitment["label"]
 	result["assessment"] = chosen.get("assessment", {}).duplicate(true)
 
-	if state.course_context != null:
+	if state.course_context != null and int(result["shot_type"]) != PUTT:
 		var landing_surface = state.course_context.surface_at(result["landing_position"])
 		if state.course_context.surface_name(landing_surface) == "WATER":
 			result["outcome"] = "WATER"
@@ -62,7 +66,8 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	else:
 		result["water_entry_point"] = result["landing_position"]
 		result["relief_position"] = result["landing_position"]
-	state.advance_to(next_position, result["outcome"], result["penalty_strokes"])
+	var hole_radius: float = 0.01 if int(result["shot_type"]) == PUTT else 2.0
+	state.advance_to(next_position, result["outcome"], result["penalty_strokes"], hole_radius)
 	result["surface_after"] = state.surface_name()
 	result["lie_quality_after"] = state.current_lie_quality
 	var execution_assessment = _assess_execution(result)
@@ -76,6 +81,22 @@ func play_step(golfer: Node, state, hazards: Array = []) -> Dictionary:
 	return result
 
 func _assess_execution(result: Dictionary) -> Dictionary:
+	if int(result.get("shot_type", -1)) == PUTT and result.has("putting"):
+		var roll: Dictionary = result["putting"].get("roll", {})
+		var miss_feet: float = float(roll.get("finish_distance_from_hole_feet", 0.0))
+		var holed: bool = bool(roll.get("holed", false))
+		var score: float = 100.0 if holed else clampf(100.0 - miss_feet * 12.0, 0.0, 95.0)
+		var quality: String = "GOOD"
+		var reason: String = "Putt was holed"
+		if not holed and miss_feet > 6.0:
+			quality = "POOR"
+			reason = "Putt finished a difficult distance from the hole"
+		elif not holed and miss_feet > 3.0:
+			quality = "ACCEPTABLE"
+			reason = "Putt missed but left a manageable remaining putt"
+		elif not holed:
+			reason = "Putt missed but finished close to the hole"
+		return {"quality": quality, "score": score, "miss_distance": miss_feet / FEET_PER_YARD, "reason": reason}
 	var miss_distance = result["target_position"].distance_to(result["landing_position"])
 	var dispersion = max(float(result.get("club_dispersion", 1.0)), 0.25)
 	var normalized_miss = miss_distance / dispersion
@@ -133,6 +154,8 @@ func play_hole(golfer: Node, start_position: Vector3, hole_position: Vector3, ha
 
 func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array, commitment: Dictionary = {}) -> Dictionary:
 	var shot_type: int = option["shot_type"]
+	if shot_type == PUTT:
+		return _execute_putt(golfer, state, option)
 	var ability = golfer.get_shot_ability(shot_type)
 	var target: Vector3 = option["target_position"]
 	var start: Vector3 = state.ball_position
@@ -165,6 +188,63 @@ func _execute_option(golfer: Node, state, option: Dictionary, hazards: Array, co
 			var hazard = _closest_intersecting_hazard(start, target, hazards)
 			if not hazard.is_empty(): landing = hazard["position"]; landing.y = start.y; outcome = "WATER"; penalty_strokes = 1
 	return {"shot_number": state.strokes + 1, "option": option["name"], "shot_type": shot_type, "club_id": option.get("club_id", ""), "club_name": option.get("club_name", ""), "club_effective_carry": effective_carry, "club_dispersion": dispersion, "start_position": start, "target_position": target, "landing_position": landing, "intended_distance": intended_distance, "outcome": outcome, "penalty_strokes": penalty_strokes, "execution_roll": execution_roll, "remaining_after_shot": landing.distance_to(state.hole_position), "lateral_error": lateral_error, "distance_error": distance_error}
+
+func _execute_putt(golfer: Node, state, option: Dictionary) -> Dictionary:
+	var start: Vector3 = state.ball_position
+	var target: Vector3 = state.hole_position
+	var direction: Vector3 = target - start
+	direction.y = 0.0
+	var distance_yards: float = direction.length()
+	if distance_yards <= 0.0001:
+		direction = Vector3.FORWARD
+	else:
+		direction = direction.normalized()
+	var lateral: Vector3 = Vector3(-direction.z, 0.0, direction.x)
+	var slope_across: float = float(option.get("slope_across_percent", 0.0))
+	var slope_along: float = float(option.get("slope_along_percent", 0.0))
+	var green_speed: float = float(option.get("green_speed", 10.0))
+	var putting: Dictionary = putting_pipeline.resolve(
+		golfer,
+		distance_yards * FEET_PER_YARD,
+		int(randi()),
+		slope_across,
+		slope_along,
+		green_speed
+	)
+	var roll: Dictionary = putting["roll"]
+	var holed: bool = bool(putting["holed"])
+	var rolled_yards: float = float(putting["rolled_distance_feet"]) / FEET_PER_YARD
+	var lateral_yards: float = float(putting["final_lateral_feet"]) / FEET_PER_YARD
+	var landing: Vector3
+	if holed:
+		landing = target
+	else:
+		landing = start + direction * rolled_yards + lateral * lateral_yards
+		landing.y = start.y
+	var outcome: String = "HOLED" if holed else "SUCCESS"
+	return {
+		"shot_number": state.strokes + 1,
+		"option": option["name"],
+		"shot_type": PUTT,
+		"club_id": option.get("club_id", "PUTTER"),
+		"club_name": option.get("club_name", "Putter"),
+		"club_effective_carry": distance_yards,
+		"club_dispersion": 0.25,
+		"start_position": start,
+		"target_position": target,
+		"landing_position": landing,
+		"intended_distance": distance_yards,
+		"outcome": outcome,
+		"penalty_strokes": 0,
+		"execution_roll": -1.0,
+		"remaining_after_shot": landing.distance_to(target),
+		"lateral_error": lateral_yards,
+		"distance_error": rolled_yards - distance_yards,
+		"putting": putting,
+		"putting_strategy": str(putting["strategy"].get("strategy", "NEUTRAL")),
+		"putting_holed": holed,
+		"putting_finish_distance_feet": float(roll.get("finish_distance_from_hole_feet", 0.0))
+	}
 
 func _closest_intersecting_hazard(start: Vector3, end: Vector3, hazards: Array) -> Dictionary:
 	var best: Dictionary = {}; var best_distance = INF
