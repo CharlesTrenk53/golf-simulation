@@ -5,6 +5,7 @@ const HoleAuthoringModel = preload("res://simulation/hole_authoring_model.gd")
 const DataDefinedAutonomousHole = preload("res://simulation/data_defined_autonomous_hole.gd")
 
 var failures: int = 0
+var profile_choices: Dictionary = {}
 
 
 func _init() -> void:
@@ -21,6 +22,19 @@ func _init() -> void:
 		GolferScript.GolferProfile.CAREFUL_CARL
 	]:
 		_run_profile(hole, profile)
+
+	# Rick and Carl have nearly identical playing skill but radically different
+	# risk tolerance. On this purpose-built decision, both must see a genuine
+	# risk/reward choice. We then expect personality, rather than arbitrary labels,
+	# to be capable of separating their preferred strategy.
+	var rick: Dictionary = profile_choices.get("Reckless Rick", {})
+	var carl: Dictionary = profile_choices.get("Careful Carl", {})
+	_assert_true(int(rick.get("aggressive_candidates", 0)) > 0, "Reckless Rick sees aggressive alternatives")
+	_assert_true(int(rick.get("standard_candidates", 0)) > 0, "Reckless Rick sees bailout alternatives")
+	_assert_true(int(carl.get("aggressive_candidates", 0)) > 0, "Careful Carl sees aggressive alternatives")
+	_assert_true(int(carl.get("standard_candidates", 0)) > 0, "Careful Carl sees bailout alternatives")
+	_assert_true(bool(rick.get("chosen_aggressive", false)), "Reckless Rick takes the close aggressive tradeoff")
+	_assert_true(not bool(carl.get("chosen_aggressive", true)), "Careful Carl takes the safer bailout")
 
 	_finish()
 
@@ -44,8 +58,16 @@ func _run_profile(hole, profile: int) -> void:
 		else:
 			standard_candidates += 1
 
-	_assert_true(aggressive_candidates > 0, "%s sees at least one aggressive alternative" % golfer.golfer_name)
-	_assert_true(standard_candidates > 0, "%s sees at least one standard alternative" % golfer.golfer_name)
+	# Wild Bill's much greater driving ability can legitimately erase the exact
+	# tradeoff faced by Rick/Carl, so his candidate mix is diagnostic rather than
+	# a pass/fail requirement.
+	_assert_true(standard_candidates > 0, "%s sees at least one playable standard alternative" % golfer.golfer_name)
+
+	profile_choices[golfer.golfer_name] = {
+		"chosen_aggressive": bool(chosen.get("is_aggressive", false)),
+		"aggressive_candidates": aggressive_candidates,
+		"standard_candidates": standard_candidates
+	}
 
 	print("STRATEGY_PROFILE,%s,risk_tolerance=%.0f,choice=%s,club=%s,target=%s,posture=%s,downside=%.3f,leave=%.1f,decision_expected=%.3f,aggressive_candidates=%d,standard_candidates=%d" % [
 		golfer.golfer_name,
@@ -61,8 +83,6 @@ func _run_profile(hole, profile: int) -> void:
 		standard_candidates
 	])
 
-	# Print the best aggressive and best standard alternatives so we can inspect
-	# whether personality is resolving a genuine close strategic tradeoff.
 	var best_aggressive: Dictionary = {}
 	var best_standard: Dictionary = {}
 	for candidate in evaluated:
@@ -101,14 +121,22 @@ func _build_risk_reward_hole():
 	author.add_tee("back", "Back", Vector3(0, 0, 430), 430.0)
 	author.set_pin(Vector3(0, 0, 0))
 	author.set_green(_rect(-21, -16, 21, 18))
-	# Broad fairway gives a legitimate bailout lane on the left while the center
-	# and right side offer a more direct route near water.
-	author.add_surface_region("fairway", "Fairway", "FAIRWAY", _rect(-72, 24, 58, 410))
+
+	# The left bailout fairway sits at a shorter-club landing distance. A player
+	# choosing more club can gain roughly 15-25 yards, but the longer central/right
+	# landing zone is pinched by water. This creates advancement that is actually
+	# purchased with downside rather than a free same-distance lateral escape.
+	author.add_surface_region("bailout_fairway", "Bailout Fairway", "FAIRWAY", PackedVector2Array([
+		Vector2(-72, 250), Vector2(-18, 250), Vector2(-18, 305), Vector2(-72, 305)
+	]))
+	author.add_surface_region("approach_fairway", "Approach Fairway", "FAIRWAY", _rect(-34, 24, 34, 225))
 	author.add_surface_region("tee", "Tee", "TEE", _rect(-10, 420, 10, 440))
-	# Water occupies the center/right landing corridor around a normal tee-shot
-	# distance but leaves the far-left target lane available.
-	author.add_hazard("right_lake", "Right Lake", "WATER", PackedVector2Array([
-		Vector2(-8, 165), Vector2(62, 165), Vector2(62, 265), Vector2(5, 265)
+
+	# Water guards the longer driver landing window. Far-left bailout geometry is
+	# deliberately behind this window, so a shorter club can find fairway while a
+	# driver that tries to gain the extra distance must challenge the hazard.
+	author.add_hazard("decision_lake", "Decision Lake", "WATER", PackedVector2Array([
+		Vector2(-12, 225), Vector2(58, 225), Vector2(58, 260), Vector2(-4, 260)
 	]), 1, "lateral")
 	return author.build_definition()
 
