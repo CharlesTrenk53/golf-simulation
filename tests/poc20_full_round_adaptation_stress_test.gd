@@ -88,7 +88,12 @@ func _run_profile(course, profile_id: int) -> void:
 		var hole_results: Array = result.get("hole_results", [])
 		for hole_result in hole_results:
 			var hole_number := int(hole_result.get("hole_number", 0))
-			var behavior: Dictionary = hole_result.get("pre_hole_behavior_adjustment", {})
+			# AutonomousRound exposes the transient per-hole behavior bundle under
+			# pre_hole_behavior. The hole itself also carries the same bundle as
+			# round_behavior for diagnostics; prefer the round-level canonical key.
+			var behavior: Dictionary = hole_result.get("pre_hole_behavior", {})
+			if behavior.is_empty():
+				behavior = hole_result.get("round_behavior", {})
 			if behavior.is_empty():
 				failures += 1
 				push_error("FAIL: %s hole %d missing behavior adjustment" % [profile_name, hole_number])
