@@ -41,8 +41,10 @@ func leave_hole(group_id: String, hole_number: int) -> bool:
 	if int(hole_by_group.get(id, 0)) != hole_number:
 		return false
 	var occupants: Array = groups_by_hole[hole_number]
-	if not occupants.erase(id):
+	var index: int = occupants.find(id)
+	if index < 0:
 		return false
+	occupants.remove_at(index)
 	groups_by_hole[hole_number] = occupants
 	hole_by_group.erase(id)
 	return true
