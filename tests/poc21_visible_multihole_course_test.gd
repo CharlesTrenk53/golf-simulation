@@ -79,7 +79,9 @@ func _init() -> void:
 func _first_three_hole_course(full_course):
 	var CourseAuthoringModel = preload("res://simulation/course_authoring_model.gd")
 	var author = CourseAuthoringModel.new()
-	author.configure_identity("poc21_three_hole_runtime", "POC-21 Three-Hole Runtime")
+	# The holes already belong to the authored POC-19 course. Preserve that
+	# authoritative identity while taking only a three-hole runtime slice.
+	author.configure_identity(str(full_course.course_id), "%s — Three-Hole Runtime Slice" % str(full_course.course_name))
 	for index in range(3):
 		if not author.add_hole_definition(full_course.holes[index]):
 			return null
