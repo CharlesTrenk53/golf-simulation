@@ -96,7 +96,6 @@ func _play_visible() -> void:
 			_update_status("Stopped before hole completion")
 			return
 		_update_status("Shot %d — %s" % [int(shot.get("shot_number", 0)), str(shot.get("club_name", shot.get("option", "Shot")))])
-		_frame_shot(shot)
 		await runtime.ball_visual.flight_finished
 		runtime.finish_visual_resolution(shot)
 		await get_tree().create_timer(shot_pause_seconds).timeout
@@ -149,17 +148,16 @@ func _frame_hole() -> void:
 	var pin: Vector3 = hole.pin_position
 	var center: Vector3 = (tee + pin) * 0.5
 	var length: float = max(160.0, tee.distance_to(pin))
-	camera.position = Vector3(center.x + length * 0.50, max(125.0, length * 0.38), center.z + length * 0.10)
-	camera.look_at(center, Vector3.UP)
 
-
-func _frame_shot(shot: Dictionary) -> void:
-	var start: Vector3 = shot.get("start_position", Vector3.ZERO)
-	var landing: Vector3 = shot.get("relief_position", shot.get("landing_position", Vector3.ZERO))
-	var center: Vector3 = (start + landing) * 0.5
-	var distance: float = max(45.0, start.distance_to(landing))
-	camera.position = Vector3(center.x + distance * 0.48, max(42.0, distance * 0.30), center.z + distance * 0.15)
-	camera.look_at(center, Vector3.UP)
+	# Stationary elevated spectator camera: high enough to read the entire hole,
+	# offset laterally to create an isometric-style angle, and aimed near the
+	# midpoint so the player can watch golfer and ball move through the landscape.
+	camera.position = Vector3(
+		center.x + length * 0.58,
+		max(190.0, length * 0.52),
+		center.z + length * 0.28
+	)
+	camera.look_at(Vector3(center.x, 0.0, center.z), Vector3.UP)
 
 
 func _update_status(message: String) -> void:
