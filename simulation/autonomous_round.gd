@@ -5,14 +5,22 @@ extends RefCounted
 # Orchestrates independently playable data-defined holes through RoundState.
 # The same golfer instance is supplied for every hole; this object owns course
 # progression, not golfer identity or shot logic.
+#
+# POC-20C adds a read-only round-context seam. Context and adaptation signals are
+# captured before each hole and supplied to that hole for diagnostics only. They
+# do not yet alter strategy or execution.
 
 const RoundState = preload("res://simulation/round_state.gd")
+const RoundContext = preload("res://simulation/round_context.gd")
+const RoundAdaptationModel = preload("res://simulation/round_adaptation_model.gd")
 const DataDefinedAutonomousHole = preload("res://simulation/data_defined_autonomous_hole.gd")
 
 var course = null
 var tee_id: String = "default"
 var round_state = null
 var hole_results: Array = []
+var round_context_model = RoundContext.new()
+var round_adaptation_model = RoundAdaptationModel.new()
 
 
 func _init(course_definition = null, selected_tee_id: String = "default") -> void:
@@ -38,12 +46,17 @@ func play_current_hole(golfer: Node, seed_value: int = 1) -> Dictionary:
 	if hole == null:
 		return {}
 
+	var pre_hole_context: Dictionary = round_context_model.build(round_state)
+	var pre_hole_adaptation: Dictionary = round_adaptation_model.interpret(golfer, pre_hole_context)
 	var playable = DataDefinedAutonomousHole.new(hole, tee_id)
+	playable.set_round_context(pre_hole_context, pre_hole_adaptation)
 	var result: Dictionary = playable.play_hole(golfer, seed_value)
 	result["hole_number"] = int(hole.hole_number)
 	result["hole_name"] = str(hole.hole_name)
 	result["tee_id"] = tee_id
 	result["recorded"] = false
+	result["pre_hole_round_context"] = pre_hole_context.duplicate(true)
+	result["pre_hole_adaptation"] = pre_hole_adaptation.duplicate(true)
 
 	# A safety stroke limit is not a golf-hole completion. Only a genuinely
 	# holed-out result can advance RoundState.
