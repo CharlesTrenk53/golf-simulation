@@ -13,6 +13,8 @@ extends RefCounted
 # preserving the legacy AutonomousHole path for greens and as a safety fallback.
 # POC-14F now executes the selected shot intent rather than silently reverting to
 # a generic stock-flight engine after the HOW decision has been made.
+# POC-20C allows read-only round context to travel with a hole result without
+# changing any strategy or shot-execution behavior.
 
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
 const HoleCourseContext = preload("res://simulation/hole_course_context.gd")
@@ -25,6 +27,8 @@ var autonomous = AutonomousHole.new()
 var strategy_selector = CourseStrategySelector.new()
 var intent_execution = ShotIntentExecutionBridge.new()
 var tee_id: String = "default"
+var round_context: Dictionary = {}
+var round_adaptation: Dictionary = {}
 var _seed_base: int = 1
 
 
@@ -38,6 +42,11 @@ func _init(definition = null, selected_tee_id: String = "default") -> void:
 	autonomous.option_generator.bag.use_literal_yardages(true)
 	autonomous.bag.use_literal_yardages(true)
 	strategy_selector.use_literal_yardages(true)
+
+
+func set_round_context(context: Dictionary, adaptation: Dictionary = {}) -> void:
+	round_context = context.duplicate(true)
+	round_adaptation = adaptation.duplicate(true)
 
 
 func create_state(seed_value: int = 1):
@@ -188,7 +197,9 @@ func play_hole(golfer: Node, seed_value: int = 1) -> Dictionary:
 		"remaining_distance": state.remaining_distance() if state != null else INF,
 		"final_position": state.ball_position if state != null else Vector3.ZERO,
 		"final_surface": state.surface_name() if state != null else "UNKNOWN",
-		"history": autonomous.shot_history.duplicate(true)
+		"history": autonomous.shot_history.duplicate(true),
+		"round_context": round_context.duplicate(true),
+		"round_adaptation": round_adaptation.duplicate(true)
 	}
 
 
