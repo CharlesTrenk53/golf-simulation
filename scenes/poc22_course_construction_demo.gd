@@ -16,7 +16,9 @@ const GolferScript = preload("res://scenes/golfer.gd")
 @export var shot_pause_seconds: float = 0.7
 @export var spectator_golfer_scale: float = 3.0
 @export var spectator_ball_scale: float = 2.0
-@export var golfer_walk_speed_yards_per_second: float = 85.0
+# Deliberately compressed spectator movement: much slower than the first proof,
+# while still avoiding real-time multi-minute walks between long shots.
+@export var golfer_walk_speed_yards_per_second: float = 32.0
 
 var grid = null
 var economy = null
@@ -132,7 +134,7 @@ func _move_golfer_to_resolved_lie(shot: Dictionary) -> void:
 
 	var start_course: Vector3 = runtime.golfer_visual.course_position
 	var travel_distance: float = Vector2(start_course.x, start_course.z).distance_to(Vector2(resolved.x, resolved.z))
-	var duration: float = clamp(travel_distance / max(1.0, golfer_walk_speed_yards_per_second), 0.35, 2.25)
+	var duration: float = clamp(travel_distance / max(1.0, golfer_walk_speed_yards_per_second), 0.60, 5.50)
 	var target_visual := Vector3(resolved.x, 1.0, resolved.z)
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE)
