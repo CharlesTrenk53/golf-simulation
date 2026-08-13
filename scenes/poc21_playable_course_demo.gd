@@ -46,13 +46,13 @@ func _ready() -> void:
 
 
 func _play_round_visible() -> void:
-	while _running and runtime != null and not runtime.round.round_state.complete:
+	while _running and runtime != null and runtime.authoritative_round != null and not runtime.authoritative_round.round_state.complete:
 		var hole_number: int = runtime.active_hole_number
 		_update_status("Hole %d — preparing" % hole_number)
 		_frame_active_hole()
 		await get_tree().create_timer(hole_pause_seconds).timeout
 
-		var result: Dictionary = runtime.round.play_current_hole(golfer, runtime.seed_value + hole_number - 1)
+		var result: Dictionary = runtime.authoritative_round.play_current_hole(golfer, runtime.seed_value + hole_number - 1)
 		if result.is_empty() or not bool(result.get("recorded", false)):
 			_update_status("Stopped on unfinished Hole %d" % hole_number)
 			_running = false
@@ -65,22 +65,45 @@ func _play_round_visible() -> void:
 			runtime.golfer_visual.observe_shot_result(shot)
 			runtime.ball_visual.present_shot(shot, true)
 			await runtime.ball_visual.flight_finished
-			runtime._apply_resolved_post_shot_position(shot)
+			_apply_resolved_post_shot_position(shot)
 			_frame_shot(shot)
 			await get_tree().create_timer(shot_pause_seconds).timeout
 
-		runtime._capture_presented_hole(result)
-		if not runtime.round.round_state.complete:
-			runtime._load_current_hole_visual()
+		_capture_presented_hole(result)
+		if not runtime.authoritative_round.round_state.complete:
+			runtime._prepare_current_hole_visual()
 
 	var final: Dictionary = runtime.runtime_snapshot()
 	_update_status("Round complete — %d (%+d)" % [int(final.get("total_strokes", 0)), int(final.get("score_to_par", 0))])
 
 
+func _apply_resolved_post_shot_position(shot: Dictionary) -> void:
+	if runtime.ball_visual.has_relief:
+		runtime.ball_visual.apply_simulation_relief()
+	runtime.golfer_visual.move_to_resolved_ball(shot)
+
+
+func _capture_presented_hole(result: Dictionary) -> void:
+	var history: Array = result.get("history", [])
+	runtime.presented_holes.append({
+		"hole_number": int(result.get("hole_number", runtime.active_hole_number)),
+		"hole_name": str(result.get("hole_name", "")),
+		"par": int(result.get("par", 0)),
+		"strokes": int(result.get("strokes", 0)),
+		"finished": bool(result.get("finished", false)),
+		"recorded": bool(result.get("recorded", false)),
+		"shots_presented": history.size(),
+		"simulation_shots": history.size(),
+		"final_position": result.get("final_position", Vector3.ZERO),
+		"visual_ball_position": runtime.ball_visual.course_position,
+		"visual_golfer_position": runtime.golfer_visual.course_position
+	}.duplicate(true))
+
+
 func _frame_active_hole() -> void:
-	if runtime == null or runtime.round == null or runtime.round.round_state == null:
+	if runtime == null or runtime.authoritative_round == null or runtime.authoritative_round.round_state == null:
 		return
-	var hole = runtime.round.round_state.current_hole()
+	var hole = runtime.authoritative_round.round_state.current_hole()
 	if hole == null:
 		return
 	var tee: Vector3 = hole.tee_position(runtime.tee_id)
@@ -101,10 +124,10 @@ func _frame_shot(shot: Dictionary) -> void:
 
 
 func _update_status(message: String) -> void:
-	if runtime == null or runtime.round == null or runtime.round.round_state == null:
+	if runtime == null or runtime.authoritative_round == null or runtime.authoritative_round.round_state == null:
 		status_label.text = message
 		return
-	var state = runtime.round.round_state
+	var state = runtime.authoritative_round.round_state
 	status_label.text = "%s\n%s | Hole %d | %d holes complete | %d strokes | %+d" % [
 		message,
 		str(golfer.golfer_name),
