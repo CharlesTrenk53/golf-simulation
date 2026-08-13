@@ -27,8 +27,9 @@ func render_grid(grid) -> bool:
 		return false
 
 	construction_grid = grid
-	for surface in SURFACE_ORDER:
-		var tile_count := grid.count_surface(surface)
+	for surface_value in SURFACE_ORDER:
+		var surface: String = str(surface_value)
+		var tile_count: int = int(grid.count_surface(surface))
 		if tile_count <= 0:
 			continue
 		_add_surface_mesh(surface, tile_count)
@@ -44,7 +45,7 @@ func clear_grid() -> void:
 
 
 func surface_visual(surface: String) -> Node3D:
-	var normalized := surface.to_upper()
+	var normalized: String = surface.to_upper()
 	for child in get_children():
 		if child is Node3D and str(child.get_meta("classification", "")) == normalized:
 			return child
@@ -52,7 +53,7 @@ func surface_visual(surface: String) -> Node3D:
 
 
 func rendered_tile_count(surface: String) -> int:
-	var visual := surface_visual(surface)
+	var visual: Node3D = surface_visual(surface)
 	if visual == null:
 		return 0
 	return int(visual.get_meta("tile_count", 0))
@@ -62,14 +63,16 @@ func terrain_height_at_grid_corner(corner_x: int, corner_y: int) -> float:
 	if construction_grid == null:
 		return 0.0
 	var elevations: Array[float] = []
-	for tile_y in [corner_y - 1, corner_y]:
-		for tile_x in [corner_x - 1, corner_x]:
+	for tile_y_value in [corner_y - 1, corner_y]:
+		var tile_y: int = int(tile_y_value)
+		for tile_x_value in [corner_x - 1, corner_x]:
+			var tile_x: int = int(tile_x_value)
 			if construction_grid.is_in_bounds(tile_x, tile_y):
 				elevations.append(float(construction_grid.tile_at(tile_x, tile_y).get("elevation", 0.0)))
 	if elevations.is_empty():
 		return 0.0
-	var total := 0.0
-	for elevation in elevations:
+	var total: float = 0.0
+	for elevation: float in elevations:
 		total += elevation
 	return total / float(elevations.size())
 
@@ -77,23 +80,23 @@ func terrain_height_at_grid_corner(corner_x: int, corner_y: int) -> float:
 func _add_surface_mesh(surface: String, tile_count: int) -> void:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
-	var size: float = construction_grid.tile_size_yards
+	var size: float = float(construction_grid.tile_size_yards)
 	var offset_y: float = float(SURFACE_HEIGHT_OFFSET.get(surface, 0.0))
 
-	for y in range(construction_grid.height):
-		for x in range(construction_grid.width):
-			if construction_grid.surface_at(x, y) != surface:
+	for y in range(int(construction_grid.height)):
+		for x in range(int(construction_grid.width)):
+			if str(construction_grid.surface_at(x, y)) != surface:
 				continue
 
-			var x0: float = construction_grid.origin.x + float(x) * size
+			var x0: float = float(construction_grid.origin.x) + float(x) * size
 			var x1: float = x0 + size
-			var z0: float = construction_grid.origin.y + float(y) * size
+			var z0: float = float(construction_grid.origin.y) + float(y) * size
 			var z1: float = z0 + size
 
-			var p00 := Vector3(x0, terrain_height_at_grid_corner(x, y) + offset_y, z0)
-			var p10 := Vector3(x1, terrain_height_at_grid_corner(x + 1, y) + offset_y, z0)
-			var p11 := Vector3(x1, terrain_height_at_grid_corner(x + 1, y + 1) + offset_y, z1)
-			var p01 := Vector3(x0, terrain_height_at_grid_corner(x, y + 1) + offset_y, z1)
+			var p00: Vector3 = Vector3(x0, terrain_height_at_grid_corner(x, y) + offset_y, z0)
+			var p10: Vector3 = Vector3(x1, terrain_height_at_grid_corner(x + 1, y) + offset_y, z0)
+			var p11: Vector3 = Vector3(x1, terrain_height_at_grid_corner(x + 1, y + 1) + offset_y, z1)
+			var p01: Vector3 = Vector3(x0, terrain_height_at_grid_corner(x, y + 1) + offset_y, z1)
 
 			_append_triangle(vertices, normals, p00, p11, p10)
 			_append_triangle(vertices, normals, p00, p01, p11)
@@ -122,7 +125,7 @@ func _add_surface_mesh(surface: String, tile_count: int) -> void:
 
 
 func _append_triangle(vertices: PackedVector3Array, normals: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3) -> void:
-	var normal := (b - a).cross(c - a).normalized()
+	var normal: Vector3 = (b - a).cross(c - a).normalized()
 	vertices.append(a)
 	vertices.append(b)
 	vertices.append(c)
