@@ -127,8 +127,8 @@ func _build_player_hole(economy) -> bool:
 
 
 func _purchase(economy, x: int, y: int, surface: String) -> bool:
-	var result: Dictionary = economy.construct_surface(x, y, surface)
-	return bool(result.get("success", false))
+	var result: Dictionary = economy.build_surface(x, y, surface)
+	return bool(result.get("built", false))
 
 
 func _assert_true(value: bool, label: String) -> void:
