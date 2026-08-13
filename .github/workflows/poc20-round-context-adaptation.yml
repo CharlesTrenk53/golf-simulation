@@ -1,0 +1,41 @@
+name: POC-20 Round Context & Adaptation Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  poc20:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+
+      - name: Run POC-20A round context model
+        run: godot --headless --path . --script res://tests/poc20_round_context_test.gd
+
+      - name: Run POC-20B round adaptation signals
+        run: godot --headless --path . --script res://tests/poc20_round_adaptation_signal_test.gd
+
+      - name: Run POC-20C round context propagation
+        run: godot --headless --path . --script res://tests/poc20_round_context_propagation_test.gd
+
+      - name: Run POC-20D contextual behavior adjustments
+        run: godot --headless --path . --script res://tests/poc20_contextual_behavior_adjustment_test.gd
+
+      - name: Run POC-20E full-round adaptation stress test
+        run: godot --headless --path . --script res://tests/poc20_full_round_adaptation_stress_test.gd
