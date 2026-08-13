@@ -13,6 +13,8 @@ extends RefCounted
 # preserving the legacy AutonomousHole path for greens and as a safety fallback.
 # POC-14F now executes the selected shot intent rather than silently reverting to
 # a generic stock-flight engine after the HOW decision has been made.
+# POC-20C allows read-only round context to travel with a hole result.
+# POC-20D applies bounded transient round behavior without rewriting golfer traits.
 
 const AutonomousHole = preload("res://simulation/autonomous_hole.gd")
 const HoleCourseContext = preload("res://simulation/hole_course_context.gd")
@@ -25,6 +27,9 @@ var autonomous = AutonomousHole.new()
 var strategy_selector = CourseStrategySelector.new()
 var intent_execution = ShotIntentExecutionBridge.new()
 var tee_id: String = "default"
+var round_context: Dictionary = {}
+var round_adaptation: Dictionary = {}
+var round_behavior: Dictionary = {}
 var _seed_base: int = 1
 
 
@@ -38,6 +43,12 @@ func _init(definition = null, selected_tee_id: String = "default") -> void:
 	autonomous.option_generator.bag.use_literal_yardages(true)
 	autonomous.bag.use_literal_yardages(true)
 	strategy_selector.use_literal_yardages(true)
+
+
+func set_round_context(context: Dictionary, adaptation: Dictionary = {}, behavior: Dictionary = {}) -> void:
+	round_context = context.duplicate(true)
+	round_adaptation = adaptation.duplicate(true)
+	round_behavior = behavior.duplicate(true)
 
 
 func create_state(seed_value: int = 1):
@@ -56,7 +67,7 @@ func create_state(seed_value: int = 1):
 func choose_course_strategy(golfer: Node, state) -> Dictionary:
 	if golfer == null or state == null:
 		return {"chosen": {}, "evaluated": []}
-	return strategy_selector.choose(golfer, state)
+	return strategy_selector.choose(golfer, state, round_behavior)
 
 
 func play_step(golfer: Node, state) -> Dictionary:
@@ -102,6 +113,7 @@ func _execute_course_strategy_choice(golfer: Node, state, chosen: Dictionary, ev
 	result["perceived_expected_strokes"] = float(chosen.get("perceived_expected_strokes_to_hole", INF))
 	result["calibration_gap"] = float(chosen.get("calibration_gap", 0.0))
 	result["strategy_candidates"] = evaluated.duplicate(true)
+	result["round_behavior"] = round_behavior.duplicate(true)
 
 	if state.course_context != null:
 		var landing_surface = state.course_context.surface_at(result["landing_position"])
@@ -139,12 +151,16 @@ func _execute_selected_intent(state, chosen: Dictionary, predicted: Dictionary, 
 	var start: Vector3 = state.ball_position
 	var target: Vector3 = chosen.get("target_position", chosen.get("target", state.hole_position))
 	var shot_seed: int = _seed_base * 1009 + (state.strokes + 1) * 7919
-	var realized: Dictionary = intent_execution.execute(start, target, predicted, proficiency, shot_seed)
+	var contextual_proficiency: Dictionary = proficiency.duplicate(true)
+	var baseline_dispersion_multiplier: float = float(contextual_proficiency.get("expected_dispersion_multiplier", 1.0))
+	var round_dispersion_multiplier: float = max(1.0, float(round_behavior.get("execution_dispersion_multiplier", 1.0)))
+	contextual_proficiency["expected_dispersion_multiplier"] = baseline_dispersion_multiplier * round_dispersion_multiplier
+	var realized: Dictionary = intent_execution.execute(start, target, predicted, contextual_proficiency, shot_seed)
 	var landing: Vector3 = realized.get("landing_position", target)
 	var intended_distance: float = start.distance_to(target)
 	var planned_carry: float = float(predicted.get("carry_yards", intended_distance))
 	var predicted_dispersion: float = float(predicted.get("dispersion_yards", chosen.get("dispersion", 1.0)))
-	var proficiency_dispersion: float = float(proficiency.get("expected_dispersion_multiplier", 1.0))
+	var proficiency_dispersion: float = float(contextual_proficiency.get("expected_dispersion_multiplier", 1.0))
 
 	return {
 		"shot_number": state.strokes + 1,
@@ -154,6 +170,7 @@ func _execute_selected_intent(state, chosen: Dictionary, predicted: Dictionary, 
 		"club_name": chosen.get("club_name", ""),
 		"club_effective_carry": planned_carry,
 		"club_dispersion": max(0.25, predicted_dispersion * proficiency_dispersion),
+		"round_execution_dispersion_multiplier": round_dispersion_multiplier,
 		"start_position": start,
 		"target_position": target,
 		"landing_position": landing,
@@ -166,7 +183,7 @@ func _execute_selected_intent(state, chosen: Dictionary, predicted: Dictionary, 
 		"distance_error": float(realized.get("actual_total_yards", intended_distance)) - intended_distance,
 		"shot_intent": chosen.get("chosen_intent", {}).duplicate(true),
 		"predicted_flight": predicted.duplicate(true),
-		"shotmaking_proficiency": proficiency.duplicate(true),
+		"shotmaking_proficiency": contextual_proficiency.duplicate(true),
 		"shot_execution": realized.duplicate(true),
 		"intent_signature": str(realized.get("intent_signature", "")),
 		"execution_seed": shot_seed
@@ -188,7 +205,10 @@ func play_hole(golfer: Node, seed_value: int = 1) -> Dictionary:
 		"remaining_distance": state.remaining_distance() if state != null else INF,
 		"final_position": state.ball_position if state != null else Vector3.ZERO,
 		"final_surface": state.surface_name() if state != null else "UNKNOWN",
-		"history": autonomous.shot_history.duplicate(true)
+		"history": autonomous.shot_history.duplicate(true),
+		"round_context": round_context.duplicate(true),
+		"round_adaptation": round_adaptation.duplicate(true),
+		"round_behavior": round_behavior.duplicate(true)
 	}
 
 
