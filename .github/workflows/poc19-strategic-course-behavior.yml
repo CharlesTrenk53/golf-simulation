@@ -1,0 +1,38 @@
+name: POC-19 Strategic Course Behavior Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
+  workflow_dispatch:
+
+jobs:
+  poc19:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+
+      - name: Run POC-19A strategic proving course structure
+        run: godot --headless --path . --script res://tests/poc19_strategic_course_structure_test.gd
+
+      - name: Run POC-19B single-round personality diagnostic
+        run: godot --headless --path . --script res://tests/poc19_single_round_personality_diagnostic.gd
+
+      - name: Run POC-19C multi-seed personality diagnostic
+        run: godot --headless --path . --script res://tests/poc19_multiseed_personality_diagnostic.gd
+
+      - name: Run POC-19D 100-round profile stress test
+        run: godot --headless --path . --script res://tests/poc19_hundred_round_profile_stress_test.gd
