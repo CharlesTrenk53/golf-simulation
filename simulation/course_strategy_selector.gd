@@ -2,10 +2,13 @@ extends RefCounted
 
 # POC-13D / POC-14E: autonomous course-strategy selector.
 # -------------------------------------------------------
-# POC-13 chooses club + target from golfer, bag and geometry. POC-14 now layers a
+# POC-13 chooses club + target from golfer, bag and geometry. POC-14 layers a
 # separate HOW decision onto each feasible plan: trajectory, shape, swing length
 # and technique. The ordering remains intentional:
 # club + target -> shot intent -> execution.
+#
+# POC-20D optionally accepts transient round behavior adjustments. Callers that
+# omit them retain the exact pre-POC-20 behavior.
 
 const ClubCandidateGenerator = preload("res://simulation/club_candidate_generator.gd")
 const ClubCandidateEvaluator = preload("res://simulation/club_candidate_evaluator.gd")
@@ -23,7 +26,7 @@ func use_literal_yardages(enabled: bool = true) -> void:
 	evaluator.bag.use_literal_yardages(enabled)
 
 
-func choose(golfer: Node, state) -> Dictionary:
+func choose(golfer: Node, state, round_behavior: Dictionary = {}) -> Dictionary:
 	var candidates: Array = generator.generate(golfer, state)
 	if candidates.is_empty():
 		return {"chosen": {}, "evaluated": []}
@@ -41,7 +44,7 @@ func choose(golfer: Node, state) -> Dictionary:
 		)
 		for key in perception.keys():
 			candidate[key] = perception[key]
-		var personality: Dictionary = _personality_strategy_adjustment(golfer, candidate)
+		var personality: Dictionary = _personality_strategy_adjustment(golfer, candidate, round_behavior)
 		for key in personality.keys():
 			candidate[key] = personality[key]
 
@@ -72,16 +75,20 @@ func choose(golfer: Node, state) -> Dictionary:
 	}
 
 
-func _personality_strategy_adjustment(golfer: Node, candidate: Dictionary) -> Dictionary:
+func _personality_strategy_adjustment(golfer: Node, candidate: Dictionary, round_behavior: Dictionary = {}) -> Dictionary:
 	# Course Management answers "what do I think this shot will cost?" Personality
 	# answers "how willing am I to accept variance around that expectation?" This
 	# keeps objective golf scoring and perceived scoring separate from temperament.
 	var perceived: float = float(candidate.get("perceived_expected_strokes_to_hole", INF))
-	var risk_tolerance: float = 50.0
+	var base_risk_tolerance: float = 50.0
 	if golfer != null:
 		var raw_risk = golfer.get("risk_tolerance")
 		if raw_risk != null:
-			risk_tolerance = clamp(float(raw_risk), 0.0, 100.0)
+			base_risk_tolerance = clamp(float(raw_risk), 0.0, 100.0)
+
+	var effective_risk_tolerance: float = base_risk_tolerance
+	if not round_behavior.is_empty():
+		effective_risk_tolerance = clamp(float(round_behavior.get("effective_risk_tolerance", base_risk_tolerance)), 0.0, 100.0)
 
 	var hazard_probability: float = clamp(float(candidate.get("hazard_probability", 0.0)), 0.0, 1.0)
 	var ob_probability: float = clamp(float(candidate.get("out_of_bounds_probability", 0.0)), 0.0, 1.0)
@@ -93,12 +100,14 @@ func _personality_strategy_adjustment(golfer: Node, candidate: Dictionary) -> Di
 	# golfer discounts that same volatility by a similar amount. The adjustment is
 	# intentionally modest: it can break close strategic ties, but should not make
 	# obviously poor shots attractive merely because a golfer is reckless.
-	var risk_preference: float = (50.0 - risk_tolerance) / 50.0
+	var risk_preference: float = (50.0 - effective_risk_tolerance) / 50.0
 	var personality_risk_adjustment: float = downside_exposure * risk_preference * 0.30
 	var decision_expected: float = perceived + personality_risk_adjustment
 
 	return {
-		"risk_tolerance": risk_tolerance,
+		"risk_tolerance": effective_risk_tolerance,
+		"base_risk_tolerance": base_risk_tolerance,
+		"round_risk_tolerance_shift": effective_risk_tolerance - base_risk_tolerance,
 		"downside_exposure": downside_exposure,
 		"personality_risk_adjustment": personality_risk_adjustment,
 		"decision_expected_strokes": decision_expected
