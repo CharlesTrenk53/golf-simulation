@@ -138,6 +138,10 @@ func _material_for_surface(surface: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = _surface_color(surface)
 	material.roughness = 0.95
+	# Construction terrain is a visual projection of authoritative grid data.
+	# Render both sides so camera orientation cannot accidentally make the entire
+	# property disappear because of triangle winding/back-face culling.
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
 
 
