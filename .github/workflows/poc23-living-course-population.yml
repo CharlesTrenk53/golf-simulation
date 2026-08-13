@@ -1,0 +1,4 @@
+name: POC-23 Living Course Population Checks
+
+on:
+  workflow_dispatch:
