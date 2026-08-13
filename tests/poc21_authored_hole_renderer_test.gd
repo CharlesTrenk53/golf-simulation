@@ -17,7 +17,7 @@ func _init() -> void:
 	var renderer = AuthoredHoleRenderer.new()
 	get_root().add_child(renderer)
 	_assert_true(renderer.render_hole(hole, "back"), "renderer accepts valid HoleDefinition")
-	_assert_equal(renderer.rendered_regions.size(), 5, "renderer creates visuals for surfaces, green, hazards, and OB")
+	_assert_equal(renderer.rendered_regions.size(), 6, "renderer creates visuals for surfaces, green, hazards, and OB")
 
 	_assert_region_matches(renderer, hole, "fairway", "FAIRWAY")
 	_assert_region_matches(renderer, hole, "tee", "TEE")
