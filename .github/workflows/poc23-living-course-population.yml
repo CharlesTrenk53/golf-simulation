@@ -1,4 +1,38 @@
 name: POC-23 Living Course Population Checks
 
 on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - ready_for_review
   workflow_dispatch:
+
+jobs:
+  poc23:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+
+      - name: Run POC-23A course population foundation
+        run: godot --headless --path . --script res://tests/poc23_course_population_test.gd
+
+      - name: Run POC-23B independent group progression
+        run: godot --headless --path . --script res://tests/poc23_group_progression_test.gd
+
+      - name: Run POC-23C ordered group start sequencing
+        run: godot --headless --path . --script res://tests/poc23_group_start_sequence_test.gd
+
+      - name: Run POC-23D living-course controller
+        run: godot --headless --path . --script res://tests/poc23_living_course_controller_test.gd
