@@ -1,10 +1,12 @@
 extends Node
 
-# POC-25D: Timed Spectator Group Playback
-# ----------------------------------------
+# POC-25D/E: Timed Spectator Group Playback
+# ------------------------------------------
 # Drives one SpectatorGroupVisual from the authoritative POC-24 event clock.
 # It consumes a deterministic visual schedule built from resolved shot histories
 # and POC-24 pace milestones; it never advances or mutates simulation state.
+# POC-25E refreshes the projected group state before attaching a newly-started
+# playback so hole-clear releases cannot leave the visible status one cycle stale.
 
 const SpectatorHolePlaybackSchedule = preload("res://simulation/spectator_hole_playback_schedule.gd")
 
@@ -21,6 +23,9 @@ func configure(group_visual_value, active_event: Dictionary, hole_definition, te
 	if group_visual_value == null or active_event.is_empty() or hole_definition == null:
 		return false
 	group_visual = group_visual_value
+	if not group_visual.sync_from_authority():
+		clear_playback()
+		return false
 	var play_result: Dictionary = active_event.get("play_result", {})
 	if group_visual.load_authoritative_hole_result(play_result).is_empty():
 		clear_playback()
