@@ -60,8 +60,12 @@ func _test_course_strategy_contract(hole) -> void:
 	_assert_true(bool(execution.get("executed", false)), "human-selected intent executes authoritatively")
 	_assert_equal(str(execution.get("choice_source", "")), "HUMAN", "execution records human decision source")
 	_assert_equal(str(execution.get("decision_id", "")), decision_id, "execution preserves decision identity")
-	_assert_equal(int(state.strokes), strokes_before + 1, "human choice advances exactly one golf shot")
 	var shot: Dictionary = execution.get("shot", {})
+	_assert_equal(
+		int(state.strokes),
+		strokes_before + 1 + int(shot.get("penalty_strokes", 0)),
+		"human choice records one played stroke plus authoritative penalties"
+	)
 	_assert_equal(str(shot.get("choice_source", "")), "HUMAN", "authoritative shot history carries human provenance")
 	_assert_equal(str(shot.get("decision_id", "")), decision_id, "authoritative shot carries matching decision id")
 	_assert_true(not shot.get("selected_option", {}).is_empty(), "human shot retains exact authoritative selected option")
@@ -84,7 +88,12 @@ func _test_ai_contract(hole) -> void:
 	var execution: Dictionary = contract.execute_candidate(ai_index, "AI")
 	_assert_true(bool(execution.get("executed", false)), "AI candidate executes through shared authority")
 	_assert_equal(str(execution.get("choice_source", "")), "AI", "AI execution records AI decision source")
-	_assert_equal(int(state.strokes), 1, "AI shared-contract execution advances one shot")
+	var shot: Dictionary = execution.get("shot", {})
+	_assert_equal(
+		int(state.strokes),
+		1 + int(shot.get("penalty_strokes", 0)),
+		"AI shared-contract execution records one played stroke plus authoritative penalties"
+	)
 	_assert_equal(playable.autonomous.shot_history.size(), 1, "AI execution also appears exactly once in authoritative history")
 
 
