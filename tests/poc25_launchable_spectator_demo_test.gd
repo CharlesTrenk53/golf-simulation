@@ -8,6 +8,11 @@ func _init() -> void:
 	demo.auto_advance = false
 	get_root().add_child(demo)
 
+	# SceneTree tests execute this function before a newly-added child's _ready()
+	# callback is guaranteed to run. Initialize explicitly through the same public
+	# seam used by _ready() so the headless proof is deterministic; a later _ready()
+	# call is harmless because initialize_demo() is idempotent once initialized.
+	assert(demo.initialize_demo())
 	assert(demo.initialized)
 	var initial: Dictionary = demo.snapshot()
 	assert(bool(initial.get("initialized", false)))
