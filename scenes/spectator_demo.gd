@@ -10,7 +10,8 @@ extends Node3D
 # Spectator pacing deliberately compresses uneventful wall-clock time. The
 # authoritative course clock still uses the full POC-24 walking/routine/traffic
 # durations; only the rate at which the presentation consumes those timestamps
-# changes. Visible ball flights pause the course clock so they are never skipped.
+# changes. Visible ball flights and inter-hole walks pause the course clock so
+# neither presentation can be skipped.
 
 const CourseDefinition = preload("res://simulation/course_definition.gd")
 const SpacingAwareTimedCourseController = preload("res://simulation/spacing_aware_timed_course_controller.gd")
@@ -139,10 +140,14 @@ func advance_presentation(real_delta_seconds: float) -> Dictionary:
 		if playback.has_active_flight():
 			any_flying = true
 
-	# Ball flights remain normal-speed visible actions. Between visible actions we
-	# consume authoritative simulation time faster so realistic walking and shot-
-	# routine timestamps do not become multi-second spectator dead air.
-	if not any_flying and not _physical_round_complete():
+	var any_walking: bool = _any_group_walking()
+
+	# Ball flights and inter-hole walks remain normal-speed visible actions.
+	# Between visible actions we consume authoritative simulation time faster so
+	# realistic walking and shot-routine timestamps do not become spectator dead
+	# air. Authority is already at the next-hole boundary while a visual walk is
+	# playing; pausing here prevents the next shot from visually overtaking it.
+	if not any_flying and not any_walking and not _physical_round_complete():
 		var real_step: float = clampf(real_delta_seconds, 0.0, max_real_step_seconds)
 		if real_step > 0.0:
 			session.advance_time(real_step * presentation_simulation_speed(), true)
@@ -187,6 +192,7 @@ func snapshot() -> Dictionary:
 		"simulation_time_seconds": controller.current_time_seconds if controller != null else 0.0,
 		"presentation_speed": presentation_simulation_speed(),
 		"physical_round_complete": _physical_round_complete(),
+		"inter_hole_walk_active": _any_group_walking(),
 		"focus": focus_controller.presentation_snapshot() if focus_controller != null else {},
 		"hud_status": status_label.text if status_label != null else "",
 		"hud_shot": shot_label.text if shot_label != null else "",
@@ -311,7 +317,12 @@ func _update_hud(presentation: Dictionary) -> void:
 	var hole_number: int = int(presentation.get("hole_number", 0))
 	group_label.text = "%s  •  Hole %d" % [_display_group_name(group_id), hole_number]
 
-	if status == "WAITING":
+	var selected_visual = population_view.group_visual(group_id) if population_view != null else null
+	var walking: bool = selected_visual != null and selected_visual.has_active_inter_hole_transition()
+	if walking:
+		var transition: Dictionary = selected_visual.transition_snapshot()
+		status_label.text = "WALKING — to Hole %d tee" % int(transition.get("to_hole_number", hole_number))
+	elif status == "WAITING":
 		if bool(presentation.get("waiting_for_group_ahead", false)):
 			status_label.text = "WAITING — group ahead must clear"
 		elif int(presentation.get("traffic_hole_number", 0)) <= 0:
@@ -325,7 +336,9 @@ func _update_hud(presentation: Dictionary) -> void:
 
 	var shot: Dictionary = presentation.get("shot", {})
 	var phase: String = str(shot.get("phase", "NONE"))
-	if phase == "ACTIVE" or phase == "NEXT":
+	if walking:
+		shot_label.text = "Moving to the next tee"
+	elif phase == "ACTIVE" or phase == "NEXT":
 		var prefix: String = "NOW" if phase == "ACTIVE" else "NEXT"
 		var club: String = str(shot.get("club_name", shot.get("club_id", "")))
 		var intent: String = str(shot.get("intent", ""))
@@ -343,7 +356,7 @@ func _update_hud(presentation: Dictionary) -> void:
 		var member: Dictionary = member_value
 		var line: String = "%s  %s" % [str(member.get("golfer_name", "Golfer")), str(member.get("score_label", "E"))]
 		var seen: int = int(member.get("current_hole_strokes_seen", 0))
-		if status == "PLAYING" and seen > 0:
+		if status == "PLAYING" and seen > 0 and not walking:
 			line += "  •  %d stroke%s this hole" % [seen, "" if seen == 1 else "s"]
 		member_lines.append(line)
 	members_label.text = "\n".join(member_lines)
@@ -363,6 +376,15 @@ func _update_camera(target: Vector3, delta: float, snap_camera: bool) -> void:
 		spectator_camera.global_position = spectator_camera.global_position.lerp(desired, weight)
 	if spectator_camera.global_position.distance_to(target) > 0.01:
 		spectator_camera.look_at(target, Vector3.UP)
+
+
+func _any_group_walking() -> bool:
+	if population_view == null:
+		return false
+	for visual in population_view.group_visuals.values():
+		if visual != null and visual.has_active_inter_hole_transition():
+			return true
+	return false
 
 
 func _physical_round_complete() -> bool:
