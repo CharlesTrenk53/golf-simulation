@@ -6,6 +6,10 @@ extends RefCounted
 # positions and compares that clearance with the following group's credible tee
 # reach. POC-25D replaces the old numbered-shot-wave assumption with the real
 # group order of play: the golfer farthest from the pin plays next.
+#
+# POC-25 spectator traffic also needs an authoritative milestone for when every
+# golfer in the lead group has reached the green (or holed out). This milestone
+# is derived from the same resolved shot order; it does not change shot outcomes.
 
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const GroupPaceModel = preload("res://simulation/group_pace_model.gd")
@@ -80,6 +84,7 @@ func build_clearance_timeline(group_result: Dictionary, hole_definition, tee_id:
 		)
 		elapsed = max(previous_elapsed, elapsed)
 		previous_elapsed = elapsed
+		var resolved_shot: Dictionary = ordered.get("shot", {})
 		timeline.append({
 			"sequence_index": int(ordered.get("sequence_index", timeline.size())),
 			"member_index": member_index,
@@ -92,9 +97,59 @@ func build_clearance_timeline(group_result: Dictionary, hole_definition, tee_id:
 			"clearance_yards": clearance_yards,
 			"cumulative_shots": cumulative_shots,
 			"cumulative_penalties": cumulative_penalties,
-			"distance_to_hole_yards": float(ordered.get("distance_to_hole_yards", 0.0))
+			"distance_to_hole_yards": float(ordered.get("distance_to_hole_yards", 0.0)),
+			"surface_after": str(resolved_shot.get("surface_after", "")),
+			"outcome": str(resolved_shot.get("outcome", ordered.get("outcome", "")))
 		})
 	return timeline
+
+func earliest_all_members_green_time(group_result: Dictionary, hole_definition, tee_id: String = "default") -> Dictionary:
+	if group_result.is_empty() or hole_definition == null:
+		return {"reached": false, "status": "INVALID"}
+	var member_results: Array = group_result.get("member_results", [])
+	var timeline: Array = build_clearance_timeline(group_result, hole_definition, tee_id)
+	if member_results.is_empty() or timeline.is_empty():
+		return {"reached": false, "status": "INVALID", "timeline": timeline.duplicate(true)}
+
+	# Track each golfer's current resolved state. A golfer counts as clear for the
+	# start gate while their ball is on GREEN, or permanently once they have HOLED.
+	var member_green_or_holed: Dictionary = {}
+	for member_index in range(member_results.size()):
+		member_green_or_holed[member_index] = false
+
+	for milestone_value in timeline:
+		if typeof(milestone_value) != TYPE_DICTIONARY:
+			continue
+		var milestone: Dictionary = milestone_value
+		var member_index: int = int(milestone.get("member_index", -1))
+		if member_index < 0 or member_index >= member_results.size():
+			continue
+		var surface_after: String = str(milestone.get("surface_after", "")).to_upper()
+		var outcome: String = str(milestone.get("outcome", "")).to_upper()
+		member_green_or_holed[member_index] = surface_after == "GREEN" or outcome == "HOLED"
+
+		var all_ready: bool = true
+		for ready_value in member_green_or_holed.values():
+			if not bool(ready_value):
+				all_ready = false
+				break
+		if all_ready:
+			return {
+				"reached": true,
+				"status": "ALL_LEAD_GOLFERS_ON_GREEN",
+				"green_time_seconds": float(milestone.get("elapsed_seconds", 0.0)),
+				"safe_clearance_yards": float(milestone.get("clearance_yards", 0.0)),
+				"shot_wave": int(milestone.get("shot_wave", 0)),
+				"sequence_index": int(milestone.get("sequence_index", -1)),
+				"member_index": member_index,
+				"timeline": timeline.duplicate(true)
+			}
+
+	return {
+		"reached": false,
+		"status": "LEAD_GROUP_NOT_ALL_ON_GREEN",
+		"timeline": timeline.duplicate(true)
+	}
 
 func earliest_safe_tee_time(group_result: Dictionary, hole_definition, following_golfers: Array, tee_id: String = "default") -> Dictionary:
 	var credible_reach: float = maximum_tee_reach(following_golfers)
