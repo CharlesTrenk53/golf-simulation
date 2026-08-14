@@ -6,10 +6,9 @@ extends RefCounted
 # simulated traffic event. POC-25D also carries the ordered-shot milestone that
 # produced the clearance so spectator playback and traffic can agree exactly.
 #
-# POC-25 spectator start policy adds a second authoritative gate: the following
-# group cannot be released before every lead-group golfer is on the green (or
-# holed out). The final release is the later of the reach-safety milestone and
-# the all-lead-golfers-on-green milestone.
+# POC-25 spectator start policy requires both reach safety and every lead-group
+# golfer to be on the green (or holed out). SameHoleSpacingModel now returns that
+# unified effective milestone so first-tee and later-hole traffic share one rule.
 
 const SameHoleSpacingModel = preload("res://simulation/same_hole_spacing_model.gd")
 
@@ -37,26 +36,13 @@ func schedule_release(lead_group_id: String, following_group_id: String, lead_gr
 			"credible_reach_yards": float(spacing.get("credible_reach_yards", 0.0))
 		}
 
-	var green_gate: Dictionary = spacing_model.earliest_all_members_green_time(lead_group_result, hole_definition, tee_id)
-	if not bool(green_gate.get("reached", false)):
-		return {
-			"scheduled": false,
-			"lead_group_id": lead_id,
-			"following_group_id": follower_id,
-			"hole_number": int(hole_definition.hole_number),
-			"status": str(green_gate.get("status", "WAIT_FOR_LEAD_GROUP_GREEN")),
-			"credible_reach_yards": float(spacing.get("credible_reach_yards", 0.0)),
-			"range_safe_time_seconds": float(spacing.get("safe_time_seconds", 0.0))
-		}
-
-	var range_safe_time: float = float(spacing.get("safe_time_seconds", 0.0))
-	var green_time: float = float(green_gate.get("green_time_seconds", 0.0))
-	var relative_time: float = max(range_safe_time, green_time)
-	var release_milestone: Dictionary = spacing if range_safe_time >= green_time else green_gate
+	var relative_time: float = float(spacing.get("safe_time_seconds", 0.0))
+	var range_safe_time: float = float(spacing.get("range_safe_time_seconds", relative_time))
+	var green_time: float = float(spacing.get("lead_group_green_time_seconds", relative_time))
 	var event := {
 		"scheduled": true,
 		"status": "SCHEDULED_SAFE_TEE_RELEASE",
-		"release_rule": "RANGE_SAFE_AND_ALL_LEAD_GOLFERS_ON_GREEN",
+		"release_rule": str(spacing.get("release_rule", "RANGE_SAFE_AND_ALL_LEAD_GOLFERS_ON_GREEN")),
 		"lead_group_id": lead_id,
 		"following_group_id": follower_id,
 		"hole_number": int(hole_definition.hole_number),
@@ -66,10 +52,10 @@ func schedule_release(lead_group_id: String, following_group_id: String, lead_gr
 		"range_safe_time_seconds": range_safe_time,
 		"lead_group_green_time_seconds": green_time,
 		"credible_reach_yards": float(spacing.get("credible_reach_yards", 0.0)),
-		"safe_clearance_yards": float(release_milestone.get("safe_clearance_yards", 0.0)),
-		"shot_wave": int(release_milestone.get("shot_wave", 0)),
-		"sequence_index": int(release_milestone.get("sequence_index", -1)),
-		"member_index": int(release_milestone.get("member_index", -1))
+		"safe_clearance_yards": float(spacing.get("safe_clearance_yards", 0.0)),
+		"shot_wave": int(spacing.get("shot_wave", 0)),
+		"sequence_index": int(spacing.get("sequence_index", -1)),
+		"member_index": int(spacing.get("member_index", -1))
 	}
 	pending_by_group[follower_id] = event
 	return event.duplicate(true)
