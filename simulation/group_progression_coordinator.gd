@@ -1,12 +1,16 @@
 extends RefCounted
 
-# POC-23B / POC-25 / POC-26A: Group Progression Coordinator
-# ----------------------------------------------------------
+# POC-23B / POC-25 / POC-26A / POC-26C: Group Progression Coordinator
+# ---------------------------------------------------------------------
 # Advances one authoritative GolferGroup through one course hole while preserving
 # each golfer's independent AutonomousRound as the source of score/progression.
 # POC-25 added tee honors. POC-26A moves tee/away order into a live incremental
 # GroupHoleSession while retaining play_current_hole() as the whole-hole
 # compatibility facade used by the existing living-course stack.
+#
+# POC-26C allows begin_session() to designate one normal member as human-controlled.
+# The default remains -1, so every pre-existing autonomous caller retains its
+# original behavior while mixed participation uses the same GroupHoleSession.
 
 const GroupTeeOrderModel = preload("res://simulation/group_tee_order_model.gd")
 const GroupHoleSession = preload("res://simulation/group_hole_session.gd")
@@ -14,9 +18,9 @@ const GroupHoleSession = preload("res://simulation/group_hole_session.gd")
 var tee_order_model = GroupTeeOrderModel.new()
 
 
-func begin_session(group, seed_value: int = 1):
+func begin_session(group, seed_value: int = 1, human_member_index: int = -1):
 	var session = GroupHoleSession.new()
-	if not session.begin(group, seed_value):
+	if not session.begin(group, seed_value, human_member_index):
 		return null
 	return session
 
@@ -28,7 +32,7 @@ func play_current_hole(group, seed_value: int = 1) -> Dictionary:
 
 	# Existing autonomous callers still request a fully resolved group hole. They
 	# now drive the exact same one-turn-at-a-time authority that player
-	# participation will pause between turns.
+	# participation pauses between turns. No human member is designated here.
 	var safety_turns: int = 0
 	while not session.is_complete() and not session.has_failed() and safety_turns < 1000:
 		var turn_result: Dictionary = session.play_current_turn()
