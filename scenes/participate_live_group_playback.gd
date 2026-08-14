@@ -104,6 +104,14 @@ func present_next(animate: bool = true) -> Dictionary:
 	var event: Dictionary = queued_events[0]
 	var member_index: int = int(event.get("member_index", -1))
 	var world_shot: Dictionary = event.get("world_shot", {})
+	# A next-hole playback can be created while the visual inter-hole walk is only
+	# beginning, so configure() may have captured the previous green as the tee-rest
+	# formation. The first tee shot cannot present until that walk is finished; at
+	# this exact boundary the visible member positions are therefore the true new
+	# tee formation. Refresh once before any tee destination is recorded so later
+	# first-shot completions return golfers to the new tee, never the prior green.
+	if int(world_shot.get("shot_number", 0)) == 1 and tee_destinations.is_empty():
+		tee_rest_positions = group_visual.member_world_positions()
 	if not _begin_member_visual(member_index, world_shot, animate):
 		return {}
 	queued_events.remove_at(0)
