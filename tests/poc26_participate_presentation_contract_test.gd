@@ -80,9 +80,11 @@ func _init() -> void:
 	_assert_near(float(presentation.get("situation", {}).get("remaining_distance_yards", -1.0)), float(decision.get("situation", {}).get("remaining_distance_yards", -2.0)), 0.0001, "HUD distance comes from authoritative situation")
 	var choices: Array = presentation.get("choices", [])
 	_assert_true(not choices.is_empty(), "playable HUD exposes human-selectable authoritative choices")
+	var hidden_ai_choices: int = 0
 	for choice_value in choices:
-		if typeof(choice_value) == TYPE_DICTIONARY:
-			_assert_true(bool(choice_value.get("human_selectable", false)), "HUD never exposes hidden AI-only candidate as player command")
+		if typeof(choice_value) == TYPE_DICTIONARY and not bool(choice_value.get("human_selectable", false)):
+			hidden_ai_choices += 1
+	_assert_equal(hidden_ai_choices, 0, "HUD exposes no hidden AI-only candidate as player command")
 	var current_turn: Dictionary = runtime.live_session_snapshot("player_group").get("current_turn", {})
 	_assert_equal(int(current_turn.get("member_index", -1)), 0, "playable HUD belongs to designated human golfer")
 	_assert_equal(str(current_turn.get("golfer_name", "")), str(player_golfers[0].get("golfer_name")), "playable HUD identifies human golfer")
