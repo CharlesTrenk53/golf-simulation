@@ -15,7 +15,8 @@ extends Node
 # balls resolve normally, but golfers remain at the tee until every member has
 # played. The group then disperses together toward the authoritative first-shot
 # resolved positions. This is presentation only; shot order and outcomes remain
-# unchanged.
+# unchanged. Headless/immediate playback drains presentation-only movement so
+# deterministic clock jumps never stall behind animations that require frames.
 
 const SpectatorHolePlaybackSchedule = preload("res://simulation/spectator_hole_playback_schedule.gd")
 
@@ -54,7 +55,7 @@ func configure(group_visual_value, active_event: Dictionary, hole_definition, te
 		clear_playback()
 		return false
 	current_time_seconds = float(schedule.get("start_time_seconds", 0.0))
-	tee_rest_positions = group_visual.member_world_positions()
+	tee_rest_positions = _resolved_tee_rest_positions()
 	return tee_rest_positions.size() == group_visual.member_visuals.size()
 
 
@@ -63,6 +64,8 @@ func advance_to(simulation_time_seconds: float, animate: bool = false) -> Array:
 		return []
 	if simulation_time_seconds < current_time_seconds:
 		return []
+	if not animate:
+		_complete_presentation_only_movement_for_immediate_playback()
 	if animate and has_active_tee_dispersion():
 		return []
 	current_time_seconds = simulation_time_seconds
@@ -257,3 +260,28 @@ func _begin_tee_dispersion() -> void:
 		"start_positions": starts.duplicate(),
 		"destination_positions": destinations.duplicate()
 	}
+
+
+func _resolved_tee_rest_positions() -> Array:
+	if group_visual == null:
+		return []
+	if group_visual.has_active_inter_hole_transition():
+		var transition: Dictionary = group_visual.transition_snapshot()
+		var destinations = transition.get("destination_positions", [])
+		if typeof(destinations) == TYPE_ARRAY and destinations.size() == group_visual.member_visuals.size():
+			return destinations.duplicate()
+	return group_visual.member_world_positions()
+
+
+func _complete_presentation_only_movement_for_immediate_playback() -> void:
+	if group_visual == null:
+		return
+	if group_visual.has_active_inter_hole_transition():
+		var transition: Dictionary = group_visual.transition_snapshot()
+		var duration: float = maxf(float(transition.get("duration_seconds", 0.0)), 0.001)
+		var elapsed: float = maxf(float(transition.get("elapsed_seconds", 0.0)), 0.0)
+		group_visual.advance_inter_hole_transition(maxf(duration - elapsed, 0.001))
+	if has_active_tee_dispersion():
+		var duration: float = maxf(float(tee_dispersion.get("duration_seconds", tee_dispersion_duration_seconds)), 0.001)
+		var elapsed: float = maxf(float(tee_dispersion.get("elapsed_seconds", 0.0)), 0.0)
+		advance_tee_dispersion(maxf(duration - elapsed, 0.001))
