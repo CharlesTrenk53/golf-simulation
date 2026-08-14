@@ -10,8 +10,8 @@ extends Node3D
 # Spectator pacing deliberately compresses uneventful wall-clock time. The
 # authoritative course clock still uses the full POC-24 walking/routine/traffic
 # durations; only the rate at which the presentation consumes those timestamps
-# changes. Visible ball flights and inter-hole walks pause the course clock so
-# neither presentation can be skipped.
+# changes. Visible ball flights, tee dispersal walks, and inter-hole walks pause
+# the course clock so none of those presentations can be skipped.
 
 const CourseDefinition = preload("res://simulation/course_definition.gd")
 const SpacingAwareTimedCourseController = preload("res://simulation/spacing_aware_timed_course_controller.gd")
@@ -142,11 +142,11 @@ func advance_presentation(real_delta_seconds: float) -> Dictionary:
 
 	var any_walking: bool = _any_group_walking()
 
-	# Ball flights and inter-hole walks remain normal-speed visible actions.
-	# Between visible actions we consume authoritative simulation time faster so
-	# realistic walking and shot-routine timestamps do not become spectator dead
-	# air. Authority is already at the next-hole boundary while a visual walk is
-	# playing; pausing here prevents the next shot from visually overtaking it.
+	# Ball flights and visible group walks remain normal-speed actions. Between
+	# visible actions we consume authoritative simulation time faster so realistic
+	# walking and shot-routine timestamps do not become spectator dead air.
+	# Authority may already be ahead of the presentation; pausing here prevents a
+	# later shot from visually overtaking a tee-dispersal or inter-hole walk.
 	if not any_flying and not any_walking and not _physical_round_complete():
 		var real_step: float = clampf(real_delta_seconds, 0.0, max_real_step_seconds)
 		if real_step > 0.0:
@@ -192,7 +192,8 @@ func snapshot() -> Dictionary:
 		"simulation_time_seconds": controller.current_time_seconds if controller != null else 0.0,
 		"presentation_speed": presentation_simulation_speed(),
 		"physical_round_complete": _physical_round_complete(),
-		"inter_hole_walk_active": _any_group_walking(),
+		"inter_hole_walk_active": _any_inter_hole_walk(),
+		"visible_walk_active": _any_group_walking(),
 		"focus": focus_controller.presentation_snapshot() if focus_controller != null else {},
 		"hud_status": status_label.text if status_label != null else "",
 		"hud_shot": shot_label.text if shot_label != null else "",
@@ -318,8 +319,13 @@ func _update_hud(presentation: Dictionary) -> void:
 	group_label.text = "%s  •  Hole %d" % [_display_group_name(group_id), hole_number]
 
 	var selected_visual = population_view.group_visual(group_id) if population_view != null else null
-	var walking: bool = selected_visual != null and selected_visual.has_active_inter_hole_transition()
-	if walking:
+	var selected_playback = session.playback_for_group(group_id) if session != null else null
+	var inter_hole_walking: bool = selected_visual != null and selected_visual.has_active_inter_hole_transition()
+	var tee_dispersion_walking: bool = selected_playback != null and selected_playback.has_active_tee_dispersion()
+	var walking: bool = inter_hole_walking or tee_dispersion_walking
+	if tee_dispersion_walking:
+		status_label.text = "WALKING — dispersing to tee shots"
+	elif inter_hole_walking:
 		var transition: Dictionary = selected_visual.transition_snapshot()
 		status_label.text = "WALKING — to Hole %d tee" % int(transition.get("to_hole_number", hole_number))
 	elif status == "WAITING":
@@ -336,7 +342,9 @@ func _update_hud(presentation: Dictionary) -> void:
 
 	var shot: Dictionary = presentation.get("shot", {})
 	var phase: String = str(shot.get("phase", "NONE"))
-	if walking:
+	if tee_dispersion_walking:
+		shot_label.text = "Group moving to their balls"
+	elif inter_hole_walking:
 		shot_label.text = "Moving to the next tee"
 	elif phase == "ACTIVE" or phase == "NEXT":
 		var prefix: String = "NOW" if phase == "ACTIVE" else "NEXT"
@@ -378,11 +386,22 @@ func _update_camera(target: Vector3, delta: float, snap_camera: bool) -> void:
 		spectator_camera.look_at(target, Vector3.UP)
 
 
-func _any_group_walking() -> bool:
+func _any_inter_hole_walk() -> bool:
 	if population_view == null:
 		return false
 	for visual in population_view.group_visuals.values():
 		if visual != null and visual.has_active_inter_hole_transition():
+			return true
+	return false
+
+
+func _any_group_walking() -> bool:
+	if _any_inter_hole_walk():
+		return true
+	if session == null:
+		return false
+	for playback in session.active_playbacks.values():
+		if playback != null and playback.has_active_tee_dispersion():
 			return true
 	return false
 
