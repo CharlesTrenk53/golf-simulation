@@ -44,7 +44,10 @@ func _init() -> void:
 	assert(view.group_visual("group_2").projected_status == "WAITING")
 
 	var lead_hole_one: Dictionary = controller.active_event("group_1")
-	var release: Dictionary = lead_hole_one.get("tee_release", {})
+	# Same-hole release authority lives in the scheduler, not in active_hole_events.
+	# An empty pending release means spacing requires the follower to wait until
+	# hole one clears completely.
+	var release: Dictionary = controller.release_scheduler.pending_release("group_2")
 	var same_hole_release: bool = bool(release.get("scheduled", false))
 	var lead_finish: float = float(lead_hole_one.get("finish_time_seconds", -1.0))
 	assert(lead_finish > controller.current_time_seconds)
@@ -55,8 +58,6 @@ func _init() -> void:
 		release_path = "SAFE_SAME_HOLE"
 		assert(follower_start_boundary > controller.current_time_seconds)
 		assert(follower_start_boundary <= lead_finish)
-	else:
-		assert(str(release.get("status", "WAIT_FOR_HOLE_CLEAR")) == "WAIT_FOR_HOLE_CLEAR")
 
 	var through_release: Array = session.advance_time(follower_start_boundary - controller.current_time_seconds, false)
 	assert(not through_release.is_empty())
@@ -65,7 +66,6 @@ func _init() -> void:
 	var follower_hole_one: Dictionary = controller.active_event("group_2")
 	assert(not follower_hole_one.is_empty())
 	var actual_follower_start: float = float(follower_hole_one.get("start_time_seconds", -1.0))
-	print("POC25_RELEASE_DEBUG path=%s expected=%.6f actual=%.6f controller=%.6f lead_finish=%.6f processed=%s" % [release_path, follower_start_boundary, actual_follower_start, controller.current_time_seconds, lead_finish, str(through_release)])
 	assert(is_equal_approx(actual_follower_start, follower_start_boundary))
 	assert(session.playback_for_group("group_2") != null)
 	assert(view.group_visual("group_2").projected_status == "PLAYING")
