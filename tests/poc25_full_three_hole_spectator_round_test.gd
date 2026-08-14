@@ -48,7 +48,14 @@ func _init() -> void:
 	var inter_hole_wait_count: int = 0
 	var processed_event_count: int = 0
 	var iterations: int = 0
-	while iterations < 240 and (str(group_1.status) != "FINISHED" or str(group_2.status) != "FINISHED"):
+	while iterations < 240 and (
+		str(group_1.status) != "FINISHED"
+		or str(group_2.status) != "FINISHED"
+		or controller.traffic.group_hole("group_1") != 0
+		or controller.traffic.group_hole("group_2") != 0
+		or not controller.active_event("group_1").is_empty()
+		or not controller.active_event("group_2").is_empty()
+	):
 		iterations += 1
 		var before_time: float = controller.current_time_seconds
 		var emitted: Array = session.advance_time(30.0, false)
@@ -124,7 +131,7 @@ func _init() -> void:
 	assert(view.group_visual("group_1").projected_status == "FINISHED")
 	assert(view.group_visual("group_2").projected_status == "FINISHED")
 
-	print("POC25_FULL_ROUND_SUMMARY time=%.1f starts=%d finishes=%d playbacks=%d overlap=%s inter_hole_waits=%d processed=%d" % [controller.current_time_seconds, play_start_count, hole_finish_count, int(session_snapshot.get("completed_playback_count", 0)), str(overlap_seen), inter_hole_wait_count, processed_event_count])
+	print("POC25_FULL_ROUND_SUMMARY time=%.1f starts=%d finishes=%d playbacks=%d overlap=%s inter_hole_waits=%d processed=%d iterations=%d" % [controller.current_time_seconds, play_start_count, hole_finish_count, int(session_snapshot.get("completed_playback_count", 0)), str(overlap_seen), inter_hole_wait_count, processed_event_count, iterations])
 	print("POC-25F FULL TWO-GROUP THREE-HOLE SPECTATOR ROUND PASSED")
 
 	session.queue_free();view.queue_free();world.queue_free()
