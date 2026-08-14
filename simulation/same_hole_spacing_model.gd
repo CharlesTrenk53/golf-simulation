@@ -10,6 +10,8 @@ extends RefCounted
 # POC-25 spectator traffic also needs an authoritative milestone for when every
 # golfer in the lead group has reached the green (or holed out). This milestone
 # is derived from the same resolved shot order; it does not change shot outcomes.
+# The effective safe-tee time is the later of range safety and the all-green gate,
+# so the same rule applies to the opening tee and every later-hole transition.
 
 const GolfBag = preload("res://simulation/golf_bag.gd")
 const GroupPaceModel = preload("res://simulation/group_pace_model.gd")
@@ -157,6 +159,7 @@ func earliest_safe_tee_time(group_result: Dictionary, hole_definition, following
 	if credible_reach <= 0.0 or timeline.is_empty():
 		return {"safe": false, "status": "INVALID", "credible_reach_yards": credible_reach}
 
+	var range_milestone: Dictionary = {}
 	for index in range(timeline.size()):
 		var remains_safe: bool = true
 		for later_index in range(index, timeline.size()):
@@ -164,22 +167,42 @@ func earliest_safe_tee_time(group_result: Dictionary, hole_definition, following
 				remains_safe = false
 				break
 		if remains_safe:
-			var milestone: Dictionary = timeline[index]
-			return {
-				"safe": true,
-				"status": "SAFE_SAME_HOLE",
-				"credible_reach_yards": credible_reach,
-				"safe_time_seconds": float(milestone.get("elapsed_seconds", 0.0)),
-				"safe_clearance_yards": float(milestone.get("clearance_yards", 0.0)),
-				"shot_wave": int(milestone.get("shot_wave", 0)),
-				"sequence_index": int(milestone.get("sequence_index", -1)),
-				"member_index": int(milestone.get("member_index", -1)),
-				"timeline": timeline.duplicate(true)
-			}
+			range_milestone = timeline[index]
+			break
 
+	if range_milestone.is_empty():
+		return {
+			"safe": false,
+			"status": "WAIT_FOR_HOLE_CLEAR",
+			"credible_reach_yards": credible_reach,
+			"timeline": timeline.duplicate(true)
+		}
+
+	var green_gate: Dictionary = earliest_all_members_green_time(group_result, hole_definition, tee_id)
+	if not bool(green_gate.get("reached", false)):
+		return {
+			"safe": false,
+			"status": "WAIT_FOR_LEAD_GROUP_GREEN",
+			"credible_reach_yards": credible_reach,
+			"range_safe_time_seconds": float(range_milestone.get("elapsed_seconds", 0.0)),
+			"timeline": timeline.duplicate(true)
+		}
+
+	var range_time: float = float(range_milestone.get("elapsed_seconds", 0.0))
+	var green_time: float = float(green_gate.get("green_time_seconds", 0.0))
+	var effective_time: float = max(range_time, green_time)
+	var release_milestone: Dictionary = range_milestone if range_time >= green_time else green_gate
 	return {
-		"safe": false,
-		"status": "WAIT_FOR_HOLE_CLEAR",
+		"safe": true,
+		"status": "SAFE_SAME_HOLE_AFTER_LEAD_GREEN",
+		"release_rule": "RANGE_SAFE_AND_ALL_LEAD_GOLFERS_ON_GREEN",
 		"credible_reach_yards": credible_reach,
+		"safe_time_seconds": effective_time,
+		"range_safe_time_seconds": range_time,
+		"lead_group_green_time_seconds": green_time,
+		"safe_clearance_yards": float(release_milestone.get("safe_clearance_yards", release_milestone.get("clearance_yards", 0.0))),
+		"shot_wave": int(release_milestone.get("shot_wave", 0)),
+		"sequence_index": int(release_milestone.get("sequence_index", -1)),
+		"member_index": int(release_milestone.get("member_index", -1)),
 		"timeline": timeline.duplicate(true)
 	}
