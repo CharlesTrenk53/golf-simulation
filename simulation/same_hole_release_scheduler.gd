@@ -1,11 +1,14 @@
 extends RefCounted
 
-# POC-24F: Same-Hole Release Scheduler
-# ------------------------------------
+# POC-24F / POC-25D: Same-Hole Release Scheduler
+# -----------------------------------------------
 # Converts the spacing model's relative safe-tee milestone into an absolute
-# simulated traffic event. This scheduler does not advance golfer rounds or own
-# course occupancy; it only determines when a following group becomes eligible
-# to tee off behind a resolved lead group.
+# simulated traffic event. POC-25D also carries the ordered-shot milestone that
+# produced the clearance so spectator playback and traffic can agree exactly.
+#
+# POC-25 spectator start policy requires both reach safety and every lead-group
+# golfer to be on the green (or holed out). SameHoleSpacingModel now returns that
+# unified effective milestone so first-tee and later-hole traffic share one rule.
 
 const SameHoleSpacingModel = preload("res://simulation/same_hole_spacing_model.gd")
 
@@ -34,18 +37,25 @@ func schedule_release(lead_group_id: String, following_group_id: String, lead_gr
 		}
 
 	var relative_time: float = float(spacing.get("safe_time_seconds", 0.0))
+	var range_safe_time: float = float(spacing.get("range_safe_time_seconds", relative_time))
+	var green_time: float = float(spacing.get("lead_group_green_time_seconds", relative_time))
 	var event := {
 		"scheduled": true,
 		"status": "SCHEDULED_SAFE_TEE_RELEASE",
+		"release_rule": str(spacing.get("release_rule", "RANGE_SAFE_AND_ALL_LEAD_GOLFERS_ON_GREEN")),
 		"lead_group_id": lead_id,
 		"following_group_id": follower_id,
 		"hole_number": int(hole_definition.hole_number),
 		"lead_start_time_seconds": lead_start_time_seconds,
 		"relative_safe_time_seconds": relative_time,
 		"release_time_seconds": lead_start_time_seconds + relative_time,
+		"range_safe_time_seconds": range_safe_time,
+		"lead_group_green_time_seconds": green_time,
 		"credible_reach_yards": float(spacing.get("credible_reach_yards", 0.0)),
 		"safe_clearance_yards": float(spacing.get("safe_clearance_yards", 0.0)),
-		"shot_wave": int(spacing.get("shot_wave", 0))
+		"shot_wave": int(spacing.get("shot_wave", 0)),
+		"sequence_index": int(spacing.get("sequence_index", -1)),
+		"member_index": int(spacing.get("member_index", -1))
 	}
 	pending_by_group[follower_id] = event
 	return event.duplicate(true)
