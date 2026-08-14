@@ -1,88 +1,46 @@
 extends RefCounted
 
-# POC-23B / POC-25: Group Progression Coordinator
-# ------------------------------------------------
+# POC-23B / POC-25 / POC-26A: Group Progression Coordinator
+# ----------------------------------------------------------
 # Advances one authoritative GolferGroup through one course hole while preserving
 # each golfer's independent AutonomousRound as the source of score/progression.
-# POC-25 adds authoritative tee order: seeded random on the opening tee, then
-# previous-hole honors with stable tie order. Away play is derived separately
-# from the resolved shot histories.
+# POC-25 added tee honors. POC-26A moves tee/away order into a live incremental
+# GroupHoleSession while retaining play_current_hole() as the whole-hole
+# compatibility facade used by the existing living-course stack.
 
 const GroupTeeOrderModel = preload("res://simulation/group_tee_order_model.gd")
-
-const STATUS_PLAYING := "PLAYING"
-const STATUS_FINISHED := "FINISHED"
+const GroupHoleSession = preload("res://simulation/group_hole_session.gd")
 
 var tee_order_model = GroupTeeOrderModel.new()
 
 
+func begin_session(group, seed_value: int = 1):
+	var session = GroupHoleSession.new()
+	if not session.begin(group, seed_value):
+		return null
+	return session
+
+
 func play_current_hole(group, seed_value: int = 1) -> Dictionary:
-	if group == null or str(group.status) != STATUS_PLAYING:
-		return {}
-	if group.rounds.is_empty() or group.golfers.size() != group.rounds.size():
-		return {}
-
-	var hole_number: int = group.current_hole_number()
-	if hole_number <= 0:
+	var session = begin_session(group, seed_value)
+	if session == null:
 		return {}
 
-	# Preflight the whole group before any golfer round is advanced.
-	for autonomous_round in group.rounds:
-		if autonomous_round == null or autonomous_round.round_state == null:
-			return {}
-		if autonomous_round.round_state.complete:
-			return {}
-		if autonomous_round.round_state.current_hole_number() != hole_number:
-			return {}
+	# Existing autonomous callers still request a fully resolved group hole. They
+	# now drive the exact same one-turn-at-a-time authority that player
+	# participation will pause between turns.
+	var safety_turns: int = 0
+	while not session.is_complete() and not session.has_failed() and safety_turns < 1000:
+		var turn_result: Dictionary = session.play_current_turn()
+		if turn_result.is_empty():
+			break
+		safety_turns += 1
 
-	var tee_context: Dictionary = _tee_order_context(group, seed_value)
-	var tee_order: Array = tee_context.get("tee_order", [])
-	if not tee_order_model.is_valid_order(tee_order, group.member_count()):
-		return {}
-	if not group.set_tee_order(tee_order):
-		return {}
-
-	var member_results: Array = []
-	for index in range(group.rounds.size()):
-		var autonomous_round = group.rounds[index]
-		var golfer = group.golfers[index]
-		var member_seed: int = seed_value + index * 997
-		var result: Dictionary = autonomous_round.play_current_hole(golfer, member_seed)
-		var member_result: Dictionary = result.duplicate(true)
-		member_result["member_index"] = index
-		member_result["golfer_name"] = str(golfer.get("golfer_name")) if golfer != null else ""
-		member_results.append(member_result)
-		if result.is_empty() or not bool(result.get("recorded", false)):
-			return {
-				"group_id": str(group.group_id),
-				"hole_number": hole_number,
-				"completed": false,
-				"failed_member_index": index,
-				"member_results": member_results,
-				"tee_order": tee_order.duplicate(),
-				"tee_order_source": str(tee_context.get("source", "")),
-				"previous_hole_scores": tee_context.get("previous_hole_scores", []).duplicate(),
-				"status": str(group.status),
-				"next_hole_number": group.current_hole_number()
-			}
-
-	var next_hole: int = group.current_hole_number()
-	if next_hole == 0:
-		group.status = STATUS_FINISHED
-
-	return {
-		"group_id": str(group.group_id),
-		"hole_number": hole_number,
-		"completed": next_hole >= 0,
-		"member_results": member_results,
-		"tee_order": tee_order.duplicate(),
-		"tee_order_source": str(tee_context.get("source", "")),
-		"previous_hole_scores": tee_context.get("previous_hole_scores", []).duplicate(),
-		"status": str(group.status),
-		"next_hole_number": next_hole
-	}
+	return session.result()
 
 
+# Retained as a compatibility/read seam for existing diagnostics. GroupHoleSession
+# contains the same calculation and is the live authority during actual play.
 func _tee_order_context(group, seed_value: int) -> Dictionary:
 	if group == null or group.rounds.is_empty():
 		return {}
