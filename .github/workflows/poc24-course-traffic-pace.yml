@@ -11,6 +11,7 @@ on:
 jobs:
   poc24:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -23,31 +24,41 @@ jobs:
           include-templates: false
 
       - name: Import project
+        timeout-minutes: 5
         run: godot --headless --editor --path . --quit
 
       - name: Run POC-24A course traffic state
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_course_traffic_state_test.gd
 
       - name: Run POC-24B traffic-aware living course
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_traffic_aware_living_course_test.gd
 
       - name: Run POC-24C group pace model
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_group_pace_model_test.gd
 
       - name: Run POC-24D simulated event clock
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_timed_course_traffic_test.gd
 
       - name: Run POC-24E same-hole spacing
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_same_hole_spacing_test.gd
 
       - name: Run POC-24F spacing-aware tee release scheduler
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_same_hole_release_scheduler_test.gd
 
       - name: Run POC-24G concurrent same-hole traffic
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_spacing_aware_concurrent_traffic_test.gd
 
       - name: Run POC-24H inter-hole transition scheduler
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_inter_hole_transition_scheduler_test.gd
 
       - name: Run POC-24H emergent inter-hole catch-up integration
+        timeout-minutes: 5
         run: godot --headless --path . --script res://tests/poc24_inter_hole_catchup_integration_test.gd
