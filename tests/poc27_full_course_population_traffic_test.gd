@@ -41,7 +41,7 @@ func _run() -> void:
 		)
 
 	_assert_equal_int(runtime.living_course.population.group_count(), GROUP_IDS.size(), "all five groups exist in one course population")
-	_assert_equal_int(runtime.living_course.start_sequencer.waiting_count(), GROUP_IDS.size(), "all five groups begin in the same FIFO tee queue")
+	_assert_equal_int(runtime.living_course.start_sequencer.waiting_group_ids().size(), GROUP_IDS.size(), "all five groups begin in the same FIFO tee queue")
 
 	var opening: Dictionary = runtime.release_next_group()
 	_assert_true(bool(opening.get("released", false)), "first group releases onto open Hole 1")
