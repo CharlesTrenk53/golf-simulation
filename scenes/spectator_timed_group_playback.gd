@@ -1,12 +1,15 @@
 extends Node
 
-# POC-25D/E: Timed Spectator Group Playback
-# ------------------------------------------
+# POC-25D/E/H: Timed Spectator Group Playback
+# --------------------------------------------
 # Drives one SpectatorGroupVisual from the authoritative POC-24 event clock.
 # It consumes a deterministic visual schedule built from resolved shot histories
 # and POC-24 pace milestones; it never advances or mutates simulation state.
 # POC-25E refreshes the projected group state before attaching a newly-started
 # playback so hole-clear releases cannot leave the visible status one cycle stale.
+# POC-25H adds an interactive seam that retires a shot only after the visual ball
+# has naturally finished its flight; this lets a launchable spectator scene pause
+# presentation time during animation without forcing the ball to its landing.
 
 const SpectatorHolePlaybackSchedule = preload("res://simulation/spectator_hole_playback_schedule.gd")
 
@@ -80,6 +83,35 @@ func complete_active_flights() -> int:
 		if group_visual.complete_member_shot(int(member_index)):
 			completed += 1
 	return completed
+
+
+func complete_finished_flights() -> int:
+	if group_visual == null:
+		return 0
+	var completed: int = 0
+	var active_members: Array = group_visual.active_member_shots.keys()
+	active_members.sort()
+	for member_index_value in active_members:
+		var member_index: int = int(member_index_value)
+		if member_index < 0 or member_index >= group_visual.member_ball_visuals.size():
+			continue
+		var ball_visual = group_visual.member_ball_visuals[member_index]
+		if ball_visual != null and not ball_visual.is_flying:
+			if group_visual.complete_member_shot(member_index):
+				completed += 1
+	return completed
+
+
+func has_active_flight() -> bool:
+	if group_visual == null:
+		return false
+	for member_index_value in group_visual.active_member_shots.keys():
+		var member_index: int = int(member_index_value)
+		if member_index >= 0 and member_index < group_visual.member_ball_visuals.size():
+			var ball_visual = group_visual.member_ball_visuals[member_index]
+			if ball_visual != null and ball_visual.is_flying:
+				return true
+	return false
 
 
 func is_complete() -> bool:
