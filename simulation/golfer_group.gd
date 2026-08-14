@@ -17,6 +17,7 @@ var tee_id: String = "default"
 var golfers: Array = []
 var rounds: Array = []
 var status: String = STATUS_WAITING
+var tee_order: Array = []
 
 
 func configure(new_group_id: String, golfer_values: Array, course_definition, selected_tee_id: String = "default") -> bool:
@@ -41,6 +42,7 @@ func configure(new_group_id: String, golfer_values: Array, course_definition, se
 	tee_id = selected_tee_id
 	golfers = golfer_values.duplicate()
 	rounds.clear()
+	tee_order.clear()
 	for _golfer in golfers:
 		var autonomous_round = AutonomousRound.new(course, tee_id)
 		if autonomous_round.round_state == null or autonomous_round.round_state.complete:
@@ -69,6 +71,23 @@ func contains_golfer(golfer) -> bool:
 		if member == golfer:
 			return true
 	return false
+
+
+func set_tee_order(order: Array) -> bool:
+	if order.size() != member_count():
+		return false
+	var seen: Dictionary = {}
+	for value in order:
+		var member_index: int = int(value)
+		if member_index < 0 or member_index >= member_count() or seen.has(member_index):
+			return false
+		seen[member_index] = true
+	tee_order = order.duplicate()
+	return true
+
+
+func current_tee_order() -> Array:
+	return tee_order.duplicate()
 
 
 func current_hole_number() -> int:
@@ -107,5 +126,6 @@ func snapshot() -> Dictionary:
 		"tee_id": tee_id,
 		"member_count": member_count(),
 		"current_hole_number": current_hole_number(),
+		"tee_order": current_tee_order(),
 		"members": members
 	}
