@@ -152,10 +152,46 @@ func _consider_boundary(existing: float, current: float, candidate: float) -> fl
 func _advance_playbacks_to(simulation_time: float, animate: bool) -> void:
 	var ids: Array = active_playbacks.keys()
 	ids.sort()
+	if not animate:
+		for group_id in ids:
+			var immediate_playback = active_playbacks[group_id]
+			if immediate_playback != null:
+				immediate_playback.advance_to(simulation_time, false)
+		return
+
+	# A spectator can only meaningfully watch one ball flight at a time. Multiple
+	# autonomous groups may have legally-due shots in the same simulation window,
+	# especially when dead time is compressed. Queue those visual presentations
+	# by authoritative timestamp instead of launching several flights in one
+	# rendered update. This changes presentation only; controller time, traffic,
+	# scoring, and every scheduled shot timestamp remain untouched.
+	for group_id in ids:
+		var active_playback = active_playbacks[group_id]
+		if active_playback != null and active_playback.has_active_flight():
+			return
+
+	var selected_group_id: String = ""
+	var selected_time: float = INF
 	for group_id in ids:
 		var playback = active_playbacks[group_id]
-		if playback != null:
-			playback.advance_to(simulation_time, animate)
+		if playback == null:
+			continue
+		var next_event: Dictionary = playback.next_event()
+		if next_event.is_empty():
+			continue
+		var event_time: float = float(next_event.get("time_seconds", INF))
+		if event_time > simulation_time + 0.0001:
+			continue
+		if event_time < selected_time - 0.0001:
+			selected_time = event_time
+			selected_group_id = str(group_id)
+		elif abs(event_time - selected_time) <= 0.0001 and (selected_group_id.is_empty() or str(group_id) < selected_group_id):
+			selected_group_id = str(group_id)
+
+	if not selected_group_id.is_empty():
+		var selected_playback = active_playbacks.get(selected_group_id, null)
+		if selected_playback != null:
+			selected_playback.advance_to(simulation_time, true)
 
 
 func _handle_authority_events(processed: Array) -> void:
