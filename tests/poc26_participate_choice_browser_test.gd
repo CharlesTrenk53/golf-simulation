@@ -7,6 +7,14 @@ var demo = null
 
 
 func _init() -> void:
+	# SceneTree._init() runs before newly attached Node3D children are fully inside
+	# the active tree. Defer the visual proof one frame so Camera3D global transforms
+	# exercise the same lifecycle as the launchable scene instead of emitting
+	# headless-only get_global_transform/look_at errors.
+	call_deferred("_run")
+
+
+func _run() -> void:
 	print("POC-26E: compact participate choice browser")
 	demo = ParticipateDemo.new()
 	demo.auto_advance = false
