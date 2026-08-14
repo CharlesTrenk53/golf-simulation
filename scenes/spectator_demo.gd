@@ -6,6 +6,11 @@ extends Node3D
 # This scene owns presentation only: camera, controls, HUD, and wall-clock pacing.
 # Golf outcomes, group traffic, tee releases, honors, away order, and scoring all
 # remain authoritative in the existing simulation/controller stack.
+#
+# Spectator pacing deliberately compresses uneventful wall-clock time. The
+# authoritative course clock still uses the full POC-24 walking/routine/traffic
+# durations; only the rate at which the presentation consumes those timestamps
+# changes. Visible ball flights pause the course clock so they are never skipped.
 
 const CourseDefinition = preload("res://simulation/course_definition.gd")
 const SpacingAwareTimedCourseController = preload("res://simulation/spacing_aware_timed_course_controller.gd")
@@ -17,6 +22,8 @@ const Golfer = preload("res://scenes/golfer.gd")
 
 @export var auto_advance: bool = true
 @export var simulation_speed: float = 30.0
+@export var playing_idle_simulation_speed: float = 120.0
+@export var waiting_simulation_speed: float = 60.0
 @export var max_real_step_seconds: float = 0.05
 @export var camera_offset: Vector3 = Vector3(34.0, 30.0, 38.0)
 @export var camera_lerp_speed: float = 4.0
@@ -132,13 +139,13 @@ func advance_presentation(real_delta_seconds: float) -> Dictionary:
 		if playback.has_active_flight():
 			any_flying = true
 
-	# Wall-clock presentation pauses while a visible ball is in flight. This does
-	# not rewrite the simulation clock or event timestamps; it only prevents the
-	# viewer from being visually lapped by already-resolved future events.
+	# Ball flights remain normal-speed visible actions. Between visible actions we
+	# consume authoritative simulation time faster so realistic walking and shot-
+	# routine timestamps do not become multi-second spectator dead air.
 	if not any_flying and not _physical_round_complete():
 		var real_step: float = clampf(real_delta_seconds, 0.0, max_real_step_seconds)
 		if real_step > 0.0:
-			session.advance_time(real_step * maxf(simulation_speed, 0.01), true)
+			session.advance_time(real_step * presentation_simulation_speed(), true)
 
 	_refresh_presentation(real_delta_seconds)
 	return snapshot()
@@ -159,10 +166,26 @@ func cycle_group(step: int = 1) -> String:
 	return selected
 
 
+func presentation_simulation_speed() -> float:
+	var base_speed: float = maxf(simulation_speed, 0.01)
+	if not initialized or focus_controller == null:
+		return base_speed
+	var presentation: Dictionary = focus_controller.presentation_snapshot()
+	if presentation.is_empty():
+		return base_speed
+	var status: String = str(presentation.get("status", ""))
+	if status == "PLAYING":
+		return maxf(base_speed, playing_idle_simulation_speed)
+	if status == "WAITING":
+		return maxf(base_speed, waiting_simulation_speed)
+	return base_speed
+
+
 func snapshot() -> Dictionary:
 	return {
 		"initialized": initialized,
 		"simulation_time_seconds": controller.current_time_seconds if controller != null else 0.0,
+		"presentation_speed": presentation_simulation_speed(),
 		"physical_round_complete": _physical_round_complete(),
 		"focus": focus_controller.presentation_snapshot() if focus_controller != null else {},
 		"hud_status": status_label.text if status_label != null else "",
