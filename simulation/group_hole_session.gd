@@ -1,16 +1,24 @@
 extends RefCounted
 
-# POC-26A: Authoritative Incremental Group Hole Session
-# -----------------------------------------------------
+# POC-26A / POC-26C: Authoritative Incremental Group Hole Session
+# ---------------------------------------------------------------
 # Owns live order of play for one GolferGroup on one hole. Tee order is decided
 # before any shot is played; after every member has teed off, the golfer farthest
-# from the pin plays next. Each turn advances exactly one member's existing
-# authoritative AutonomousRound/DataDefinedAutonomousHole state.
+# from the pin plays next. Each completed turn advances exactly one member's
+# existing authoritative AutonomousRound/DataDefinedAutonomousHole state.
+#
+# POC-26C optionally designates one normal group member as human-controlled. AI
+# turns execute automatically through the shared POC-26B decision contract. A
+# human turn prepares that same contract and pauses without moving the ball until
+# a valid candidate index is submitted. Out-of-turn commands are rejected here,
+# above shot execution, so the group session remains the order-of-play authority.
 
 const GroupTeeOrderModel = preload("res://simulation/group_tee_order_model.gd")
 
 const STATUS_PLAYING := "PLAYING"
 const STATUS_FINISHED := "FINISHED"
+const CONTROL_AI := "AI"
+const CONTROL_HUMAN := "HUMAN"
 const DISTANCE_TIE_EPSILON := 0.001
 
 var tee_order_model = GroupTeeOrderModel.new()
@@ -24,16 +32,19 @@ var previous_hole_scores: Array = []
 var member_shots_played: Array = []
 var member_results: Array = []
 var turn_history: Array = []
+var human_member_index: int = -1
 var failed: bool = false
 var failed_member_index: int = -1
 var failure_reason: String = ""
 var complete: bool = false
 
 
-func begin(group_value, new_seed_value: int = 1) -> bool:
+func begin(group_value, new_seed_value: int = 1, human_controlled_member: int = -1) -> bool:
 	if group_value == null or str(group_value.status) != STATUS_PLAYING:
 		return false
 	if group_value.rounds.is_empty() or group_value.golfers.size() != group_value.rounds.size():
+		return false
+	if human_controlled_member < -1 or human_controlled_member >= group_value.member_count():
 		return false
 
 	var current_hole: int = group_value.current_hole_number()
@@ -70,6 +81,7 @@ func begin(group_value, new_seed_value: int = 1) -> bool:
 	tee_order = resolved_tee_order.duplicate()
 	tee_order_source = str(tee_context.get("source", ""))
 	previous_hole_scores = tee_context.get("previous_hole_scores", []).duplicate()
+	human_member_index = human_controlled_member
 	member_shots_played.clear()
 	member_results.clear()
 	turn_history.clear()
@@ -134,54 +146,102 @@ func play_current_turn() -> Dictionary:
 	if member_index < 0 or member_index >= group.member_count():
 		return {}
 	var golfer = group.golfers[member_index]
-	var step_result: Dictionary = group.rounds[member_index].play_current_hole_step(golfer)
-	if step_result.is_empty():
+	var autonomous_round = group.rounds[member_index]
+
+	# Human participation is a pause in the exact same authoritative turn. Merely
+	# asking the session to advance cannot silently let AI choose for this golfer.
+	if member_index == human_member_index:
+		var decision: Dictionary = autonomous_round.prepare_current_hole_decision(golfer)
+		if decision.is_empty():
+			_mark_failed(member_index, "HUMAN_DECISION_PREPARE_FAILED")
+			return {
+				"played": false,
+				"awaiting_human": false,
+				"turn": turn.duplicate(true),
+				"failed": true,
+				"session_result": result()
+			}
+		return {
+			"played": false,
+			"awaiting_human": true,
+			"turn": turn.duplicate(true),
+			"decision": decision.duplicate(true),
+			"failed": false,
+			"complete": false,
+			"next_turn": turn.duplicate(true)
+		}
+
+	var step_result: Dictionary = autonomous_round.play_current_hole_step(golfer)
+	if step_result.is_empty() or not bool(step_result.get("executed", false)):
 		_mark_failed(member_index, "MEMBER_SHOT_STEP_FAILED")
 		return {
 			"played": false,
+			"awaiting_human": false,
 			"turn": turn.duplicate(true),
 			"failed": true,
 			"session_result": result()
 		}
+	return _accept_played_turn(turn, step_result)
 
-	member_shots_played[member_index] = int(member_shots_played[member_index]) + 1
-	var shot: Dictionary = step_result.get("shot", {}).duplicate(true)
-	turn_history.append({
-		"sequence_index": turn_history.size(),
-		"member_index": member_index,
-		"golfer_name": str(golfer.get("golfer_name")) if golfer != null else "",
-		"order_reason": str(turn.get("order_reason", "")),
-		"distance_to_hole_yards": float(turn.get("distance_to_hole_yards", -1.0)),
-		"shot_number": int(shot.get("shot_number", member_shots_played[member_index])),
-		"shot": shot.duplicate(true)
-	})
 
-	if bool(step_result.get("hole_ended", false)):
-		var final_result: Dictionary = step_result.get("hole_result", {}).duplicate(true)
-		final_result["member_index"] = member_index
-		final_result["golfer_name"] = str(golfer.get("golfer_name")) if golfer != null else ""
-		member_results[member_index] = final_result
-		if final_result.is_empty() or not bool(final_result.get("recorded", false)):
-			_mark_failed(member_index, "MEMBER_HOLE_NOT_RECORDED")
-		elif _all_members_recorded():
-			var next_hole: int = group.current_hole_number()
-			if next_hole < 0:
-				_mark_failed(member_index, "GROUP_ROUND_DESYNCHRONIZED_AFTER_COMPLETION")
-			else:
-				if next_hole == 0:
-					group.status = STATUS_FINISHED
-				complete = true
+func submit_human_choice(member_index: int, candidate_index: int) -> Dictionary:
+	if group == null or failed or complete:
+		return {"played": false, "rejected": true, "reason": "SESSION_NOT_ACTIVE"}
+	if human_member_index < 0:
+		return {"played": false, "rejected": true, "reason": "NO_HUMAN_CONTROLLED_MEMBER"}
+	if member_index != human_member_index:
+		return {"played": false, "rejected": true, "reason": "MEMBER_NOT_HUMAN_CONTROLLED"}
 
-	return {
-		"played": true,
-		"turn": turn.duplicate(true),
-		"shot": shot.duplicate(true),
-		"hole_ended": bool(step_result.get("hole_ended", false)),
-		"failed": failed,
-		"complete": complete,
-		"next_turn": current_turn(),
-		"session_result": result() if failed or complete else {}
-	}
+	var turn: Dictionary = current_turn()
+	if turn.is_empty():
+		return {"played": false, "rejected": true, "reason": "NO_ACTIVE_TURN"}
+	if int(turn.get("member_index", -1)) != human_member_index:
+		return {
+			"played": false,
+			"rejected": true,
+			"reason": "OUT_OF_TURN",
+			"turn": turn.duplicate(true)
+		}
+
+	var golfer = group.golfers[member_index]
+	var autonomous_round = group.rounds[member_index]
+	var decision: Dictionary = autonomous_round.prepare_current_hole_decision(golfer)
+	if decision.is_empty():
+		_mark_failed(member_index, "HUMAN_DECISION_PREPARE_FAILED")
+		return {
+			"played": false,
+			"rejected": false,
+			"reason": "HUMAN_DECISION_PREPARE_FAILED",
+			"failed": true,
+			"session_result": result()
+		}
+
+	var step_result: Dictionary = autonomous_round.execute_current_hole_decision(
+		golfer,
+		candidate_index,
+		CONTROL_HUMAN
+	)
+	if not bool(step_result.get("executed", false)):
+		return {
+			"played": false,
+			"awaiting_human": true,
+			"rejected": true,
+			"reason": str(step_result.get("reason", "DECISION_REJECTED")),
+			"turn": turn.duplicate(true),
+			"decision": autonomous_round.pending_current_hole_decision()
+		}
+
+	return _accept_played_turn(turn, step_result)
+
+
+func pending_human_decision() -> Dictionary:
+	if group == null or failed or complete or human_member_index < 0:
+		return {}
+	var turn: Dictionary = current_turn()
+	if int(turn.get("member_index", -1)) != human_member_index:
+		return {}
+	var golfer = group.golfers[human_member_index]
+	return group.rounds[human_member_index].prepare_current_hole_decision(golfer)
 
 
 func is_complete() -> bool:
@@ -204,6 +264,7 @@ func result() -> Dictionary:
 		"tee_order": tee_order.duplicate(),
 		"tee_order_source": tee_order_source,
 		"previous_hole_scores": previous_hole_scores.duplicate(),
+		"human_member_index": human_member_index,
 		"status": str(group.status),
 		"next_hole_number": next_hole,
 		"turn_history": turn_history.duplicate(true)
@@ -215,19 +276,73 @@ func result() -> Dictionary:
 
 
 func snapshot() -> Dictionary:
+	var turn: Dictionary = current_turn()
 	return {
 		"group_id": str(group.group_id) if group != null else "",
 		"hole_number": hole_number,
 		"tee_order": tee_order.duplicate(),
 		"tee_order_source": tee_order_source,
 		"previous_hole_scores": previous_hole_scores.duplicate(),
+		"human_member_index": human_member_index,
 		"member_shots_played": member_shots_played.duplicate(),
-		"current_turn": current_turn(),
+		"current_turn": turn,
+		"awaiting_human": human_member_index >= 0 and int(turn.get("member_index", -1)) == human_member_index,
 		"turn_history": turn_history.duplicate(true),
 		"failed": failed,
 		"failed_member_index": failed_member_index,
 		"failure_reason": failure_reason,
 		"complete": complete
+	}
+
+
+func _accept_played_turn(turn: Dictionary, step_result: Dictionary) -> Dictionary:
+	var member_index: int = int(turn.get("member_index", -1))
+	if member_index < 0 or member_index >= group.member_count():
+		return {}
+	var golfer = group.golfers[member_index]
+	member_shots_played[member_index] = int(member_shots_played[member_index]) + 1
+	var shot: Dictionary = step_result.get("shot", {}).duplicate(true)
+	turn_history.append({
+		"sequence_index": turn_history.size(),
+		"member_index": member_index,
+		"golfer_name": str(golfer.get("golfer_name")) if golfer != null else "",
+		"order_reason": str(turn.get("order_reason", "")),
+		"control_source": str(turn.get("control_source", CONTROL_AI)),
+		"choice_source": str(shot.get("choice_source", turn.get("control_source", CONTROL_AI))),
+		"distance_to_hole_yards": float(turn.get("distance_to_hole_yards", -1.0)),
+		"shot_number": int(shot.get("shot_number", member_shots_played[member_index])),
+		"decision_id": str(shot.get("decision_id", "")),
+		"decision_kind": str(shot.get("decision_kind", "")),
+		"decision_candidate_index": int(shot.get("decision_candidate_index", -1)),
+		"shot": shot.duplicate(true)
+	})
+
+	if bool(step_result.get("hole_ended", false)):
+		var final_result: Dictionary = step_result.get("hole_result", {}).duplicate(true)
+		final_result["member_index"] = member_index
+		final_result["golfer_name"] = str(golfer.get("golfer_name")) if golfer != null else ""
+		member_results[member_index] = final_result
+		if final_result.is_empty() or not bool(final_result.get("recorded", false)):
+			_mark_failed(member_index, "MEMBER_HOLE_NOT_RECORDED")
+		elif _all_members_recorded():
+			var next_hole: int = group.current_hole_number()
+			if next_hole < 0:
+				_mark_failed(member_index, "GROUP_ROUND_DESYNCHRONIZED_AFTER_COMPLETION")
+			else:
+				if next_hole == 0:
+					group.status = STATUS_FINISHED
+				complete = true
+
+	return {
+		"played": true,
+		"awaiting_human": false,
+		"turn": turn.duplicate(true),
+		"shot": shot.duplicate(true),
+		"hole_ended": bool(step_result.get("hole_ended", false)),
+		"failed": failed,
+		"complete": complete,
+		"next_turn": current_turn(),
+		"session_result": result() if failed or complete else {}
 	}
 
 
@@ -245,6 +360,7 @@ func _turn_dictionary(member_index: int, reason: String, known_distance: float =
 		"golfer_name": str(group.golfers[member_index].get("golfer_name")) if group.golfers[member_index] != null else "",
 		"shot_number": int(member_shots_played[member_index]) + 1,
 		"order_reason": reason,
+		"control_source": CONTROL_HUMAN if member_index == human_member_index else CONTROL_AI,
 		"distance_to_hole_yards": distance_to_hole
 	}
 
