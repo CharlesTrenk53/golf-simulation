@@ -53,10 +53,13 @@ func _init() -> void:
 	)
 	assert(bool(green_gate.get("reached", false)))
 
-	var range_time: float = float(spacing.get("safe_time_seconds", -1.0))
-	var green_time: float = float(green_gate.get("green_time_seconds", -1.0))
-	assert(range_time >= 0.0 and green_time >= 0.0)
+	var range_time: float = float(spacing.get("range_safe_time_seconds", -1.0))
+	var green_time: float = float(spacing.get("lead_group_green_time_seconds", -1.0))
+	var effective_time: float = float(spacing.get("safe_time_seconds", -1.0))
+	assert(range_time >= 0.0 and green_time >= 0.0 and effective_time >= 0.0)
 	assert(green_time > range_time)
+	assert(is_equal_approx(effective_time, max(range_time, green_time)))
+	assert(is_equal_approx(green_time, float(green_gate.get("green_time_seconds", -1.0))))
 
 	var pending: Dictionary = controller.release_scheduler.pending_release("group_2")
 	assert(not pending.is_empty())
@@ -65,7 +68,7 @@ func _init() -> void:
 	assert(is_equal_approx(float(pending.get("lead_group_green_time_seconds", -1.0)), green_time))
 	var release_time: float = float(pending.get("release_time_seconds", -1.0))
 	var lead_start: float = float(pending.get("lead_start_time_seconds", 0.0))
-	assert(is_equal_approx(release_time, lead_start + max(range_time, green_time)))
+	assert(is_equal_approx(release_time, lead_start + effective_time))
 
 	var pre_release_target: float = release_time - 0.05
 	assert(pre_release_target > controller.current_time_seconds)
@@ -79,9 +82,10 @@ func _init() -> void:
 	assert(controller.traffic.group_hole("group_2") == 1)
 	assert(session.playback_for_group("group_2") != null)
 
-	print("POC25_GREEN_RELEASE_SUMMARY range=%.1f green=%.1f release=%.1f follower_hole=%d" % [
+	print("POC25_GREEN_RELEASE_SUMMARY range=%.1f green=%.1f effective=%.1f release=%.1f follower_hole=%d" % [
 		range_time,
 		green_time,
+		effective_time,
 		release_time,
 		int(controller.traffic.group_hole("group_2"))
 	])
