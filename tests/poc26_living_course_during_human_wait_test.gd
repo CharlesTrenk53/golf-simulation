@@ -99,7 +99,9 @@ func _init() -> void:
 	_assert_equal(str(still_pending.get("decision_id", "")), decision_id, "same authoritative human decision remains pending after world advances")
 
 	# Resume the player. The waiting period must not poison group authority or
-	# course progression; the player group should still be able to finish its hole.
+	# course progression. Wait for the authoritative whole-group hole-finish event,
+	# not merely the human member's scorecard, because the AI partner may still have
+	# a scheduled live turn after the human holes out.
 	var resume_choice: int = _first_human_choice(still_pending)
 	_assert_true(resume_choice >= 0, "pending human decision remains selectable after world wait")
 	if resume_choice >= 0:
@@ -107,7 +109,8 @@ func _init() -> void:
 		_assert_true(bool(resumed.get("played", false)), "human play resumes through same authoritative decision after wait")
 
 	var completion_iterations: int = 0
-	while player_group.rounds[0].round_state.holes_completed() < 1 and completion_iterations < 240:
+	var player_hole_finish: Dictionary = _latest_event(runtime.event_history, "LIVE_HOLE_FINISH", "player_group")
+	while player_hole_finish.is_empty() and completion_iterations < 240:
 		runtime.advance_time(30.0)
 		var next_decision: Dictionary = runtime.pending_human_decision("player_group")
 		if not next_decision.is_empty():
@@ -115,9 +118,11 @@ func _init() -> void:
 			if next_choice >= 0:
 				var next_submission: Dictionary = runtime.submit_human_choice("player_group", next_choice)
 				_assert_true(bool(next_submission.get("played", false)), "resumed human group continues through subsequent live turns")
+		player_hole_finish = _latest_event(runtime.event_history, "LIVE_HOLE_FINISH", "player_group")
 		completion_iterations += 1
 
 	_assert_true(completion_iterations < 240, "player group can complete hole after extended human wait")
+	_assert_true(not player_hole_finish.is_empty(), "whole mixed group records authoritative hole completion after resume")
 	_assert_true(player_group.rounds[0].round_state.holes_completed() >= 1, "human golfer records completed authoritative hole after resume")
 	_assert_true(player_group.rounds[1].round_state.holes_completed() >= 1, "AI partner records same completed group hole")
 	_assert_true(runtime.group_live_shot_count("autonomous_group") > autonomous_shots_before, "other-group progression survives player resume")
