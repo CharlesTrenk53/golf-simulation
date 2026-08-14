@@ -50,7 +50,9 @@ func _init() -> void:
 	assert(waiting_positions[0].distance_to(waiting_positions[1]) > 0.1)
 	var lead_center: Vector3 = (lead_positions[0] + lead_positions[1]) * 0.5
 	var waiting_center: Vector3 = (waiting_positions[0] + waiting_positions[1]) * 0.5
-	assert(lead_center.distance_to(waiting_center) > 1.0)
+	# First-tee waiting groups must read as a separate group, not as extra members
+	# of the group currently teeing off. This is presentation-only spacing.
+	assert(lead_center.distance_to(waiting_center) >= 19.0)
 
 	var group_1_snapshot: Dictionary = group_1.snapshot()
 	var group_2_snapshot: Dictionary = group_2.snapshot()
@@ -61,7 +63,7 @@ func _init() -> void:
 	assert(controller.traffic.group_hole("group_1") == 1)
 	assert(controller.traffic.group_hole("group_2") == 0)
 
-	print("POC25_GROUP_SUMMARY lead=%s waiting=%s" % [str(lead_center), str(waiting_center)])
+	print("POC25_GROUP_SUMMARY lead=%s waiting=%s separation=%.1f" % [str(lead_center), str(waiting_center), lead_center.distance_to(waiting_center)])
 	print("POC-25B VISIBLE TWO-GROUP POPULATION PASSED")
 	view.queue_free()
 	world.queue_free()
