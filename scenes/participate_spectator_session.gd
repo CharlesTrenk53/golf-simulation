@@ -124,7 +124,7 @@ func drain_visuals_immediate() -> int:
 
 
 func pending_human_decision(group_id: String) -> Dictionary:
-	if controller == null or presentation_busy():
+	if controller == null or group_presentation_busy(group_id):
 		return {}
 	return controller.pending_human_decision(group_id)
 
@@ -132,8 +132,11 @@ func pending_human_decision(group_id: String) -> Dictionary:
 func submit_human_choice(group_id: String, candidate_index: int, animate: bool = false) -> Dictionary:
 	if controller == null:
 		return {"played": false, "rejected": true, "reason": "NO_CONTROLLER"}
-	if presentation_busy():
-		return {"played": false, "rejected": true, "reason": "PRESENTATION_NOT_CAUGHT_UP"}
+	# Only unfinished presentation work for this group blocks its authoritative
+	# command. Other groups remain visually alive without erasing or disabling a
+	# stable player decision.
+	if group_presentation_busy(group_id):
+		return {"played": false, "rejected": true, "reason": "GROUP_PRESENTATION_NOT_CAUGHT_UP"}
 	var result: Dictionary = controller.submit_human_choice(group_id, candidate_index)
 	if not bool(result.get("played", false)):
 		return result
@@ -152,6 +155,20 @@ func submit_human_choice(group_id: String, candidate_index: int, animate: bool =
 
 func playback_for_group(group_id: String):
 	return active_playbacks.get(group_id.strip_edges(), null)
+
+
+func group_presentation_busy(group_id: String) -> bool:
+	var normalized: String = group_id.strip_edges()
+	if normalized.is_empty():
+		return false
+	var playback = active_playbacks.get(normalized, null)
+	if playback != null and (playback.is_busy() or playback.has_pending_events()):
+		return true
+	if population_view != null:
+		var visual = population_view.group_visual(normalized)
+		if visual != null and visual.has_active_inter_hole_transition():
+			return true
+	return false
 
 
 func presentation_busy() -> bool:
