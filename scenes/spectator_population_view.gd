@@ -7,6 +7,8 @@ extends Node3D
 
 const SpectatorGroupVisual = preload("res://scenes/spectator_group_visual.gd")
 
+@export var first_tee_waiting_backoff_yards: float = 20.0
+
 var course_world = null
 var controller = null
 var group_visuals: Dictionary = {}
@@ -23,6 +25,7 @@ func configure(world_value, controller_value) -> bool:
 	controller = controller_value
 	for group in controller.living_course.population.groups:
 		var visual = SpectatorGroupVisual.new()
+		visual.waiting_backoff_yards = maxf(first_tee_waiting_backoff_yards, 0.0)
 		add_child(visual)
 		if not visual.configure(group, course_world, controller.traffic):
 			clear_view()
