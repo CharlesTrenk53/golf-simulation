@@ -13,12 +13,18 @@ extends RefCounted
 # POC-26A opens the same authoritative hole pipeline at a one-shot-at-a-time
 # seam. Whole-hole callers remain supported through play_current_hole(), which
 # simply drives the incremental state until the hole attempt ends.
+#
+# POC-26C routes every incremental shot through the POC-26B shared decision
+# contract. Autonomous callers still receive one completed shot per call, but AI
+# now prepares, chooses, and executes through the exact same authority that a
+# human-controlled group member will pause and submit a choice into.
 
 const RoundState = preload("res://simulation/round_state.gd")
 const RoundContext = preload("res://simulation/round_context.gd")
 const RoundAdaptationModel = preload("res://simulation/round_adaptation_model.gd")
 const RoundBehaviorAdjustmentModel = preload("res://simulation/round_behavior_adjustment_model.gd")
 const DataDefinedAutonomousHole = preload("res://simulation/data_defined_autonomous_hole.gd")
+const ShotDecisionContract = preload("res://simulation/shot_decision_contract.gd")
 
 var course = null
 var tee_id: String = "default"
@@ -35,6 +41,7 @@ var active_hole_name: String = ""
 var active_pre_hole_context: Dictionary = {}
 var active_pre_hole_adaptation: Dictionary = {}
 var active_pre_hole_behavior: Dictionary = {}
+var active_decision_contract = ShotDecisionContract.new()
 
 
 func _init(course_definition = null, selected_tee_id: String = "default") -> void:
@@ -102,29 +109,74 @@ func active_hole_snapshot() -> Dictionary:
 	}
 
 
-func play_current_hole_step(golfer: Node) -> Dictionary:
+func prepare_current_hole_decision(golfer: Node) -> Dictionary:
 	if golfer == null or not has_active_hole() or not active_hole_state.can_continue():
 		return {}
+	if active_decision_contract == null:
+		active_decision_contract = ShotDecisionContract.new()
+	if active_decision_contract.has_pending_decision():
+		return active_decision_contract.decision_package()
+	return active_decision_contract.prepare(active_playable, golfer, active_hole_state)
 
-	var shot: Dictionary = active_playable.play_step(golfer, active_hole_state)
-	if shot.is_empty():
+
+func pending_current_hole_decision() -> Dictionary:
+	if active_decision_contract == null or not active_decision_contract.has_pending_decision():
 		return {}
+	return active_decision_contract.decision_package()
 
+
+func execute_current_hole_decision(
+	golfer: Node,
+	candidate_index: int,
+	choice_source: String = "HUMAN"
+) -> Dictionary:
+	if golfer == null or not has_active_hole() or active_decision_contract == null:
+		return {"executed": false, "reason": "NO_ACTIVE_HOLE_DECISION"}
+	if not active_decision_contract.has_pending_decision():
+		return {"executed": false, "reason": "NO_PENDING_DECISION"}
+
+	var execution: Dictionary = active_decision_contract.execute_candidate(candidate_index, choice_source)
+	if not bool(execution.get("executed", false)):
+		var rejected := {
+			"executed": false,
+			"reason": str(execution.get("reason", "DECISION_REJECTED")),
+			"decision_id": str(execution.get("decision_id", "")),
+			"decision": pending_current_hole_decision()
+		}
+		return rejected
+
+	var shot: Dictionary = execution.get("shot", {}).duplicate(true)
 	var response := {
-		"shot": shot.duplicate(true),
+		"executed": true,
+		"shot": shot,
 		"hole_ended": false,
 		"recorded": false,
 		"hole_result": {},
-		"active_state": active_hole_snapshot()
+		"active_state": active_hole_snapshot(),
+		"decision_execution": execution.duplicate(true)
 	}
 
-	if not active_hole_state.can_continue():
+	if bool(execution.get("hole_ended", false)) or not active_hole_state.can_continue():
 		var final_result: Dictionary = _finalize_active_hole_attempt()
 		response["hole_ended"] = true
 		response["recorded"] = bool(final_result.get("recorded", false))
 		response["hole_result"] = final_result.duplicate(true)
 		response["active_state"] = {}
 
+	return response
+
+
+func play_current_hole_step(golfer: Node) -> Dictionary:
+	var decision: Dictionary = prepare_current_hole_decision(golfer)
+	if decision.is_empty():
+		return {}
+	var ai_candidate: int = active_decision_contract.choose_ai_candidate()
+	if ai_candidate < 0:
+		active_decision_contract.cancel_pending_decision()
+		return {}
+	var response: Dictionary = execute_current_hole_decision(golfer, ai_candidate, "AI")
+	if not bool(response.get("executed", false)):
+		return {}
 	return response
 
 
@@ -207,6 +259,8 @@ func _finalize_active_hole_attempt() -> Dictionary:
 
 
 func _clear_active_hole() -> void:
+	if active_decision_contract != null:
+		active_decision_contract.cancel_pending_decision()
 	active_playable = null
 	active_hole_state = null
 	active_hole_number = 0
