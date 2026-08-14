@@ -4,16 +4,21 @@ const SpectatorDemoScene = preload("res://scenes/spectator_demo.tscn")
 
 
 func _init() -> void:
+	# SceneTree._init() itself runs before newly-added Node3D children are guaranteed
+	# to have completed their normal enter-tree/ready lifecycle. Defer the proof one
+	# idle turn, then allow one process frame after adding the demo before asserting.
+	call_deferred("_run_proof")
+
+
+func _run_proof() -> void:
 	var demo = SpectatorDemoScene.instantiate()
 	demo.auto_advance = false
 	get_root().add_child(demo)
+	await process_frame
 
-	# SceneTree tests execute this function before a newly-added child's _ready()
-	# callback is guaranteed to run. Initialize explicitly through the same public
-	# seam used by _ready() so the headless proof is deterministic; a later _ready()
-	# call is harmless because initialize_demo() is idempotent once initialized.
-	assert(demo.initialize_demo())
 	assert(demo.initialized)
+	assert(demo.is_inside_tree())
+	assert(demo.spectator_camera != null and demo.spectator_camera.is_inside_tree())
 	var initial: Dictionary = demo.snapshot()
 	assert(bool(initial.get("initialized", false)))
 	assert(not bool(initial.get("physical_round_complete", true)))
@@ -24,7 +29,7 @@ func _init() -> void:
 	assert(focus.get("available_group_ids", []).size() == 2)
 	assert(str(initial.get("hud_status", "")).contains("PLAYING"))
 	assert(not str(initial.get("hud_members", "")).is_empty())
-	assert(demo.spectator_camera != null and demo.spectator_camera.current)
+	assert(demo.spectator_camera.current)
 
 	assert(demo.select_group("group_2"))
 	var waiting: Dictionary = demo.snapshot()
