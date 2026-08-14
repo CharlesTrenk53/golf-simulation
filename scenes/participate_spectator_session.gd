@@ -88,7 +88,10 @@ func advance_visuals(delta_seconds: float) -> bool:
 			visual.advance_inter_hole_transition(delta_seconds)
 			changed = true
 	_finalize_idle_playbacks()
-	if not presentation_busy() and not _present_next_global(true).is_empty():
+	# Pending events intentionally keep simulation time paused until presentation
+	# catches up, but they must never prevent their own playback. _present_next_global
+	# already refuses to start anything while an actual flight/walk is still moving.
+	if not _present_next_global(true).is_empty():
 		changed = true
 	return changed
 
