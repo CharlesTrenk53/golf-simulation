@@ -90,13 +90,40 @@ func _init() -> void:
 	_assert_true(bool(submitted.get("played", false)), "player can commit stable choice while unrelated group is visually busy")
 	_assert_equal(str(submitted.get("shot", {}).get("decision_id", "")), decision_id, "committed shot retains decision shown during unrelated playback")
 
+	var player_playback = session.playback_for_group("group_1")
+	_assert_true(player_playback != null, "committed player shot remains attached to player playback")
+	if player_playback != null:
+		var queued_snapshot: Dictionary = player_playback.snapshot()
+		_assert_true(int(queued_snapshot.get("queued_event_count", 0)) > 0, "player shot waits in presentation queue while unrelated motion is active")
+		_assert_true(not bool(queued_snapshot.get("active_flight", false)), "queued player shot does not visually overtake unrelated active motion")
+
 	if displaced != null:
 		session.active_playbacks["group_2"] = displaced
 	else:
 		session.active_playbacks.erase("group_2")
-	session.drain_visuals_immediate()
 
-	print("POC26E_DECISION_PERSISTENCE_SUMMARY decision=%s global_busy=true submitted=%s" % [decision_id, str(bool(submitted.get("played", false)))])
+	var kicked_queue: bool = session.advance_visuals(0.01)
+	_assert_true(kicked_queue, "visual update starts oldest queued shot after unrelated motion clears")
+	player_playback = session.playback_for_group("group_1")
+	if player_playback != null:
+		var started_snapshot: Dictionary = player_playback.snapshot()
+		_assert_equal(int(started_snapshot.get("queued_event_count", 0)), 0, "queued player shot leaves queue once motion clears")
+		_assert_equal(int(started_snapshot.get("presented_event_count", 0)), 1, "queued player shot is actually presented")
+		_assert_true(bool(started_snapshot.get("active_flight", false)), "queued player shot begins visible flight")
+
+	session.drain_visuals_immediate()
+	_assert_true(not session.group_presentation_busy("group_1"), "player presentation catches up after queued shot completes")
+	_assert_true(not session.presentation_busy(), "global presentation no longer deadlocks on an empty-motion pending queue")
+
+	var before_resume_time: float = runtime.current_time_seconds
+	session.advance_time(1.0, true)
+	_assert_true(runtime.current_time_seconds > before_resume_time, "course clock can resume after queued presentation drains")
+
+	print("POC26E_DECISION_PERSISTENCE_SUMMARY decision=%s global_busy=true submitted=%s resumed=%s" % [
+		decision_id,
+		str(bool(submitted.get("played", false))),
+		str(runtime.current_time_seconds > before_resume_time)
+	])
 	_finish()
 
 
