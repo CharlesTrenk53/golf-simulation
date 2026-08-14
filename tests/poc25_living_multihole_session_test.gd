@@ -45,18 +45,26 @@ func _init() -> void:
 
 	var lead_hole_one: Dictionary = controller.active_event("group_1")
 	var release: Dictionary = lead_hole_one.get("tee_release", {})
-	assert(bool(release.get("scheduled", false)))
-	var release_time: float = float(release.get("release_time_seconds", -1.0))
-	assert(release_time > controller.current_time_seconds)
-	var lead_finish: float = float(lead_hole_one.get("finish_time_seconds", release_time))
+	var same_hole_release: bool = bool(release.get("scheduled", false))
+	var lead_finish: float = float(lead_hole_one.get("finish_time_seconds", -1.0))
+	assert(lead_finish > controller.current_time_seconds)
+	var follower_start_boundary: float = lead_finish
+	var release_path: String = "HOLE_CLEAR"
+	if same_hole_release:
+		follower_start_boundary = float(release.get("release_time_seconds", -1.0))
+		release_path = "SAFE_SAME_HOLE"
+		assert(follower_start_boundary > controller.current_time_seconds)
+		assert(follower_start_boundary <= lead_finish)
+	else:
+		assert(str(release.get("status", "WAIT_FOR_HOLE_CLEAR")) == "WAIT_FOR_HOLE_CLEAR")
 
-	var through_release: Array = session.advance_time(release_time - controller.current_time_seconds, false)
+	var through_release: Array = session.advance_time(follower_start_boundary - controller.current_time_seconds, false)
 	assert(not through_release.is_empty())
-	assert(is_equal_approx(controller.current_time_seconds, release_time))
+	assert(is_equal_approx(controller.current_time_seconds, follower_start_boundary))
 	assert(controller.traffic.group_hole("group_2") == 1)
 	var follower_hole_one: Dictionary = controller.active_event("group_2")
 	assert(not follower_hole_one.is_empty())
-	assert(is_equal_approx(float(follower_hole_one.get("start_time_seconds", -1.0)), release_time))
+	assert(is_equal_approx(float(follower_hole_one.get("start_time_seconds", -1.0)), follower_start_boundary))
 	assert(session.playback_for_group("group_2") != null)
 	assert(view.group_visual("group_2").projected_status == "PLAYING")
 	assert(view.group_visual("group_2").projected_hole_number == 1)
@@ -82,7 +90,7 @@ func _init() -> void:
 	assert(int(first_completed.get("hole_number", 0)) == 1)
 	assert(bool(first_completed.get("complete", false)))
 
-	print("POC25_SESSION_SUMMARY release=%.1f lead_h2_start=%.1f follower_hole=%d completed_playbacks=%d" % [release_time, lead_finish, follower_traffic_hole, int(session_snapshot.get("completed_playback_count", 0))])
+	print("POC25_SESSION_SUMMARY release_path=%s follower_start=%.1f lead_h2_start=%.1f follower_hole=%d completed_playbacks=%d" % [release_path, follower_start_boundary, lead_finish, follower_traffic_hole, int(session_snapshot.get("completed_playback_count", 0))])
 	print("POC-25E LIVING TWO-GROUP MULTI-HOLE SPECTATOR SESSION PASSED")
 	session.queue_free();view.queue_free();world.queue_free()
 	lead_a.queue_free();lead_b.queue_free();follow_a.queue_free();follow_b.queue_free()
