@@ -2,6 +2,7 @@ extends SceneTree
 
 const CourseDefinition = preload("res://simulation/course_definition.gd")
 const SpacingAwareTimedCourseController = preload("res://simulation/spacing_aware_timed_course_controller.gd")
+const GroupShotOrderModel = preload("res://simulation/group_shot_order_model.gd")
 const SpectatorCourseWorld = preload("res://scenes/spectator_course_world.gd")
 const SpectatorPopulationView = preload("res://scenes/spectator_population_view.gd")
 const SpectatorTimedGroupPlayback = preload("res://scenes/spectator_timed_group_playback.gd")
@@ -47,6 +48,13 @@ func _init() -> void:
 	for index in range(1, events.size()):
 		assert(float(events[index].get("time_seconds", 0.0)) >= float(events[index - 1].get("time_seconds", 0.0)))
 
+	var order_model = GroupShotOrderModel.new()
+	var authoritative_order: Array = order_model.build_order(active.get("play_result", {}), course.hole_by_number(1), "default")
+	assert(authoritative_order.size() == events.size())
+	for index in range(events.size()):
+		assert(int(events[index].get("member_index", -1)) == int(authoritative_order[index].get("member_index", -2)))
+		assert(int(events[index].get("shot_index", -1)) == int(authoritative_order[index].get("shot_index", -2)))
+
 	var start_time: float = float(active.get("start_time_seconds", 0.0))
 	assert(timed.advance_to(start_time, false).is_empty())
 	assert(int(timed.snapshot().get("presented_event_count", -1)) == 0)
@@ -56,14 +64,11 @@ func _init() -> void:
 	assert(int(timed.snapshot().get("presented_event_count", 0)) == first_due.size())
 
 	var release_time: float = float(tee_release.get("release_time_seconds", -1.0))
-	var release_wave: int = int(tee_release.get("shot_wave", 0))
-	var matching_wave_events: Array = events.filter(func(event: Dictionary) -> bool:
-		return int(event.get("shot_wave", 0)) == release_wave
-	)
-	assert(not matching_wave_events.is_empty())
-	for event_value in matching_wave_events:
-		var event: Dictionary = event_value
-		assert(is_equal_approx(float(event.get("wave_clearance_time_seconds", -2.0)), release_time))
+	var release_sequence: int = int(tee_release.get("sequence_index", -1))
+	assert(release_sequence >= 0 and release_sequence < events.size())
+	var release_visual_event: Dictionary = events[release_sequence]
+	assert(is_equal_approx(float(release_visual_event.get("clearance_time_seconds", -2.0)), release_time))
+	assert(int(release_visual_event.get("member_index", -1)) == int(tee_release.get("member_index", -2)))
 
 	var due_at_release: Array = timed.advance_to(release_time, false)
 	assert(not due_at_release.is_empty())
@@ -83,8 +88,8 @@ func _init() -> void:
 	assert(controller.current_time_seconds == 0.0)
 	assert(controller.traffic.group_hole("following") == 0)
 
-	print("POC25_TIMED_SUMMARY shots=%d release=%.1f finish=%.1f" % [events.size(), release_time, finish_time])
-	print("POC-25D PACE-SYNCHRONIZED SPECTATOR PLAYBACK PASSED")
+	print("POC25_TIMED_SUMMARY shots=%d release=%.1f finish=%.1f release_sequence=%d" % [events.size(), release_time, finish_time, release_sequence])
+	print("POC-25D PACE-SYNCHRONIZED AWAY-ORDER SPECTATOR PLAYBACK PASSED")
 	timed.queue_free()
 	view.queue_free()
 	world.queue_free()
