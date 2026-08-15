@@ -62,7 +62,37 @@ func _run() -> void:
 
 	while iterations < MAX_ITERATIONS and not _all_groups_finished(runtime):
 		iterations += 1
-		runtime.advance_time(STEP_SECONDS)
+		if iterations <= 20 or iterations % 50 == 0:
+			print("POC27C TRAFFIC BEFORE iteration=%d time=%.1f waiting=%d live_sessions=%d blocked=%d events=%d" % [
+				iterations,
+				runtime.current_time_seconds,
+				runtime.living_course.start_sequencer.waiting_group_ids().size(),
+				runtime.live_sessions.size(),
+				runtime.blocked_transitions.size(),
+				runtime.event_history.size()
+			])
+
+		var processed: Array = runtime.advance_time(STEP_SECONDS)
+
+		if iterations <= 20 or iterations % 50 == 0:
+			print("POC27C TRAFFIC AFTER iteration=%d time=%.1f processed=%d waiting=%d live_sessions=%d blocked=%d events=%d" % [
+				iterations,
+				runtime.current_time_seconds,
+				processed.size(),
+				runtime.living_course.start_sequencer.waiting_group_ids().size(),
+				runtime.live_sessions.size(),
+				runtime.blocked_transitions.size(),
+				runtime.event_history.size()
+			])
+
+		for group_id in GROUP_IDS:
+			if runtime.live_sessions.has(group_id):
+				var session = runtime.live_sessions[group_id]
+				if session != null and session.has_failed():
+					_assert_true(false, "%s live session remains healthy" % group_id)
+					print("POC27C FAILED SESSION group=%s snapshot=%s" % [group_id, str(session.snapshot())])
+					_finish()
+					return
 
 		var occupied_holes: int = 0
 		var live_groups: int = 0
