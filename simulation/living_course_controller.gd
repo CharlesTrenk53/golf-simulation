@@ -34,6 +34,11 @@ func add_group(group_id: String, golfers: Array, tee_id: String = "default") -> 
 		return false
 	return population.add_group(group_id, golfers, tee_id)
 
+func retire_finished_group(group_id: String) -> bool:
+	if population == null:
+		return false
+	return population.retire_finished_group(group_id)
+
 func release_next_group() -> Dictionary:
 	if start_sequencer == null:
 		return {}
