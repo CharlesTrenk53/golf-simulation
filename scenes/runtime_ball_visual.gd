@@ -5,8 +5,14 @@ extends Node3D
 # Visual-only representation of an already-resolved simulation shot. The
 # simulation remains authoritative for start, target, landing, penalties, and
 # relief. This node never calculates a golf outcome or modifies simulation state.
+#
+# POC-27 kickoff: putting results retain their authoritative rolled landing point
+# but are presented as a ground roll instead of inheriting the generic airborne
+# parabola used by full shots.
 
 signal flight_finished
+
+const PUTT_SHOT_TYPE := 3
 
 @export var flight_duration: float = 1.25
 @export var default_arc_height: float = 8.0
@@ -22,6 +28,7 @@ var flight_progress: float = 1.0
 var is_flying: bool = false
 var _elapsed: float = 0.0
 var _arc_height: float = 0.0
+var _ground_roll: bool = false
 
 
 func _ready() -> void:
@@ -39,6 +46,8 @@ func place_at(position: Vector3) -> void:
 	flight_progress = 1.0
 	is_flying = false
 	_elapsed = 0.0
+	_ground_roll = false
+	set_meta("trajectory_kind", "STATIONARY")
 	_apply_course_position(position)
 
 
@@ -53,7 +62,9 @@ func present_shot(result: Dictionary, animate: bool = true) -> bool:
 	has_relief = relief_position.distance_to(shot_landing) > 0.001
 	course_position = shot_start
 	_elapsed = 0.0
-	_arc_height = _resolved_arc_height(result)
+	_ground_roll = _is_putt(result)
+	_arc_height = 0.0 if _ground_roll else _resolved_arc_height(result)
+	set_meta("trajectory_kind", "GROUND_ROLL" if _ground_roll else "AIRBORNE")
 	flight_progress = 0.0 if animate else 1.0
 	is_flying = animate
 
@@ -89,7 +100,7 @@ func _process(delta: float) -> void:
 func _apply_flight_progress(value: float) -> void:
 	var t: float = clamp(value, 0.0, 1.0)
 	var horizontal: Vector3 = shot_start.lerp(shot_landing, t)
-	var arc: float = 4.0 * _arc_height * t * (1.0 - t)
+	var arc: float = 0.0 if _ground_roll else 4.0 * _arc_height * t * (1.0 - t)
 	course_position = horizontal
 	position = Vector3(horizontal.x, horizontal.y + ball_radius + arc, horizontal.z)
 	set_meta("course_position", course_position)
@@ -108,6 +119,15 @@ func _finish_at_landing() -> void:
 func _apply_course_position(value: Vector3) -> void:
 	position = Vector3(value.x, value.y + ball_radius, value.z)
 	set_meta("course_position", value)
+
+
+func _is_putt(result: Dictionary) -> bool:
+	if int(result.get("shot_type", -1)) == PUTT_SHOT_TYPE:
+		return true
+	if str(result.get("club_id", "")).to_upper() == "PUTTER":
+		return true
+	var putting = result.get("putting", {})
+	return typeof(putting) == TYPE_DICTIONARY and not putting.is_empty()
 
 
 func _resolved_arc_height(result: Dictionary) -> float:

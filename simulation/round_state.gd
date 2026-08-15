@@ -3,8 +3,15 @@ extends RefCounted
 # POC-12B: Round State
 # --------------------
 # Tracks progression and scoring across an arbitrary CourseDefinition. This
-# object deliberately does not execute golf shots; POC-12C will feed completed
-# hole scores into it.
+# object deliberately does not execute golf shots; POC-12C feeds completed hole
+# scores into it.
+#
+# POC-27B adds read-only full-round semantics for traditional 18-hole play:
+# front-nine/back-nine progress, turn state, nine-level scoring, and explicit
+# started/finished snapshot fields. Existing arbitrary-length course behavior and
+# snapshot restoration remain unchanged.
+
+const FRONT_NINE_LIMIT := 9
 
 var course = null
 var tee_id: String = "default"
@@ -38,11 +45,7 @@ func current_hole_number() -> int:
 
 
 func holes_completed() -> int:
-	var count: int = 0
-	for score in hole_scores:
-		if score >= 0:
-			count += 1
-	return count
+	return _holes_completed_in_range(0, hole_scores.size())
 
 
 func record_current_hole(strokes: int) -> bool:
@@ -115,23 +118,11 @@ func score_for_hole(hole_number: int) -> int:
 
 
 func total_strokes() -> int:
-	var total: int = 0
-	for score in hole_scores:
-		if score >= 0:
-			total += score
-	return total
+	return _strokes_in_range(0, hole_scores.size())
 
 
 func par_played() -> int:
-	if course == null:
-		return 0
-	var total: int = 0
-	for index in range(hole_scores.size()):
-		if hole_scores[index] >= 0:
-			var hole = course.hole_at(index)
-			if hole != null:
-				total += int(hole.par)
-	return total
+	return _par_played_in_range(0, hole_scores.size())
 
 
 func score_to_par() -> int:
@@ -142,6 +133,89 @@ func remaining_holes() -> int:
 	if course == null:
 		return 0
 	return max(0, course.hole_count() - holes_completed())
+
+
+func front_nine_size() -> int:
+	if course == null:
+		return 0
+	return mini(FRONT_NINE_LIMIT, course.hole_count())
+
+
+func back_nine_size() -> int:
+	if course == null:
+		return 0
+	return maxi(0, course.hole_count() - FRONT_NINE_LIMIT)
+
+
+func front_nine_holes_completed() -> int:
+	return _holes_completed_in_range(0, front_nine_size())
+
+
+func back_nine_holes_completed() -> int:
+	return _holes_completed_in_range(FRONT_NINE_LIMIT, hole_scores.size())
+
+
+func front_nine_strokes() -> int:
+	return _strokes_in_range(0, front_nine_size())
+
+
+func back_nine_strokes() -> int:
+	return _strokes_in_range(FRONT_NINE_LIMIT, hole_scores.size())
+
+
+func front_nine_par_played() -> int:
+	return _par_played_in_range(0, front_nine_size())
+
+
+func back_nine_par_played() -> int:
+	return _par_played_in_range(FRONT_NINE_LIMIT, hole_scores.size())
+
+
+func front_nine_score_to_par() -> int:
+	return front_nine_strokes() - front_nine_par_played()
+
+
+func back_nine_score_to_par() -> int:
+	return back_nine_strokes() - back_nine_par_played()
+
+
+func front_nine_complete() -> bool:
+	return front_nine_size() > 0 and front_nine_holes_completed() == front_nine_size()
+
+
+func back_nine_complete() -> bool:
+	return back_nine_size() > 0 and back_nine_holes_completed() == back_nine_size()
+
+
+func turn_reached() -> bool:
+	return back_nine_size() > 0 and front_nine_complete()
+
+
+func round_phase() -> String:
+	if course == null:
+		return "NO_COURSE"
+	if complete:
+		return "COMPLETE"
+	if holes_completed() == 0:
+		return "NOT_STARTED"
+	if current_hole_index < FRONT_NINE_LIMIT or back_nine_size() == 0:
+		return "FRONT_NINE"
+	return "BACK_NINE"
+
+
+func nine_summary(start_index: int, end_index: int) -> Dictionary:
+	var size: int = maxi(0, mini(end_index, hole_scores.size()) - maxi(0, start_index))
+	var completed_count: int = _holes_completed_in_range(start_index, end_index)
+	var strokes: int = _strokes_in_range(start_index, end_index)
+	var par_total: int = _par_played_in_range(start_index, end_index)
+	return {
+		"holes_total": size,
+		"holes_completed": completed_count,
+		"strokes": strokes,
+		"par_played": par_total,
+		"score_to_par": strokes - par_total,
+		"complete": size > 0 and completed_count == size
+	}
 
 
 func scorecard() -> Array:
@@ -174,6 +248,47 @@ func snapshot() -> Dictionary:
 		"total_strokes": total_strokes(),
 		"par_played": par_played(),
 		"score_to_par": score_to_par(),
+		"round_started": holes_completed() > 0,
+		"round_finished": complete,
+		"round_phase": round_phase(),
+		"turn_reached": turn_reached(),
+		"front_nine": nine_summary(0, FRONT_NINE_LIMIT),
+		"back_nine": nine_summary(FRONT_NINE_LIMIT, hole_scores.size()),
 		"complete": complete,
 		"scorecard": scorecard()
 	}
+
+
+func _holes_completed_in_range(start_index: int, end_index: int) -> int:
+	var count: int = 0
+	var start: int = maxi(0, start_index)
+	var finish: int = mini(end_index, hole_scores.size())
+	for index in range(start, finish):
+		if hole_scores[index] >= 0:
+			count += 1
+	return count
+
+
+func _strokes_in_range(start_index: int, end_index: int) -> int:
+	var total: int = 0
+	var start: int = maxi(0, start_index)
+	var finish: int = mini(end_index, hole_scores.size())
+	for index in range(start, finish):
+		if hole_scores[index] >= 0:
+			total += hole_scores[index]
+	return total
+
+
+func _par_played_in_range(start_index: int, end_index: int) -> int:
+	if course == null:
+		return 0
+	var total: int = 0
+	var start: int = maxi(0, start_index)
+	var finish: int = mini(end_index, hole_scores.size())
+	for index in range(start, finish):
+		if hole_scores[index] < 0:
+			continue
+		var hole = course.hole_at(index)
+		if hole != null:
+			total += int(hole.par)
+	return total
