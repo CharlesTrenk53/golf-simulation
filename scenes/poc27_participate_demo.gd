@@ -14,13 +14,42 @@ const POC27PopulationView = preload("res://scenes/spectator_population_view.gd")
 const POC27Session = preload("res://scenes/participate_spectator_session.gd")
 const POC27FocusController = preload("res://scenes/participate_focus_controller.gd")
 const POC27Golfer = preload("res://scenes/golfer.gd")
+const ParticipatePacingController = preload("res://scenes/participate_pacing_controller.gd")
 
 const GROUP_IDS := ["group_1", "group_2", "group_3", "group_4"]
 const HUMAN_MEMBER := 0
 
+@export var compress_idle_waits: bool = true
+
+var participate_pacing = ParticipatePacingController.new()
+
 
 func _ready() -> void:
 	initialize_demo()
+
+
+func _process(delta: float) -> void:
+	if not initialized:
+		return
+	if session != null:
+		session.advance_visuals(delta)
+	if auto_advance and session != null and not _physical_round_complete():
+		var real_step: float = clampf(delta, 0.0, max_real_step_seconds)
+		if real_step > 0.0 and not session.presentation_busy():
+			var advanced: bool = false
+			if compress_idle_waits:
+				var pacing: Dictionary = participate_pacing.idle_advance(controller, "group_1")
+				if str(pacing.get("mode", "")) == ParticipatePacingController.MODE_FAST_FORWARD:
+					session.advance_time(float(pacing.get("delta_seconds", 0.0)), true)
+					advanced = true
+				elif str(pacing.get("mode", "")) == ParticipatePacingController.MODE_REALTIME:
+					# A ready human decision must remain stable, but the living course
+					# still advances normally while the player thinks.
+					session.advance_time(real_step * maxf(simulation_speed, 0.01), true)
+					advanced = true
+			if not advanced:
+				session.advance_time(real_step * maxf(simulation_speed, 0.01), true)
+	_refresh_presentation(delta)
 
 
 func initialize_demo() -> bool:
@@ -127,7 +156,7 @@ func _build_hud() -> void:
 	if canvas == null:
 		return
 	for child in canvas.get_children():
-		if child is Label and str(child.text).begins_with("TAB /"): 
+		if child is Label and str(child.text).begins_with("TAB /"):
 			child.text = "TAB / ← → switch groups   •   1 / 2 / 3 / 4 jump to group   •   Enter commits selected shot"
 
 
