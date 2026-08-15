@@ -84,6 +84,7 @@ func _run() -> void:
 	_assert_equal_int(_sum_exposure(development_evidence_1.get("shot_type_evidence", {})), int(stats_1.get("total_shots", -1)), "Round 1 development evidence preserves exact shot-family exposure")
 	_assert_equal_int(_sum_development_evidence(development_after_1) - starting_development_evidence, int(stats_1.get("total_shots", -1)), "Round 1 development engine accumulates one evidence event per played shot")
 	_assert_golfer_experience_matches_development(player, development_after_1, "Round 1 syncs development experience back onto persistent golfer")
+	_assert_golfer_ability_matches_development(player, development_after_1, "Round 1 projects durable development back to ordinary golfer abilities")
 	_assert_equal_int(persistent.completed_rounds.size(), 1, "Round 1 appears once in persistent completed-round history")
 	_assert_true(persistent.active_round.is_empty(), "player returns to persistent world with no active activity")
 	_assert_equal_str(str(persistent.player_round_context().get("activity_type", "")), "NONE", "post-round context returns to world/idle state")
@@ -100,6 +101,7 @@ func _run() -> void:
 	_assert_equal_int(int(entered_2.get("golfer_instance_id", 0)), player_id, "Round 2 reuses exact same golfer identity")
 	_assert_equal_int(int(player.shots_attempted), memory_after_round_1, "Round 2 begins with Round 1 golfer memory intact")
 	_assert_equal_int(_sum_development_evidence(persistent.development_snapshot()), development_total_after_round_1, "Round 2 begins with Round 1 development evidence intact")
+	_assert_golfer_ability_matches_development(player, persistent.development_snapshot(), "Round 2 begins using the durable ability state produced after Round 1")
 	_assert_equal_int(int(persistent.golf_activity.career_rounds_played), 1, "Round 1 activity history remains before Round 2 completion")
 	_assert_near(persistent.world_time_seconds, world_time_after_round_1, 0.0001, "Round 2 entry does not reset persistent world clock")
 	_assert_equal_int(persistent.controller.get_instance_id(), controller_id, "Round 2 uses same living-world controller")
@@ -135,6 +137,7 @@ func _run() -> void:
 	_assert_equal_int(int(development_evidence_2.get("total_evidence", 0)), int(stats_2.get("total_shots", -1)), "Round 2 sends every authoritative shot through same development bridge")
 	_assert_equal_int(_sum_development_evidence(development_after_2) - development_total_after_round_1, int(stats_2.get("total_shots", -1)), "Round 2 development evidence accumulates instead of resetting")
 	_assert_golfer_experience_matches_development(player, development_after_2, "Round 2 preserves cumulative development experience on persistent golfer")
+	_assert_golfer_ability_matches_development(player, development_after_2, "Round 2 leaves ordinary golfer abilities synchronized to cumulative durable development")
 	_assert_equal_int(
 		persistent.golf_activity.total_on_course_exposure(),
 		int(stats_1.get("total_shots", 0)) + int(stats_2.get("total_shots", 0)),
@@ -219,6 +222,16 @@ func _assert_golfer_experience_matches_development(player, snapshot: Dictionary,
 	for shot_type in [0, 1, 2, 3]:
 		var state: Dictionary = snapshot.get(shot_type, {})
 		if int(player.skill_experience_for(shot_type)) != int(state.get("total_experience", -1)):
+			all_match = false
+			break
+	_assert_true(all_match, label)
+
+
+func _assert_golfer_ability_matches_development(player, snapshot: Dictionary, label: String) -> void:
+	var all_match: bool = true
+	for shot_type in [0, 1, 2, 3]:
+		var state: Dictionary = snapshot.get(shot_type, {})
+		if abs(float(player.get_shot_ability(shot_type)) - float(state.get("effective_skill", -999.0))) > 0.0001:
 			all_match = false
 			break
 	_assert_true(all_match, label)
