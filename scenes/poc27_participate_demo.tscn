@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/poc27_participate_demo.gd" id="1"]
+[ext_resource type="Script" path="res://scenes/participate_shot_dispersion_preview.gd" id="2"]
+
+[node name="POC27ParticipateDemo" type="Node3D"]
+script = ExtResource("1")
+
+[node name="ShotDispersionPreview" type="Node3D" parent="."]
+script = ExtResource("2")
