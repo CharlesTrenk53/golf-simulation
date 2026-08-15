@@ -233,7 +233,7 @@ func finalize_player_round() -> Dictionary:
 	var round_state = player_round_state()
 	if group == null or round_state == null:
 		return {"finalized": false, "reason": "MISSING_ROUND_AUTHORITY"}
-	if str(group.status) != STATUS_FINISHED or not round_state.is_complete():
+	if str(group.status) != STATUS_FINISHED or not bool(round_state.complete):
 		return {"finalized": false, "reason": "ROUND_NOT_FINISHED"}
 	if controller.traffic != null and controller.traffic.group_hole(group_id) != 0:
 		return {"finalized": false, "reason": "GROUP_STILL_ON_COURSE"}
