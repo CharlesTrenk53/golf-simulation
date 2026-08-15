@@ -38,6 +38,7 @@ func _run() -> void:
 	var controller_id: int = persistent.controller.get_instance_id()
 	var starting_memory: int = int(player.shots_attempted)
 	var starting_world_time: float = persistent.world_time_seconds
+	var starting_development_evidence: int = _sum_development_evidence(persistent.development_snapshot())
 
 	# ROUND 1: player is an ordinary second member of a twosome.
 	var partner_1 = _new_golfer(Golfer.GolferProfile.WILD_BILL)
@@ -48,7 +49,7 @@ func _run() -> void:
 	var round_1_state = persistent.player_round_state()
 	_assert_true(round_1_state != null, "Round 1 receives fresh RoundState")
 	var round_1_state_id: int = round_1_state.get_instance_id() if round_1_state != null else 0
-	_assert_false(persistent.controller.living_course.retire_finished_group("persistent_round_1"), "active Round 1 group cannot retire early")
+	_assert_false(persistent.controller.retire_finished_group("persistent_round_1"), "active Round 1 group cannot retire early through live authority")
 
 	var release_1: Dictionary = persistent.release_next_group()
 	_assert_true(bool(release_1.get("released", false)), "Round 1 releases through ordinary tee authority")
@@ -68,6 +69,8 @@ func _run() -> void:
 	var archive_1: Dictionary = finalized_1.get("round", {})
 	var stats_1: Dictionary = archive_1.get("statistics", {})
 	var exposure_1: Dictionary = stats_1.get("shot_type_exposure", {})
+	var development_evidence_1: Dictionary = archive_1.get("development_evidence", {})
+	var development_after_1: Dictionary = archive_1.get("development_after", {})
 	_assert_equal_int(archive_1.get("scorecard", []).size(), 18, "Round 1 archive retains authoritative 18-hole scorecard")
 	_assert_equal_int(int(archive_1.get("total_strokes", -1)), int(round_1_state.total_strokes()), "Round 1 archive retains authoritative stroke total")
 	_assert_true(int(stats_1.get("total_shots", 0)) > 18, "Round 1 archive contains authoritative player shot history")
@@ -76,6 +79,11 @@ func _run() -> void:
 	_assert_equal_int(int(stats_1.get("human_shots", 0)), int(stats_1.get("total_shots", -1)), "Round 1 player shots retain human provenance")
 	_assert_equal_int(int(persistent.golf_activity.career_rounds_played), 1, "Round 1 records one factual GolfActivity round")
 	_assert_equal_int(persistent.golf_activity.total_on_course_exposure(), int(stats_1.get("total_shots", -1)), "GolfActivity uses actual Round 1 shot exposure rather than placeholder distribution")
+	_assert_equal_int(int(development_evidence_1.get("unsupported_shots", -1)), 0, "every authoritative Round 1 shot carries usable development evidence")
+	_assert_equal_int(int(development_evidence_1.get("total_evidence", 0)), int(stats_1.get("total_shots", -1)), "Round 1 sends every authoritative shot through existing development bridge")
+	_assert_equal_int(_sum_exposure(development_evidence_1.get("shot_type_evidence", {})), int(stats_1.get("total_shots", -1)), "Round 1 development evidence preserves exact shot-family exposure")
+	_assert_equal_int(_sum_development_evidence(development_after_1) - starting_development_evidence, int(stats_1.get("total_shots", -1)), "Round 1 development engine accumulates one evidence event per played shot")
+	_assert_golfer_experience_matches_development(player, development_after_1, "Round 1 syncs development experience back onto persistent golfer")
 	_assert_equal_int(persistent.completed_rounds.size(), 1, "Round 1 appears once in persistent completed-round history")
 	_assert_true(persistent.active_round.is_empty(), "player returns to persistent world with no active activity")
 	_assert_equal_str(str(persistent.player_round_context().get("activity_type", "")), "NONE", "post-round context returns to world/idle state")
@@ -85,11 +93,13 @@ func _run() -> void:
 	_assert_equal_int(persistent.controller.get_instance_id(), controller_id, "Round 1 finalization preserves exact living-world controller")
 
 	# ROUND 2: same world, same golfer, new ordinary group and fresh round state.
+	var development_total_after_round_1: int = _sum_development_evidence(persistent.development_snapshot())
 	var partner_2 = _new_golfer(Golfer.GolferProfile.RECKLESS_RICK)
 	var entered_2: Dictionary = persistent.enter_round("persistent_round_2", [partner_2], "default", 0, 28901)
 	_assert_true(bool(entered_2.get("entered", false)), "same persistent golfer can enter Round 2 after retirement")
 	_assert_equal_int(int(entered_2.get("golfer_instance_id", 0)), player_id, "Round 2 reuses exact same golfer identity")
 	_assert_equal_int(int(player.shots_attempted), memory_after_round_1, "Round 2 begins with Round 1 golfer memory intact")
+	_assert_equal_int(_sum_development_evidence(persistent.development_snapshot()), development_total_after_round_1, "Round 2 begins with Round 1 development evidence intact")
 	_assert_equal_int(int(persistent.golf_activity.career_rounds_played), 1, "Round 1 activity history remains before Round 2 completion")
 	_assert_near(persistent.world_time_seconds, world_time_after_round_1, 0.0001, "Round 2 entry does not reset persistent world clock")
 	_assert_equal_int(persistent.controller.get_instance_id(), controller_id, "Round 2 uses same living-world controller")
@@ -112,6 +122,8 @@ func _run() -> void:
 	_assert_true(bool(finalized_2.get("finalized", false)), "Round 2 finalizes without rebuilding persistent world")
 	var archive_2: Dictionary = finalized_2.get("round", {})
 	var stats_2: Dictionary = archive_2.get("statistics", {})
+	var development_evidence_2: Dictionary = archive_2.get("development_evidence", {})
+	var development_after_2: Dictionary = archive_2.get("development_after", {})
 	_assert_equal_int(archive_2.get("scorecard", []).size(), 18, "Round 2 archive retains complete authoritative scorecard")
 	_assert_equal_int(int(persistent.golf_activity.career_rounds_played), 2, "two completed activities accumulate on same GolfActivity history")
 	_assert_equal_int(persistent.completed_rounds.size(), 2, "persistent history retains both completed rounds")
@@ -119,18 +131,28 @@ func _run() -> void:
 	_assert_equal_int(persistent.controller.get_instance_id(), controller_id, "same world authority survives two complete activities")
 	_assert_true(float(archive_2.get("entered_time_seconds", 0.0)) >= float(archive_1.get("completed_time_seconds", 0.0)), "Round 2 begins no earlier than Round 1 world completion")
 	_assert_true(int(stats_2.get("total_shots", 0)) > 18, "Round 2 also derives factual authoritative shot history")
+	_assert_equal_int(int(development_evidence_2.get("unsupported_shots", -1)), 0, "every authoritative Round 2 shot carries usable development evidence")
+	_assert_equal_int(int(development_evidence_2.get("total_evidence", 0)), int(stats_2.get("total_shots", -1)), "Round 2 sends every authoritative shot through same development bridge")
+	_assert_equal_int(_sum_development_evidence(development_after_2) - development_total_after_round_1, int(stats_2.get("total_shots", -1)), "Round 2 development evidence accumulates instead of resetting")
+	_assert_golfer_experience_matches_development(player, development_after_2, "Round 2 preserves cumulative development experience on persistent golfer")
 	_assert_equal_int(
 		persistent.golf_activity.total_on_course_exposure(),
 		int(stats_1.get("total_shots", 0)) + int(stats_2.get("total_shots", 0)),
 		"career activity exposure exactly accumulates both authoritative rounds"
 	)
+	_assert_equal_int(
+		_sum_development_evidence(persistent.development_snapshot()) - starting_development_evidence,
+		int(stats_1.get("total_shots", 0)) + int(stats_2.get("total_shots", 0)),
+		"persistent development evidence exactly accumulates both authoritative rounds"
+	)
 	_assert_equal_str(str(persistent.player_round_context().get("status", "")), "IDLE", "repeat loop returns to persistent idle world after Round 2")
 
-	print("POC28F_REPEATABLE_LOOP_SUMMARY golfer_id=%d controller_id=%d rounds=%d memory=%d world_time=%.1f round1_shots=%d round2_shots=%d" % [
+	print("POC28F_REPEATABLE_LOOP_SUMMARY golfer_id=%d controller_id=%d rounds=%d memory=%d development_evidence=%d world_time=%.1f round1_shots=%d round2_shots=%d" % [
 		player_id,
 		controller_id,
 		persistent.golf_activity.career_rounds_played,
 		int(player.shots_attempted),
+		_sum_development_evidence(persistent.development_snapshot()),
 		persistent.world_time_seconds,
 		int(stats_1.get("total_shots", 0)),
 		int(stats_2.get("total_shots", 0))
@@ -182,6 +204,24 @@ func _sum_exposure(exposure: Dictionary) -> int:
 	for shot_type in [0, 1, 2, 3]:
 		total += int(exposure.get(shot_type, 0))
 	return total
+
+
+func _sum_development_evidence(snapshot: Dictionary) -> int:
+	var total: int = 0
+	for shot_type in [0, 1, 2, 3]:
+		var state: Dictionary = snapshot.get(shot_type, {})
+		total += int(state.get("evidence_count", 0))
+	return total
+
+
+func _assert_golfer_experience_matches_development(player, snapshot: Dictionary, label: String) -> void:
+	var all_match: bool = true
+	for shot_type in [0, 1, 2, 3]:
+		var state: Dictionary = snapshot.get(shot_type, {})
+		if int(player.skill_experience_for(shot_type)) != int(state.get("total_experience", -1)):
+			all_match = false
+			break
+	_assert_true(all_match, label)
 
 
 func _new_golfer(profile_value: int):
