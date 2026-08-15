@@ -1,7 +1,7 @@
 extends Node
 
-# POC-28A/B/C: Persistent Player World Session
-# ---------------------------------------------
+# POC-28A-F: Persistent Player World Session
+# -------------------------------------------
 # Long-lived authority bridge above the existing living-course stack. The player
 # golfer is owned by this node so activity/presentation scenes can come and go
 # without replacing the golfer. The living-course controller remains the sole
@@ -80,20 +80,17 @@ func enter_round(
 	if members.size() < 1 or members.size() > 4:
 		return {"entered": false, "reason": "INVALID_GROUP_SIZE"}
 
+	round_sequence += 1
 	var normalized_group_id: String = group_id.strip_edges()
 	if normalized_group_id.is_empty():
-		round_sequence += 1
 		normalized_group_id = "player_round_%d" % round_sequence
-	elif round_sequence == 0:
-		round_sequence = 1
-	else:
-		round_sequence += 1
 
 	if not controller.add_group(normalized_group_id, members, tee_id, player_member_index, seed_base):
 		return {"entered": false, "reason": "GROUP_ENTRY_REJECTED"}
 
 	active_round = {
 		"activity_type": "ROUND",
+		"sequence": round_sequence,
 		"group_id": normalized_group_id,
 		"tee_id": tee_id,
 		"player_member_index": player_member_index,
@@ -105,6 +102,7 @@ func enter_round(
 	}
 	activity_history.append({
 		"type": "ROUND_ENTERED",
+		"sequence": round_sequence,
 		"group_id": normalized_group_id,
 		"day": world_day,
 		"time_seconds": world_time_seconds,
@@ -112,6 +110,7 @@ func enter_round(
 	})
 	return {
 		"entered": true,
+		"sequence": round_sequence,
 		"group_id": normalized_group_id,
 		"player_member_index": player_member_index,
 		"tee_id": tee_id,
@@ -222,6 +221,88 @@ func player_round_context() -> Dictionary:
 	}
 
 
+# POC-28D/E/F: archive an authoritative completed round, record its actual shot
+# exposure in GolfActivity, then retire the finished group so the same persistent
+# golfer may enter another ordinary group without recreating the world.
+func finalize_player_round() -> Dictionary:
+	if controller == null or active_round.is_empty():
+		return {"finalized": false, "reason": "NO_ACTIVE_PLAYER_ROUND"}
+
+	var group_id: String = str(active_round.get("group_id", ""))
+	var group = _player_group()
+	var round_state = player_round_state()
+	if group == null or round_state == null:
+		return {"finalized": false, "reason": "MISSING_ROUND_AUTHORITY"}
+	if str(group.status) != STATUS_FINISHED or not round_state.is_complete():
+		return {"finalized": false, "reason": "ROUND_NOT_FINISHED"}
+	if controller.traffic != null and controller.traffic.group_hole(group_id) != 0:
+		return {"finalized": false, "reason": "GROUP_STILL_ON_COURSE"}
+	if controller.live_sessions.has(group_id) or controller.live_metadata.has(group_id) or controller.blocked_transitions.has(group_id):
+		return {"finalized": false, "reason": "GROUP_AUTHORITY_STILL_ACTIVE"}
+
+	var round_snapshot: Dictionary = round_state.snapshot()
+	var shot_events: Array = _player_round_shot_events(group_id, int(active_round.get("player_member_index", -1)))
+	var statistics: Dictionary = _authoritative_round_statistics(shot_events)
+	var exposure: Dictionary = statistics.get("shot_type_exposure", {}).duplicate(true)
+	var activity_result: Dictionary = golf_activity.record_round_on_day(world_day, exposure)
+
+	var archived: Dictionary = {
+		"activity_type": "ROUND",
+		"sequence": int(active_round.get("sequence", round_sequence)),
+		"group_id": group_id,
+		"course_id": str(course.course_id) if course != null else "",
+		"course_name": str(course.course_name) if course != null else "",
+		"tee_id": str(active_round.get("tee_id", "default")),
+		"golfer_instance_id": player_golfer.get_instance_id(),
+		"entered_day": int(active_round.get("entered_day", world_day)),
+		"completed_day": world_day,
+		"entered_time_seconds": float(active_round.get("entered_time_seconds", world_time_seconds)),
+		"completed_time_seconds": world_time_seconds,
+		"elapsed_world_seconds": maxf(world_time_seconds - float(active_round.get("entered_time_seconds", world_time_seconds)), 0.0),
+		"total_strokes": int(round_snapshot.get("total_strokes", 0)),
+		"par_played": int(round_snapshot.get("par_played", 0)),
+		"score_to_par": int(round_snapshot.get("score_to_par", 0)),
+		"front_nine": round_snapshot.get("front_nine", {}).duplicate(true),
+		"back_nine": round_snapshot.get("back_nine", {}).duplicate(true),
+		"scorecard": round_snapshot.get("scorecard", []).duplicate(true),
+		"statistics": statistics.duplicate(true),
+		"activity_record": activity_result.duplicate(true)
+	}
+
+	# Population is current-world membership, not history. Archive first, then
+	# release golfer assignments. Controller dictionaries are configuration for the
+	# retired group and may be safely dropped only after all live authority is gone.
+	if not controller.living_course.retire_finished_group(group_id):
+		return {"finalized": false, "reason": "GROUP_RETIREMENT_REJECTED"}
+	controller.group_controls.erase(group_id)
+
+	completed_rounds.append(archived.duplicate(true))
+	activity_history.append({
+		"type": "ROUND_COMPLETED",
+		"sequence": int(archived.get("sequence", 0)),
+		"group_id": group_id,
+		"day": world_day,
+		"time_seconds": world_time_seconds,
+		"total_strokes": int(archived.get("total_strokes", 0)),
+		"score_to_par": int(archived.get("score_to_par", 0)),
+		"authoritative_shots": int(statistics.get("total_shots", 0))
+	})
+	active_round.clear()
+	return {
+		"finalized": true,
+		"round": archived.duplicate(true),
+		"golfer_instance_id": player_golfer.get_instance_id(),
+		"world_time_seconds": world_time_seconds,
+		"career_rounds_played": golf_activity.career_rounds_played
+	}
+
+
+func latest_completed_round() -> Dictionary:
+	if completed_rounds.is_empty():
+		return {}
+	return completed_rounds[completed_rounds.size() - 1].duplicate(true)
+
+
 func snapshot() -> Dictionary:
 	return {
 		"configured": player_golfer != null and controller != null,
@@ -252,6 +333,49 @@ func _player_group():
 	if controller == null or controller.living_course == null or active_round.is_empty():
 		return null
 	return controller.living_course.population.group_by_id(str(active_round.get("group_id", "")))
+
+
+func _player_round_shot_events(group_id: String, member_index: int) -> Array:
+	var result: Array = []
+	if controller == null or group_id.is_empty() or member_index < 0:
+		return result
+	for event_value in controller.event_history:
+		if typeof(event_value) != TYPE_DICTIONARY:
+			continue
+		var event: Dictionary = event_value
+		if str(event.get("type", "")) != "LIVE_SHOT":
+			continue
+		if str(event.get("group_id", "")) != group_id or int(event.get("member_index", -1)) != member_index:
+			continue
+		result.append(event.duplicate(true))
+	return result
+
+
+func _authoritative_round_statistics(shot_events: Array) -> Dictionary:
+	var exposure: Dictionary = {0: 0, 1: 0, 2: 0, 3: 0}
+	var penalties: int = 0
+	var putts: int = 0
+	var human_provenance: int = 0
+	for event_value in shot_events:
+		if typeof(event_value) != TYPE_DICTIONARY:
+			continue
+		var event: Dictionary = event_value
+		var shot: Dictionary = event.get("shot", {})
+		var shot_type: int = int(shot.get("shot_type", -1))
+		if exposure.has(shot_type):
+			exposure[shot_type] = int(exposure.get(shot_type, 0)) + 1
+		if shot_type == 3:
+			putts += 1
+		penalties += max(0, int(event.get("penalty_strokes", shot.get("penalty_strokes", 0))))
+		if str(event.get("control_source", "")) == "HUMAN" or str(event.get("choice_source", "")) == "HUMAN":
+			human_provenance += 1
+	return {
+		"total_shots": shot_events.size(),
+		"putts": putts,
+		"penalty_strokes": penalties,
+		"human_shots": human_provenance,
+		"shot_type_exposure": exposure
+	}
 
 
 func _sync_world_clock() -> void:
