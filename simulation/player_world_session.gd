@@ -15,16 +15,21 @@ extends Node
 
 const ShotProgressiveLivingCourseController = preload("res://simulation/shot_progressive_living_course_controller.gd")
 const GolfActivity = preload("res://simulation/golf_activity.gd")
+const DevelopmentEvidenceBridge = preload("res://simulation/development_evidence_bridge.gd")
+const TechniqueSkillDevelopment = preload("res://simulation/technique_skill_development.gd")
 
 const STATUS_IDLE := "IDLE"
 const STATUS_WAITING := "WAITING"
 const STATUS_PLAYING := "PLAYING"
 const STATUS_FINISHED := "FINISHED"
+const SHOT_TYPES := [0, 1, 2, 3]
 
 var player_golfer = null
 var course = null
 var controller = null
 var golf_activity = GolfActivity.new()
+var development = TechniqueSkillDevelopment.new()
+var development_bridge = DevelopmentEvidenceBridge.new()
 
 var world_day: int = 0
 var world_time_seconds: float = 0.0
@@ -52,6 +57,9 @@ func configure(golfer, course_definition, starting_day: int = 0, starting_world_
 	world_time_seconds = maxf(starting_world_time_seconds, 0.0)
 	controller.current_time_seconds = world_time_seconds
 	golf_activity = GolfActivity.new()
+	development = TechniqueSkillDevelopment.new()
+	development.initialize_from_golfer(player_golfer)
+	development_bridge = DevelopmentEvidenceBridge.new()
 	activity_history.clear()
 	completed_rounds.clear()
 	active_round.clear()
@@ -80,6 +88,7 @@ func enter_round(
 	if members.size() < 1 or members.size() > 4:
 		return {"entered": false, "reason": "INVALID_GROUP_SIZE"}
 
+	development.set_current_age(float(player_golfer.age))
 	round_sequence += 1
 	var normalized_group_id: String = group_id.strip_edges()
 	if normalized_group_id.is_empty():
@@ -222,8 +231,9 @@ func player_round_context() -> Dictionary:
 
 
 # POC-28D/E/F: archive an authoritative completed round, record its actual shot
-# exposure in GolfActivity, then retire the finished group so the same persistent
-# golfer may enter another ordinary group without recreating the world.
+# exposure in GolfActivity, feed the same shots into the existing long-horizon
+# development engine, then retire the finished group so the same persistent golfer
+# may enter another ordinary group without recreating the world.
 func finalize_player_round() -> Dictionary:
 	if controller == null or active_round.is_empty():
 		return {"finalized": false, "reason": "NO_ACTIVE_PLAYER_ROUND"}
@@ -245,6 +255,10 @@ func finalize_player_round() -> Dictionary:
 	var statistics: Dictionary = _authoritative_round_statistics(shot_events)
 	var exposure: Dictionary = statistics.get("shot_type_exposure", {}).duplicate(true)
 	var activity_result: Dictionary = golf_activity.record_round_on_day(world_day, exposure)
+	var development_before: Dictionary = development_snapshot()
+	var development_evidence: Dictionary = _apply_round_development_evidence(shot_events)
+	_sync_golfer_career_experience()
+	var development_after: Dictionary = development_snapshot()
 
 	var archived: Dictionary = {
 		"activity_type": "ROUND",
@@ -266,15 +280,17 @@ func finalize_player_round() -> Dictionary:
 		"back_nine": round_snapshot.get("back_nine", {}).duplicate(true),
 		"scorecard": round_snapshot.get("scorecard", []).duplicate(true),
 		"statistics": statistics.duplicate(true),
-		"activity_record": activity_result.duplicate(true)
+		"activity_record": activity_result.duplicate(true),
+		"development_before": development_before.duplicate(true),
+		"development_evidence": development_evidence.duplicate(true),
+		"development_after": development_after.duplicate(true)
 	}
 
-	# Population is current-world membership, not history. Archive first, then
-	# release golfer assignments. Controller dictionaries are configuration for the
-	# retired group and may be safely dropped only after all live authority is gone.
-	if not controller.living_course.retire_finished_group(group_id):
+	# Population is current-world membership, not history. Archive first, then ask
+	# the shot-progressive authority to release golfer assignments only after all
+	# live traffic/session/transition state has drained.
+	if not controller.retire_finished_group(group_id):
 		return {"finalized": false, "reason": "GROUP_RETIREMENT_REJECTED"}
-	controller.group_controls.erase(group_id)
 
 	completed_rounds.append(archived.duplicate(true))
 	activity_history.append({
@@ -285,7 +301,8 @@ func finalize_player_round() -> Dictionary:
 		"time_seconds": world_time_seconds,
 		"total_strokes": int(archived.get("total_strokes", 0)),
 		"score_to_par": int(archived.get("score_to_par", 0)),
-		"authoritative_shots": int(statistics.get("total_shots", 0))
+		"authoritative_shots": int(statistics.get("total_shots", 0)),
+		"development_evidence": int(development_evidence.get("total_evidence", 0))
 	})
 	active_round.clear()
 	return {
@@ -293,7 +310,8 @@ func finalize_player_round() -> Dictionary:
 		"round": archived.duplicate(true),
 		"golfer_instance_id": player_golfer.get_instance_id(),
 		"world_time_seconds": world_time_seconds,
-		"career_rounds_played": golf_activity.career_rounds_played
+		"career_rounds_played": golf_activity.career_rounds_played,
+		"development": development_after.duplicate(true)
 	}
 
 
@@ -301,6 +319,15 @@ func latest_completed_round() -> Dictionary:
 	if completed_rounds.is_empty():
 		return {}
 	return completed_rounds[completed_rounds.size() - 1].duplicate(true)
+
+
+func development_snapshot() -> Dictionary:
+	var result: Dictionary = {}
+	if development == null:
+		return result
+	for shot_type in SHOT_TYPES:
+		result[shot_type] = development.development_state(shot_type).duplicate(true)
+	return result
 
 
 func snapshot() -> Dictionary:
@@ -315,6 +342,7 @@ func snapshot() -> Dictionary:
 		"completed_rounds": completed_rounds.duplicate(true),
 		"activity_history": activity_history.duplicate(true),
 		"golf_activity": golf_activity.state() if golf_activity != null else {},
+		"development": development_snapshot(),
 		"round_context": player_round_context(),
 		"world": controller.snapshot() if controller != null else {}
 	}
@@ -376,6 +404,48 @@ func _authoritative_round_statistics(shot_events: Array) -> Dictionary:
 		"human_shots": human_provenance,
 		"shot_type_exposure": exposure
 	}
+
+
+func _apply_round_development_evidence(shot_events: Array) -> Dictionary:
+	var by_type: Dictionary = {0: 0, 1: 0, 2: 0, 3: 0}
+	var unsupported: int = 0
+	if development == null or development_bridge == null:
+		return {"total_evidence": 0, "unsupported_shots": shot_events.size(), "shot_type_evidence": by_type}
+
+	for event_value in shot_events:
+		if typeof(event_value) != TYPE_DICTIONARY:
+			unsupported += 1
+			continue
+		var event: Dictionary = event_value
+		var shot: Dictionary = event.get("shot", {})
+		var shot_type: int = int(shot.get("shot_type", -1))
+		if not by_type.has(shot_type) or not shot.has("execution_score"):
+			unsupported += 1
+			continue
+		var execution_score: float = clampf(float(shot.get("execution_score", 0.0)), 0.0, 100.0)
+		var lateral_error: float = float(shot.get("lateral_error", 0.0))
+		var distance_error: float = float(shot.get("distance_error", 0.0))
+		development_bridge.apply_play_exposure(development, shot_type, 1, execution_score, lateral_error, distance_error)
+		by_type[shot_type] = int(by_type.get(shot_type, 0)) + 1
+
+	var total_evidence: int = 0
+	for shot_type in SHOT_TYPES:
+		total_evidence += int(by_type.get(shot_type, 0))
+	return {
+		"total_evidence": total_evidence,
+		"unsupported_shots": unsupported,
+		"shot_type_evidence": by_type
+	}
+
+
+func _sync_golfer_career_experience() -> void:
+	if player_golfer == null or development == null:
+		return
+	if not ("career_shot_experience" in player_golfer):
+		return
+	for shot_type in SHOT_TYPES:
+		var state: Dictionary = development.development_state(shot_type)
+		player_golfer.career_shot_experience[shot_type] = int(state.get("total_experience", player_golfer.skill_experience_for(shot_type)))
 
 
 func _sync_world_clock() -> void:
