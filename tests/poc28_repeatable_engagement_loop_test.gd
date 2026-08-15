@@ -56,7 +56,7 @@ func _run() -> void:
 	var round_1_iterations: int = _play_active_round_to_finish(persistent)
 	_assert_true(round_1_iterations < MAX_ITERATIONS, "Round 1 finishes in bounded authoritative time")
 	_assert_true(round_1_state != null and bool(round_1_state.complete), "Round 1 RoundState completes all 18 holes")
-	_assert_equal_int(int(round_1_state.holes_completed), 18, "Round 1 completes 18 scorecard holes")
+	_assert_equal_int(int(round_1_state.holes_completed()), 18, "Round 1 completes 18 scorecard holes")
 	_assert_true(int(player.shots_attempted) > starting_memory, "Round 1 naturally changes persistent golfer memory")
 	var memory_after_round_1: int = int(player.shots_attempted)
 	var world_time_after_round_1: float = persistent.world_time_seconds
@@ -69,7 +69,7 @@ func _run() -> void:
 	var stats_1: Dictionary = archive_1.get("statistics", {})
 	var exposure_1: Dictionary = stats_1.get("shot_type_exposure", {})
 	_assert_equal_int(archive_1.get("scorecard", []).size(), 18, "Round 1 archive retains authoritative 18-hole scorecard")
-	_assert_equal_int(int(archive_1.get("total_strokes", -1)), int(round_1_state.total_strokes), "Round 1 archive retains authoritative stroke total")
+	_assert_equal_int(int(archive_1.get("total_strokes", -1)), int(round_1_state.total_strokes()), "Round 1 archive retains authoritative stroke total")
 	_assert_true(int(stats_1.get("total_shots", 0)) > 18, "Round 1 archive contains authoritative player shot history")
 	_assert_equal_int(_sum_exposure(exposure_1), int(stats_1.get("total_shots", -1)), "Round 1 factual exposure equals authoritative shot count")
 	_assert_true(int(stats_1.get("putts", 0)) > 0, "Round 1 archive derives putting count from authoritative shot types")
@@ -97,7 +97,7 @@ func _run() -> void:
 	_assert_true(round_2_state != null, "Round 2 receives new RoundState")
 	if round_2_state != null:
 		_assert_true(round_2_state.get_instance_id() != round_1_state_id, "Round 2 state is fresh while golfer remains persistent")
-		_assert_equal_int(int(round_2_state.total_strokes), 0, "fresh Round 2 scoring begins at zero")
+		_assert_equal_int(int(round_2_state.total_strokes()), 0, "fresh Round 2 scoring begins at zero")
 
 	var release_2: Dictionary = persistent.release_next_group()
 	_assert_true(bool(release_2.get("released", false)), "Round 2 releases normally into unchanged world")
