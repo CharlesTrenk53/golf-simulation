@@ -82,6 +82,27 @@ func add_group(
 	return true
 
 
+# POC-28F: finished-group retirement belongs to the same live authority that
+# owns traffic, live sessions, transition waits, and human-control configuration.
+# A caller may retire only after the group is fully finished and all live course
+# authority has drained. Event history intentionally remains as archival evidence.
+func retire_finished_group(group_id: String) -> bool:
+	if living_course == null:
+		return false
+	var normalized_id: String = group_id.strip_edges()
+	var group = living_course.population.group_by_id(normalized_id)
+	if group == null or str(group.status) != "FINISHED":
+		return false
+	if live_sessions.has(normalized_id) or live_metadata.has(normalized_id) or blocked_transitions.has(normalized_id):
+		return false
+	if traffic != null and traffic.group_hole(normalized_id) != 0:
+		return false
+	if not living_course.retire_finished_group(normalized_id):
+		return false
+	group_controls.erase(normalized_id)
+	return true
+
+
 func release_next_group() -> Dictionary:
 	if living_course == null or traffic == null:
 		return {}
