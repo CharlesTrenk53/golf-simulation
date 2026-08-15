@@ -264,6 +264,7 @@ func finalize_player_round() -> Dictionary:
 	var activity_result: Dictionary = golf_activity.record_round_on_day(world_day, exposure)
 	var development_evidence: Dictionary = _apply_round_development_evidence(shot_events)
 	_sync_golfer_career_experience()
+	_sync_golfer_durable_skill()
 	var development_after: Dictionary = development_snapshot()
 
 	var archived: Dictionary = {
@@ -446,6 +447,21 @@ func _sync_golfer_career_experience() -> void:
 	for shot_type in SHOT_TYPES:
 		var state: Dictionary = development.development_state(shot_type)
 		player_golfer.career_shot_experience[shot_type] = int(state.get("total_experience", player_golfer.skill_experience_for(shot_type)))
+
+
+# TechniqueSkillDevelopment owns durable skill change. The golfer's ordinary
+# ability fields are the values the existing shot/decision systems read, so after
+# a completed activity we project the development engine's effective skill back
+# onto those fields. The development baseline itself is not reinitialized here,
+# preventing cumulative skill deltas from being applied twice.
+func _sync_golfer_durable_skill() -> void:
+	if player_golfer == null or development == null:
+		return
+	var states: Dictionary = development_snapshot()
+	player_golfer.driving = float(states.get(0, {}).get("effective_skill", player_golfer.driving))
+	player_golfer.approach = float(states.get(1, {}).get("effective_skill", player_golfer.approach))
+	player_golfer.short_game = float(states.get(2, {}).get("effective_skill", player_golfer.short_game))
+	player_golfer.putting = float(states.get(3, {}).get("effective_skill", player_golfer.putting))
 
 
 func _sync_world_clock() -> void:
