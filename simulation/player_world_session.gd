@@ -230,10 +230,9 @@ func player_round_context() -> Dictionary:
 	}
 
 
-# POC-28D/E/F: archive an authoritative completed round, record its actual shot
-# exposure in GolfActivity, feed the same shots into the existing long-horizon
-# development engine, then retire the finished group so the same persistent golfer
-# may enter another ordinary group without recreating the world.
+# POC-28D/E/F: capture a completed authoritative round, retire its finished group,
+# then commit factual activity/development consequences exactly once. The same
+# persistent golfer may then enter another ordinary group in the unchanged world.
 func finalize_player_round() -> Dictionary:
 	if controller == null or active_round.is_empty():
 		return {"finalized": false, "reason": "NO_ACTIVE_PLAYER_ROUND"}
@@ -250,12 +249,19 @@ func finalize_player_round() -> Dictionary:
 	if controller.live_sessions.has(group_id) or controller.live_metadata.has(group_id) or controller.blocked_transitions.has(group_id):
 		return {"finalized": false, "reason": "GROUP_AUTHORITY_STILL_ACTIVE"}
 
+	# Capture everything authoritative while the finished group still exists. No
+	# persistent consequence is committed until retirement itself succeeds.
 	var round_snapshot: Dictionary = round_state.snapshot()
 	var shot_events: Array = _player_round_shot_events(group_id, int(active_round.get("player_member_index", -1)))
 	var statistics: Dictionary = _authoritative_round_statistics(shot_events)
 	var exposure: Dictionary = statistics.get("shot_type_exposure", {}).duplicate(true)
-	var activity_result: Dictionary = golf_activity.record_round_on_day(world_day, exposure)
 	var development_before: Dictionary = development_snapshot()
+
+	if not controller.retire_finished_group(group_id):
+		return {"finalized": false, "reason": "GROUP_RETIREMENT_REJECTED"}
+
+	# Retirement is now committed, so factual consequences may be applied once.
+	var activity_result: Dictionary = golf_activity.record_round_on_day(world_day, exposure)
 	var development_evidence: Dictionary = _apply_round_development_evidence(shot_events)
 	_sync_golfer_career_experience()
 	var development_after: Dictionary = development_snapshot()
@@ -285,12 +291,6 @@ func finalize_player_round() -> Dictionary:
 		"development_evidence": development_evidence.duplicate(true),
 		"development_after": development_after.duplicate(true)
 	}
-
-	# Population is current-world membership, not history. Archive first, then ask
-	# the shot-progressive authority to release golfer assignments only after all
-	# live traffic/session/transition state has drained.
-	if not controller.retire_finished_group(group_id):
-		return {"finalized": false, "reason": "GROUP_RETIREMENT_REJECTED"}
 
 	completed_rounds.append(archived.duplicate(true))
 	activity_history.append({
