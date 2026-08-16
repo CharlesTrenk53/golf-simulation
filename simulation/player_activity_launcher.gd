@@ -1,11 +1,11 @@
 extends RefCounted
 
-# POC-29C: Player Activity Launcher
-# ---------------------------------
+# POC-29C/D: Player Activity Launcher
+# -----------------------------------
 # Consumes an already-validated PlayerActivityContract selection and delegates
-# mutation to the existing activity authority. ROUND launch is only an adapter to
-# PlayerWorldSession.enter_round(); it does not release the group, simulate a shot,
-# advance time, or create alternate round/traffic authority.
+# mutation to the existing persistent-session activity authority. ROUND launch is
+# only an adapter to enter_round(); PRACTICE launch is only an adapter to
+# enter_practice(). Neither path invents outcomes or bypasses world authority.
 
 const PlayerActivityContract = preload("res://simulation/player_activity_contract.gd")
 
@@ -25,6 +25,8 @@ func launch(session, selection: Dictionary) -> Dictionary:
 	match activity_type:
 		PlayerActivityContract.ACTIVITY_ROUND:
 			return _launch_round(session, selection.get("options", {}))
+		PlayerActivityContract.ACTIVITY_PRACTICE:
+			return _launch_practice(session, selection.get("options", {}))
 		_:
 			return {
 				"launched": false,
@@ -79,6 +81,52 @@ func _launch_round(session, options_value) -> Dictionary:
 	return {
 		"launched": true,
 		"activity_type": PlayerActivityContract.ACTIVITY_ROUND,
+		"reason": "",
+		"entry": entered.duplicate(true)
+	}
+
+
+func _launch_practice(session, options_value) -> Dictionary:
+	if session == null:
+		return {
+			"launched": false,
+			"activity_type": PlayerActivityContract.ACTIVITY_PRACTICE,
+			"reason": PlayerActivityContract.REASON_SESSION_NOT_CONFIGURED
+		}
+	if typeof(options_value) != TYPE_DICTIONARY:
+		return {
+			"launched": false,
+			"activity_type": PlayerActivityContract.ACTIVITY_PRACTICE,
+			"reason": "INVALID_ACTIVITY_OPTIONS"
+		}
+
+	var options: Dictionary = options_value
+	var focus_value = options.get("focus", {})
+	if typeof(focus_value) != TYPE_DICTIONARY:
+		return {
+			"launched": false,
+			"activity_type": PlayerActivityContract.ACTIVITY_PRACTICE,
+			"reason": "INVALID_PRACTICE_FOCUS"
+		}
+	var total_repetitions: int = int(options.get("total_repetitions", 0))
+	var quality: float = float(options.get("quality", 1.0))
+	var duration_seconds: float = float(options.get("duration_seconds", 1800.0))
+	var entered: Dictionary = session.enter_practice(
+		total_repetitions,
+		focus_value,
+		quality,
+		duration_seconds
+	)
+	if not bool(entered.get("entered", false)):
+		return {
+			"launched": false,
+			"activity_type": PlayerActivityContract.ACTIVITY_PRACTICE,
+			"reason": str(entered.get("reason", "PRACTICE_ENTRY_REJECTED")),
+			"entry": entered.duplicate(true)
+		}
+	return {
+		"launched": true,
+		"activity_type": PlayerActivityContract.ACTIVITY_PRACTICE,
 		"reason": "",
 		"entry": entered.duplicate(true)
 	}
