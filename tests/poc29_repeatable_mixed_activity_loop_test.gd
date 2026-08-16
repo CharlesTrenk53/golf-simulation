@@ -74,12 +74,13 @@ func _run() -> void:
 	var experience_after_practice_1: int = _sum_development_experience(persistent.development_snapshot())
 	_assert_equal_int(experience_after_practice_1 - starting_development, 30, "first practice adds factual development experience")
 
-	# ACTIVITY 2 — Ordinary scored round launched from the same hub. It enters the
-	# normal tee queue, uses the existing human decision seam, and finalizes through
-	# the same return-to-world coordinator.
+	# ACTIVITY 2 — Ordinary scored round launched from the same hub. Use an ordinary
+	# twosome, matching the already-proven living-round architecture rather than
+	# making singleton-group behavior an unrelated requirement of POC-29F.
+	var round_partner = _new_golfer(Golfer.GolferProfile.WILD_BILL)
 	var round_selection: Dictionary = hub.select_activity(PlayerActivityContract.ACTIVITY_ROUND, {
 		"group_id": "poc29_mixed_round",
-		"other_golfers": [],
+		"other_golfers": [round_partner],
 		"tee_id": "default",
 		"player_member_index": 0,
 		"seed_base": 29501
@@ -87,6 +88,7 @@ func _run() -> void:
 	_assert_true(bool(round_selection.get("accepted", false)), "round is selectable after practice")
 	var round_launch: Dictionary = hub.launch_selected_activity(round_selection)
 	_assert_true(bool(round_launch.get("launched", false)), "round launches from same hub")
+	_assert_equal_int(int(round_launch.get("entry", {}).get("member_count", 0)), 2, "mixed-loop round enters ordinary twosome")
 	_assert_equal_int(persistent.controller.get_instance_id(), controller_id, "round launch keeps same controller")
 	_assert_equal_int(player.get_instance_id(), player_id, "round launch keeps same golfer")
 	_assert_equal_int(persistent.golf_activity.total_practice_repetitions(), 30, "round launch keeps prior practice history")
@@ -130,10 +132,10 @@ func _run() -> void:
 		"duration_seconds": 300.0
 	})
 	_assert_true(bool(practice_2_selection.get("accepted", false)), "second practice is selectable after round")
+	var memory_before_practice_2: int = int(player.shots_attempted)
 	var practice_2_launch: Dictionary = hub.launch_selected_activity(practice_2_selection)
 	_assert_true(bool(practice_2_launch.get("launched", false)), "second practice launches")
-	_assert_equal_int(int(player.shots_attempted), int(player.shots_attempted), "second practice does not replace golfer memory")
-	var memory_before_practice_2: int = int(player.shots_attempted)
+	_assert_equal_int(int(player.shots_attempted), memory_before_practice_2, "second practice launch preserves golfer memory")
 	var practice_2_return: Dictionary = hub.return_to_world("COMPLETE", {
 		"observations": {
 			1: {"execution_score": 72.0, "lateral_error": 2.0, "distance_error": 3.0}
