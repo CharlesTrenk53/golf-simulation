@@ -52,6 +52,29 @@ func group_by_id(group_id: String):
 	return groups_by_id.get(group_id.strip_edges(), null)
 
 
+# POC-28F: a completed activity must leave the current population without
+# destroying the golfers who participated in it. Only fully finished groups may
+# retire; waiting/playing groups remain authoritative course occupants.
+func retire_finished_group(group_id: String) -> bool:
+	var normalized_id: String = group_id.strip_edges()
+	var group = group_by_id(normalized_id)
+	if group == null or str(group.status) != GolferGroup.STATUS_FINISHED:
+		return false
+
+	for golfer in group.golfers:
+		if golfer == null:
+			continue
+		var instance_id: int = golfer.get_instance_id()
+		if str(golfer_assignments.get(instance_id, "")) == normalized_id:
+			golfer_assignments.erase(instance_id)
+
+	groups_by_id.erase(normalized_id)
+	var index: int = groups.find(group)
+	if index >= 0:
+		groups.remove_at(index)
+	return true
+
+
 func start_group(group_id: String) -> bool:
 	var group = group_by_id(group_id)
 	if group == null:

@@ -35,12 +35,23 @@ func resolve(planned_putt: Dictionary, executed_putt: Dictionary) -> Dictionary:
 	var break_feet: float = -cross_slope * distance_factor * speed_factor * 0.42
 	var final_lateral_feet: float = actual_aim + break_feet
 
+	# Cup capture is circular. Requiring the ball center to reach the cup center
+	# allowed a putt to finish geometrically inside the cup radius while remaining
+	# live, which could create repeated "0.0 yd" putts. For a valid line, compute
+	# the front edge of the circular capture area along the ball's travel path.
+	var lateral_abs: float = absf(final_lateral_feet)
+	var on_capture_line: bool = lateral_abs <= CUP_RADIUS_FEET
+	var capture_half_chord: float = 0.0
+	if on_capture_line:
+		capture_half_chord = sqrt(maxf(0.0, CUP_RADIUS_FEET * CUP_RADIUS_FEET - final_lateral_feet * final_lateral_feet))
+	var cup_entry_distance: float = maxf(0.0, hole_distance - capture_half_chord)
+	var reached_capture_zone: bool = on_capture_line and rolled_distance >= cup_entry_distance
 	var reached_hole: bool = rolled_distance >= hole_distance
 	var distance_past_hole: float = maxf(0.0, rolled_distance - hole_distance)
 	var distance_short_of_hole: float = maxf(0.0, hole_distance - rolled_distance)
-	var on_capture_line: bool = absf(final_lateral_feet) <= CUP_RADIUS_FEET
-	var capture_pace: bool = distance_past_hole <= MAX_CAPTURE_PAST_FEET
-	var holed: bool = reached_hole and on_capture_line and capture_pace
+	var already_in_cup: bool = hole_distance <= CUP_RADIUS_FEET
+	var capture_pace: bool = already_in_cup or distance_past_hole <= MAX_CAPTURE_PAST_FEET
+	var holed: bool = already_in_cup or (reached_capture_zone and capture_pace)
 
 	var finish_distance_from_hole: float
 	if holed:
@@ -69,6 +80,9 @@ func resolve(planned_putt: Dictionary, executed_putt: Dictionary) -> Dictionary:
 		"finish_distance_from_hole_feet": finish_distance_from_hole,
 		"miss_side": miss_side,
 		"reached_hole": reached_hole,
+		"reached_capture_zone": reached_capture_zone,
+		"cup_entry_distance_feet": cup_entry_distance,
+		"already_in_cup": already_in_cup,
 		"capture_line": on_capture_line,
 		"capture_pace": capture_pace,
 		"holed": holed
