@@ -111,10 +111,23 @@ func _build_hud() -> void:
 	super._build_hud()
 	if engagement_action == null:
 		return
+
+	# POC-28's results panel was sized for one action. The POC-29 world hub has two
+	# choices, so give it enough width/height for both controls at a 1365x768 window
+	# without letting the descriptive copy push either button off-screen.
+	if engagement_panel != null:
+		engagement_panel.offset_right = 1115.0
+		engagement_panel.offset_bottom = 690.0
+	if engagement_body != null:
+		engagement_body.custom_minimum_size = Vector2(500.0, 250.0)
+		engagement_body.add_theme_font_size_override("font_size", 15)
+
 	engagement_action.text = "PLAY ROUND  (Enter)"
+	engagement_action.custom_minimum_size = Vector2(0.0, 42.0)
 	practice_action = Button.new()
 	practice_action.name = "PracticeAction"
 	practice_action.text = "PRACTICE PUTTING  (P)"
+	practice_action.custom_minimum_size = Vector2(0.0, 42.0)
 	practice_action.pressed.connect(_on_practice_action)
 	engagement_action.get_parent().add_child(practice_action)
 
@@ -269,6 +282,16 @@ func _modeled_putting_practice_observation(repetitions: int) -> Dictionary:
 	}
 
 
+func _update_hud(presentation: Dictionary) -> void:
+	super._update_hud(presentation)
+	# The inherited participation HUD historically displayed elapsed minutes and
+	# seconds. POC-29 presents a world time-of-day, so both visible clocks should
+	# describe the same authoritative controller time in HH:MM.
+	if clock_label != null:
+		var sim_seconds: float = controller.current_time_seconds if controller != null else 0.0
+		clock_label.text = "Course clock: %s" % _clock_label(sim_seconds)
+
+
 func _maybe_finalize_player_round() -> void:
 	if not _player_round_authority_complete():
 		return
@@ -353,7 +376,7 @@ func _refresh_world_hub_text() -> void:
 	var context: Dictionary = world_hub.context()
 	var abilities: Dictionary = context.get("abilities", {})
 	engagement_title.text = "YOUR GOLF WORLD"
-	engagement_body.text = "%s\n\nChoose what to do next. The course keeps living around you.\n\nRounds played: %d\nPractice sessions: %d\nPractice repetitions: %d\nWorld day: %d\nCourse clock: %s\nGroups in world: %d\n\nCurrent durable ability\nDrive %.2f  •  Approach %.2f\nShort game %.2f  •  Putting %.2f\n\nPLAY ROUND joins an ordinary group through normal FIFO/traffic authority.\nPRACTICE PUTTING runs a modeled 30-putt session while the same world clock advances." % [
+	engagement_body.text = "%s\n\nChoose your next activity. The course keeps living around you.\n\nRounds played: %d\nPractice sessions: %d\nPractice repetitions: %d\nWorld day: %d\nCourse clock: %s\nGroups in world: %d\n\nCurrent ability\nDrive %.2f  •  Approach %.2f\nShort game %.2f  •  Putting %.2f" % [
 		str(context.get("golfer_name", "Golfer")),
 		int(context.get("career_rounds_played", 0)),
 		int(context.get("completed_practices", 0)),
