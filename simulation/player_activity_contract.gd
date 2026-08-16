@@ -1,11 +1,15 @@
 extends RefCounted
 
-# POC-29B/D: Player Activity Selection Contract
+# POC-29B-F: Player Activity Selection Contract
 # ---------------------------------------------
 # Pure validation/catalog contract between the persistent world hub and activity
 # launchers. Selecting an activity is intentionally NOT the same thing as launching
 # it: this layer validates player intent without mutating golfer, world, controller,
 # clock, population, or per-activity authority.
+#
+# Availability checks deliberately inspect only configuration/activity state. They
+# must not deep-snapshot the entire accumulated world just to decide whether the
+# player can choose an activity.
 
 const ACTIVITY_ROUND := "ROUND"
 const ACTIVITY_PRACTICE := "PRACTICE"
@@ -43,12 +47,9 @@ func availability_for(session, activity_type: String) -> Dictionary:
 	var normalized: String = activity_type.strip_edges().to_upper()
 	if not DEFINITIONS.has(normalized):
 		return {"available": false, "reason": REASON_UNKNOWN_ACTIVITY, "activity_type": normalized}
-	if session == null:
+	if not _session_configured(session):
 		return {"available": false, "reason": REASON_SESSION_NOT_CONFIGURED, "activity_type": normalized}
-	var snapshot: Dictionary = session.snapshot()
-	if not bool(snapshot.get("configured", false)):
-		return {"available": false, "reason": REASON_SESSION_NOT_CONFIGURED, "activity_type": normalized}
-	if not snapshot.get("active_round", {}).is_empty() or not snapshot.get("active_practice", {}).is_empty():
+	if not session.active_round.is_empty() or not session.active_practice.is_empty():
 		return {"available": false, "reason": REASON_ACTIVITY_ALREADY_ACTIVE, "activity_type": normalized}
 	return {"available": true, "reason": "", "activity_type": normalized}
 
@@ -70,3 +71,12 @@ func select(session, activity_type: String, options: Dictionary = {}) -> Diction
 		"reason": "",
 		"options": options.duplicate(true)
 	}
+
+
+func _session_configured(session) -> bool:
+	return (
+		session != null
+		and session.player_golfer != null
+		and session.controller != null
+		and session.course != null
+	)
