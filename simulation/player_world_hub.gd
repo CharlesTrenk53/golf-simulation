@@ -1,12 +1,12 @@
 extends RefCounted
 
-# POC-29A-C: Persistent World Hub + Activity Selection/Launch
+# POC-29A-D: Persistent World Hub + Activity Selection/Launch
 # ----------------------------------------------------------
 # Player-facing coordinator over PlayerWorldSession. Hub context is a read-only
-# projection and owns no golfer, course, controller, round state, world clock, or
-# activity state. Selection remains pure through PlayerActivityContract; accepted
-# selections may be handed to PlayerActivityLauncher, which delegates mutations to
-# the existing persistent-session activity authority.
+# projection and owns no golfer, course, controller, round/practice state, world
+# clock, or activity state. Selection remains pure through PlayerActivityContract;
+# accepted selections are handed to PlayerActivityLauncher, which delegates all
+# mutations to the persistent-session activity authority.
 
 const PlayerActivityContract = preload("res://simulation/player_activity_contract.gd")
 const PlayerActivityLauncher = preload("res://simulation/player_activity_launcher.gd")
@@ -61,9 +61,12 @@ func context() -> Dictionary:
 
 	var session_snapshot: Dictionary = world_session.snapshot()
 	var active_round: Dictionary = session_snapshot.get("active_round", {})
+	var active_practice: Dictionary = session_snapshot.get("active_practice", {})
 	var active_activity_type: String = ACTIVITY_NONE
 	if not active_round.is_empty():
 		active_activity_type = str(active_round.get("activity_type", "ROUND"))
+	elif not active_practice.is_empty():
+		active_activity_type = str(active_practice.get("activity_type", "PRACTICE"))
 	var hub_state: String = STATE_WORLD if active_activity_type == ACTIVITY_NONE else STATE_ACTIVITY
 
 	var population: Dictionary = {}
@@ -86,11 +89,15 @@ func context() -> Dictionary:
 		"day": int(session_snapshot.get("day", 0)),
 		"world_time_seconds": float(session_snapshot.get("world_time_seconds", 0.0)),
 		"completed_rounds": session_snapshot.get("completed_rounds", []).size(),
+		"completed_practices": session_snapshot.get("completed_practices", []).size(),
 		"activity_history_count": session_snapshot.get("activity_history", []).size(),
 		"career_rounds_played": int(golf_activity.get("career_rounds_played", 0)),
+		"career_practice_repetitions": golf_activity.get("career_practice_repetitions", {}).duplicate(true),
+		"total_practice_repetitions": int(golf_activity.get("total_practice_repetitions", 0)),
 		"population": population.duplicate(true),
 		"abilities": _golfer_abilities(golfer),
-		"active_round": active_round.duplicate(true)
+		"active_round": active_round.duplicate(true),
+		"active_practice": active_practice.duplicate(true)
 	}
 
 
