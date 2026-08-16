@@ -100,23 +100,6 @@ func _run() -> void:
 	_assert_true(not bool(rejected_launch.get("launched", true)), "launcher refuses unaccepted selection")
 	_assert_equal_str(str(rejected_launch.get("reason", "")), PlayerActivityLauncher.REASON_SELECTION_NOT_ACCEPTED, "unaccepted selection has explicit launcher rejection")
 
-	# POC-29D will implement practice mutation. For 29C, accepted PRACTICE intent must
-	# remain explicit rather than accidentally falling through the round launcher.
-	var standalone_session = PlayerWorldSession.new()
-	standalone_session.name = "StandalonePersistentSession"
-	get_root().add_child(standalone_session)
-	created_nodes.append(standalone_session)
-	var practice_player = _new_golfer(Golfer.GolferProfile.CAREFUL_CARL)
-	_assert_true(standalone_session.configure(practice_player, course, 30, 18000.0), "second idle session configures for unsupported-activity check")
-	var practice_hub = PlayerWorldHub.new()
-	_assert_true(practice_hub.configure(standalone_session), "second hub configures")
-	var practice_selection: Dictionary = practice_hub.select_activity(PlayerActivityContract.ACTIVITY_PRACTICE, {"practice_type": "PUTTING"})
-	_assert_true(bool(practice_selection.get("accepted", false)), "practice intent remains selectable under shared contract")
-	var practice_launch: Dictionary = practice_hub.launch_selected_activity(practice_selection)
-	_assert_true(not bool(practice_launch.get("launched", true)), "29C launcher does not fake practice activity")
-	_assert_equal_str(str(practice_launch.get("reason", "")), PlayerActivityLauncher.REASON_ACTIVITY_NOT_IMPLEMENTED, "unimplemented practice launch is explicit")
-	_assert_true(standalone_session.active_round.is_empty(), "unimplemented practice cannot mutate round state")
-
 	var release: Dictionary = persistent.release_next_group()
 	_assert_true(bool(release.get("released", false)), "hub-launched group later releases through normal living-course authority")
 	_assert_equal_str(str(release.get("group_id", "")), "hub_player_group", "normal release starts the hub-launched group")
