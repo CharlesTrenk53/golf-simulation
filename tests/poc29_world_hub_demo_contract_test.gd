@@ -36,6 +36,9 @@ func _run() -> void:
 	_assert_equal_str(str(demo.focus_controller.selected_group_id()), "group_2", "world hub initially watches ordinary world population")
 	_assert_true(demo.engagement_panel != null and demo.engagement_panel.visible, "activity-selection hub is visible at world entry")
 	_assert_true(demo.engagement_action != null and demo.practice_action != null, "hub exposes separate round and practice controls")
+	_assert_true(demo.engagement_action.visible and demo.practice_action.visible, "both activity controls are visible at world entry")
+	_assert_true(demo.engagement_panel.offset_bottom <= 700.0, "world hub panel stays inside 768p acceptance viewport")
+	_assert_equal_str(str(demo.clock_label.text), "Course clock: %s" % demo._clock_label(demo.controller.current_time_seconds), "living-course HUD and world hub use same HH:MM clock convention")
 
 	var context: Dictionary = demo.world_hub.context()
 	_assert_equal_str(str(context.get("state", "")), "WORLD", "POC-29 hub reports WORLD state")
