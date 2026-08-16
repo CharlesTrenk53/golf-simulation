@@ -29,11 +29,11 @@ func _process(delta: float) -> void:
 			_print_autoplay_summary()
 		return
 
-	# After the reviewer enters the world hub, preserve the normal interactive
-	# transition. If they start another round, this review scene will autorun that
-	# round too and stop at its results screen.
+	# The review shortcut ends at the results screen. Once the reviewer explicitly
+	# returns to the world hub, resume the base scene's ordinary living-world clock
+	# so autonomous groups keep existing and progressing normally.
 	if engagement_state == "WORLD":
-		_refresh_world_hub_text()
+		super._process(delta)
 		return
 
 	autoplay_frames += 1
@@ -52,6 +52,16 @@ func _process(delta: float) -> void:
 	# ahead. No presentation result feeds back into the simulation.
 	if engagement_state == "PLAYING":
 		_refresh_presentation(0.0, true)
+
+
+func _begin_next_round() -> void:
+	var previous_round: int = round_number
+	super._begin_next_round()
+	if engagement_state == "PLAYING" and round_number > previous_round:
+		autoplay_human_shots = 0
+		autoplay_frames = 0
+		autoplay_stalled_frames = 0
+		_results_announced = false
 
 
 func _autorun_playing_round() -> bool:
@@ -85,7 +95,7 @@ func _autorun_playing_round() -> bool:
 		var before_time: float = float(controller.current_time_seconds)
 		var pacing: Dictionary = participate_pacing.idle_advance(controller, active_player_group_id)
 		var advance_seconds: float = 0.0
-		if str(pacing.get("mode", "")) == ParticipatePacingController.MODE_FAST_FORWARD:
+		if str(pacing.get("mode", "")) == "FAST_FORWARD":
 			advance_seconds = maxf(0.0, float(pacing.get("delta_seconds", 0.0)))
 		if advance_seconds <= 0.0001:
 			advance_seconds = maxf(fallback_world_step_seconds, 0.001)
