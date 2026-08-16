@@ -1,12 +1,15 @@
 extends RefCounted
 
-# POC-29E: Return-to-World Coordinator
-# ------------------------------------
+# POC-29E/F: Return-to-World Coordinator
+# --------------------------------------
 # Gives player-facing hub scenes one lifecycle seam for leaving an activity while
 # preserving persistent-world authority. Completed activities delegate to the
 # existing PlayerWorldSession finalizers. Practice may be cancelled before results
 # are committed; cancellation awards no repetitions, development, or time cost.
 # An unfinished scored round is never silently abandoned through this layer.
+#
+# Return lifecycle checks inspect only the small persistent activity state they
+# require; they do not deep-snapshot the accumulated living world.
 
 const ACTION_AUTO := "AUTO"
 const ACTION_COMPLETE := "COMPLETE"
@@ -22,10 +25,7 @@ const REASON_ROUND_ABANDONMENT_NOT_SUPPORTED := "ROUND_ABANDONMENT_NOT_SUPPORTED
 
 
 func return_to_world(session, action: String = ACTION_AUTO, payload: Dictionary = {}) -> Dictionary:
-	if session == null:
-		return _rejected(ACTIVITY_NONE, REASON_SESSION_NOT_CONFIGURED)
-	var session_snapshot: Dictionary = session.snapshot()
-	if not bool(session_snapshot.get("configured", false)):
+	if not _session_configured(session):
 		return _rejected(ACTIVITY_NONE, REASON_SESSION_NOT_CONFIGURED)
 
 	var normalized_action: String = action.strip_edges().to_upper()
@@ -34,8 +34,8 @@ func return_to_world(session, action: String = ACTION_AUTO, payload: Dictionary 
 	if not normalized_action in [ACTION_AUTO, ACTION_COMPLETE, ACTION_CANCEL]:
 		return _rejected(ACTIVITY_NONE, REASON_INVALID_RETURN_ACTION)
 
-	var active_round: Dictionary = session_snapshot.get("active_round", {})
-	var active_practice: Dictionary = session_snapshot.get("active_practice", {})
+	var active_round: Dictionary = session.active_round.duplicate(true)
+	var active_practice: Dictionary = session.active_practice.duplicate(true)
 	if active_round.is_empty() and active_practice.is_empty():
 		return {
 			"returned": true,
@@ -130,6 +130,15 @@ func _complete_round(session) -> Dictionary:
 		"controller_instance_id": session.controller.get_instance_id(),
 		"world_time_seconds": session.world_time_seconds
 	}
+
+
+func _session_configured(session) -> bool:
+	return (
+		session != null
+		and session.player_golfer != null
+		and session.controller != null
+		and session.course != null
+	)
 
 
 func _rejected(activity_type: String, reason: String) -> Dictionary:
