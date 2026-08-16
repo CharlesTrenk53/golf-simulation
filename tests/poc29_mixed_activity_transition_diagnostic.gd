@@ -16,7 +16,7 @@ func _init() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	print("POC-29F DIAGNOSTIC: full practice-to-round progression")
+	print("POC-29F DIAGNOSTIC: full mixed activity progression")
 	var course = POC27Course.build()
 	var player = _new_golfer(Golfer.GolferProfile.CAREFUL_CARL)
 	var persistent = PlayerWorldSession.new()
@@ -25,6 +25,8 @@ func _run() -> void:
 	print("TRACE 01 configure=", persistent.configure(player, course, 50, 28800.0))
 	var hub = PlayerWorldHub.new()
 	print("TRACE 02 hub configure=", hub.configure(persistent))
+	var player_id: int = player.get_instance_id()
+	var controller_id: int = persistent.controller.get_instance_id()
 
 	var practice_selection: Dictionary = hub.select_activity(PlayerActivityContract.ACTIVITY_PRACTICE, {
 		"total_repetitions": 30,
@@ -71,30 +73,59 @@ func _run() -> void:
 		if iterations % 25 == 0:
 			print("TRACE LOOP iteration=", iterations, " hole=", hole_number, " time=", persistent.world_time_seconds)
 
-		print("TRACE STEP ", iterations, " before pending")
 		var decision: Dictionary = persistent.pending_player_decision()
-		print("TRACE STEP ", iterations, " after pending size=", decision.size(), " kind=", decision.get("decision_kind", ""))
 		if not decision.is_empty():
 			var candidate_index: int = _preferred_human_candidate(decision)
-			print("TRACE STEP ", iterations, " candidate=", candidate_index, " before submit")
 			if candidate_index < 0:
-				print("TRACE ERROR no selectable candidate")
+				print("TRACE ERROR no selectable candidate iteration=", iterations)
 				break
 			var committed: Dictionary = persistent.submit_player_choice(candidate_index)
-			print("TRACE STEP ", iterations, " after submit played=", committed.get("played", false), " reason=", committed.get("reason", ""))
 			if not bool(committed.get("played", false)):
-				print("TRACE ERROR submit rejected=", committed)
+				print("TRACE ERROR submit rejected iteration=", iterations, " result=", committed)
 				break
 		else:
-			print("TRACE STEP ", iterations, " before advance")
-			var events: Array = persistent.advance_world_time(STEP_SECONDS)
-			print("TRACE STEP ", iterations, " after advance events=", events.size(), " time=", persistent.world_time_seconds)
+			persistent.advance_world_time(STEP_SECONDS)
 		iterations += 1
 
-	print("TRACE END iterations=", iterations, " time=", persistent.world_time_seconds)
+	print("TRACE 09 round loop end iterations=", iterations, " time=", persistent.world_time_seconds)
 	var final_state = persistent.player_round_state()
-	print("TRACE END state_complete=", bool(final_state.complete) if final_state != null else false, " holes=", int(final_state.holes_completed()) if final_state != null else -1)
-	print("POC-29F FULL ROUND DIAGNOSTIC COMPLETE")
+	print("TRACE 10 state object valid=", final_state != null)
+	print("TRACE 11 state_complete=", bool(final_state.complete) if final_state != null else false)
+	print("TRACE 12 holes=", int(final_state.holes_completed()) if final_state != null else -1)
+	print("TRACE 13 memory shots=", int(player.shots_attempted))
+	print("TRACE 14 before hub round return")
+	var round_return: Dictionary = hub.return_to_world()
+	print("TRACE 15 after hub round return returned=", round_return.get("returned", false), " completed=", round_return.get("completed", false), " reason=", round_return.get("reason", ""))
+	print("TRACE 16 completed_rounds=", persistent.completed_rounds.size(), " career_rounds=", persistent.golf_activity.career_rounds_played)
+	print("TRACE 17 active_round_empty=", persistent.active_round.is_empty(), " population=", persistent.controller.living_course.population.group_count())
+	print("TRACE 18 identity golfer=", player.get_instance_id() == player_id, " controller=", persistent.controller.get_instance_id() == controller_id)
+	print("TRACE 19 hub_state=", hub.context().get("state", ""), " active=", hub.context().get("active_activity_type", ""))
+	print("TRACE 20 latest round begin")
+	var round_archive: Dictionary = persistent.latest_completed_round()
+	print("TRACE 21 latest round shots=", round_archive.get("statistics", {}).get("total_shots", -1), " strokes=", round_archive.get("total_strokes", -1))
+	print("TRACE 22 development snapshot begin")
+	var development_after_round: Dictionary = persistent.development_snapshot()
+	print("TRACE 23 development snapshot skills=", development_after_round.size())
+
+	print("TRACE 24 second practice select begin")
+	var practice_2_selection: Dictionary = hub.select_activity(PlayerActivityContract.ACTIVITY_PRACTICE, {
+		"total_repetitions": 20,
+		"focus": {1: 1.0},
+		"quality": 0.5,
+		"duration_seconds": 300.0
+	})
+	print("TRACE 25 second practice selected=", practice_2_selection.get("accepted", false), " reason=", practice_2_selection.get("reason", ""))
+	print("TRACE 26 second practice launch begin")
+	var practice_2_launch: Dictionary = hub.launch_selected_activity(practice_2_selection)
+	print("TRACE 27 second practice launched=", practice_2_launch.get("launched", false), " reason=", practice_2_launch.get("reason", ""))
+	print("TRACE 28 second practice return begin")
+	var practice_2_return: Dictionary = hub.return_to_world("COMPLETE", {
+		"observations": {1: {"execution_score": 72.0, "lateral_error": 2.0, "distance_error": 3.0}}
+	})
+	print("TRACE 29 second practice returned=", practice_2_return.get("returned", false), " completed=", practice_2_return.get("completed", false), " reason=", practice_2_return.get("reason", ""))
+	print("TRACE 30 final practices=", persistent.completed_practices.size(), " rounds=", persistent.completed_rounds.size(), " reps=", persistent.golf_activity.total_practice_repetitions())
+	print("TRACE 31 final identity golfer=", player.get_instance_id() == player_id, " controller=", persistent.controller.get_instance_id() == controller_id)
+	print("POC-29F FULL MIXED DIAGNOSTIC COMPLETE")
 	_cleanup()
 	quit(0)
 
