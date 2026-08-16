@@ -1,17 +1,20 @@
 extends RefCounted
 
-# POC-29A: Persistent World Hub Foundation
-# ----------------------------------------
+# POC-29A/B: Persistent World Hub + Activity Selection
+# ---------------------------------------------------
 # Read-only player-facing coordinator over PlayerWorldSession. The hub deliberately
-# owns no golfer, course, controller, round state, or world clock. It projects the
-# current persistent session into a stable world/activity context so presentation
-# scenes can come and go without creating a second "menu world" or copying state.
+# owns no golfer, course, controller, round state, world clock, or activity state.
+# It projects the current persistent session and routes player activity intent
+# through PlayerActivityContract without mutating the world during selection.
+
+const PlayerActivityContract = preload("res://simulation/player_activity_contract.gd")
 
 const STATE_WORLD := "WORLD"
 const STATE_ACTIVITY := "ACTIVITY"
 const ACTIVITY_NONE := "NONE"
 
 var world_session = null
+var activity_contract = PlayerActivityContract.new()
 
 
 func configure(session) -> bool:
@@ -31,13 +34,22 @@ func is_configured() -> bool:
 	return bool(session_snapshot.get("configured", false))
 
 
+func activity_catalog() -> Array:
+	return activity_contract.catalog(world_session)
+
+
+func select_activity(activity_type: String, options: Dictionary = {}) -> Dictionary:
+	return activity_contract.select(world_session, activity_type, options)
+
+
 func context() -> Dictionary:
 	if not is_configured():
 		return {
 			"configured": false,
 			"state": STATE_WORLD,
 			"can_choose_activity": false,
-			"active_activity_type": ACTIVITY_NONE
+			"active_activity_type": ACTIVITY_NONE,
+			"activity_catalog": activity_catalog()
 		}
 
 	var session_snapshot: Dictionary = world_session.snapshot()
@@ -58,6 +70,7 @@ func context() -> Dictionary:
 		"state": hub_state,
 		"can_choose_activity": hub_state == STATE_WORLD,
 		"active_activity_type": active_activity_type,
+		"activity_catalog": activity_catalog(),
 		"golfer_instance_id": golfer.get_instance_id() if golfer != null else 0,
 		"golfer_name": str(golfer.get("golfer_name")) if golfer != null else "",
 		"controller_instance_id": world_session.controller.get_instance_id() if world_session.controller != null else 0,
