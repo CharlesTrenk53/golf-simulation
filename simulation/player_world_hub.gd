@@ -1,15 +1,16 @@
 extends RefCounted
 
-# POC-29A-D: Persistent World Hub + Activity Selection/Launch
-# ----------------------------------------------------------
+# POC-29A-E: Persistent World Hub + Activity Selection/Launch/Return
+# -----------------------------------------------------------------
 # Player-facing coordinator over PlayerWorldSession. Hub context is a read-only
 # projection and owns no golfer, course, controller, round/practice state, world
 # clock, or activity state. Selection remains pure through PlayerActivityContract;
-# accepted selections are handed to PlayerActivityLauncher, which delegates all
-# mutations to the persistent-session activity authority.
+# accepted selections are handed to PlayerActivityLauncher, while activity exit is
+# routed through PlayerActivityReturnCoordinator back into persistent authority.
 
 const PlayerActivityContract = preload("res://simulation/player_activity_contract.gd")
 const PlayerActivityLauncher = preload("res://simulation/player_activity_launcher.gd")
+const PlayerActivityReturnCoordinator = preload("res://simulation/player_activity_return_coordinator.gd")
 
 const STATE_WORLD := "WORLD"
 const STATE_ACTIVITY := "ACTIVITY"
@@ -18,6 +19,7 @@ const ACTIVITY_NONE := "NONE"
 var world_session = null
 var activity_contract = PlayerActivityContract.new()
 var activity_launcher = PlayerActivityLauncher.new()
+var activity_return = PlayerActivityReturnCoordinator.new()
 
 
 func configure(session) -> bool:
@@ -47,6 +49,10 @@ func select_activity(activity_type: String, options: Dictionary = {}) -> Diction
 
 func launch_selected_activity(selection: Dictionary) -> Dictionary:
 	return activity_launcher.launch(world_session, selection)
+
+
+func return_to_world(action: String = PlayerActivityReturnCoordinator.ACTION_AUTO, payload: Dictionary = {}) -> Dictionary:
+	return activity_return.return_to_world(world_session, action, payload)
 
 
 func context() -> Dictionary:
