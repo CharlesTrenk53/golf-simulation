@@ -1,13 +1,15 @@
 extends RefCounted
 
-# POC-29A/B: Persistent World Hub + Activity Selection
-# ---------------------------------------------------
-# Read-only player-facing coordinator over PlayerWorldSession. The hub deliberately
-# owns no golfer, course, controller, round state, world clock, or activity state.
-# It projects the current persistent session and routes player activity intent
-# through PlayerActivityContract without mutating the world during selection.
+# POC-29A-C: Persistent World Hub + Activity Selection/Launch
+# ----------------------------------------------------------
+# Player-facing coordinator over PlayerWorldSession. Hub context is a read-only
+# projection and owns no golfer, course, controller, round state, world clock, or
+# activity state. Selection remains pure through PlayerActivityContract; accepted
+# selections may be handed to PlayerActivityLauncher, which delegates mutations to
+# the existing persistent-session activity authority.
 
 const PlayerActivityContract = preload("res://simulation/player_activity_contract.gd")
+const PlayerActivityLauncher = preload("res://simulation/player_activity_launcher.gd")
 
 const STATE_WORLD := "WORLD"
 const STATE_ACTIVITY := "ACTIVITY"
@@ -15,6 +17,7 @@ const ACTIVITY_NONE := "NONE"
 
 var world_session = null
 var activity_contract = PlayerActivityContract.new()
+var activity_launcher = PlayerActivityLauncher.new()
 
 
 func configure(session) -> bool:
@@ -40,6 +43,10 @@ func activity_catalog() -> Array:
 
 func select_activity(activity_type: String, options: Dictionary = {}) -> Dictionary:
 	return activity_contract.select(world_session, activity_type, options)
+
+
+func launch_selected_activity(selection: Dictionary) -> Dictionary:
+	return activity_launcher.launch(world_session, selection)
 
 
 func context() -> Dictionary:
