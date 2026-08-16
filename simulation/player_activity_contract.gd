@@ -1,11 +1,11 @@
 extends RefCounted
 
-# POC-29B: Player Activity Selection Contract
-# -------------------------------------------
-# Pure validation/catalog contract between the persistent world hub and future
-# activity launchers. Selecting an activity is intentionally NOT the same thing as
-# launching it: this layer validates player intent without mutating golfer, world,
-# controller, clock, population, or per-activity authority.
+# POC-29B/D: Player Activity Selection Contract
+# ---------------------------------------------
+# Pure validation/catalog contract between the persistent world hub and activity
+# launchers. Selecting an activity is intentionally NOT the same thing as launching
+# it: this layer validates player intent without mutating golfer, world, controller,
+# clock, population, or per-activity authority.
 
 const ACTIVITY_ROUND := "ROUND"
 const ACTIVITY_PRACTICE := "PRACTICE"
@@ -48,7 +48,7 @@ func availability_for(session, activity_type: String) -> Dictionary:
 	var snapshot: Dictionary = session.snapshot()
 	if not bool(snapshot.get("configured", false)):
 		return {"available": false, "reason": REASON_SESSION_NOT_CONFIGURED, "activity_type": normalized}
-	if not snapshot.get("active_round", {}).is_empty():
+	if not snapshot.get("active_round", {}).is_empty() or not snapshot.get("active_practice", {}).is_empty():
 		return {"available": false, "reason": REASON_ACTIVITY_ALREADY_ACTIVE, "activity_type": normalized}
 	return {"available": true, "reason": "", "activity_type": normalized}
 
