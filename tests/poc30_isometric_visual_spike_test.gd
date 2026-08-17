@@ -42,6 +42,33 @@ func _init() -> void:
 	_assert_vector2_close(renderer.grid_to_iso(0.0, 1.0, 0.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), Vector2(-32.0, 16.0), "one grid step south projects to -32,16 pixels")
 	_assert_vector2_close(renderer.grid_to_iso(0.0, 0.0, 1.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), Vector2(0.0, -IsometricCourseRenderer.ELEVATION_PIXELS_PER_YARD), "one yard of elevation projects vertically without changing surface ownership")
 
+	# Elevation presentation now reconciles shared corners/edges while preserving
+	# exact authored tile-center elevations.
+	var corner_x: int = 7
+	var corner_y: int = 20
+	var expected_corner_elevation: float = 0.0
+	var corner_contributors: int = 0
+	for tile_y in [corner_y - 1, corner_y]:
+		for tile_x in [corner_x - 1, corner_x]:
+			if grid.is_in_bounds(tile_x, tile_y):
+				expected_corner_elevation += float(grid.tile_at(tile_x, tile_y).get("elevation", 0.0))
+				corner_contributors += 1
+	expected_corner_elevation /= float(corner_contributors)
+	_assert_close(renderer.terrain_corner_elevation(corner_x, corner_y), expected_corner_elevation, 0.0001, "shared terrain corner averages surrounding authoritative elevations")
+
+	var west_tile_corners: PackedVector2Array = renderer.tile_corners_iso(6, 20)
+	var east_tile_corners: PackedVector2Array = renderer.tile_corners_iso(7, 20)
+	_assert_vector2_close(west_tile_corners[1], east_tile_corners[0], "adjacent tiles share identical projected north corner")
+	_assert_vector2_close(west_tile_corners[2], east_tile_corners[3], "adjacent tiles share identical projected south corner")
+
+	var authored_center_elevation: float = float(grid.tile_at(7, 20).get("elevation", 0.0))
+	_assert_close(renderer.terrain_height_at_grid_position(7.5, 20.5), authored_center_elevation, 0.0001, "smoothed terrain still passes through exact authored tile center")
+	var shared_edge_expected: float = (
+		float(grid.tile_at(6, 20).get("elevation", 0.0))
+		+ float(grid.tile_at(7, 20).get("elevation", 0.0))
+	) * 0.5
+	_assert_close(renderer.terrain_height_at_grid_position(7.0, 20.5), shared_edge_expected, 0.0001, "shared tile edge reconciles neighboring authoritative center elevations")
+
 	_assert_equal(renderer.rendered_surface_count("FAIRWAY"), grid.count_surface("FAIRWAY"), "isometric fairway presentation reconciles exact grid ownership")
 	_assert_equal(renderer.rendered_surface_count("GREEN"), grid.count_surface("GREEN"), "isometric green presentation reconciles exact grid ownership")
 	_assert_equal(renderer.rendered_surface_count("BUNKER"), grid.count_surface("BUNKER"), "isometric bunker presentation reconciles exact grid ownership")
@@ -50,7 +77,7 @@ func _init() -> void:
 	_assert_true(proof.dressing_plan.size() > 0, "same deterministic safe-rough dressing feeds isometric world")
 	_assert_equal(grid.to_dictionary(), before, "isometric presentation never mutates authoritative construction data")
 
-	print("POC30H_ISOMETRIC_SUMMARY yardage=%.1f par=%d width=%d height=%d tile=%dx%d fairway=%d green=%d bunker=%d water=%d dressing=%d bounds=%s" % [
+	print("POC30H_ISOMETRIC_SUMMARY yardage=%.1f par=%d width=%d height=%d tile=%dx%d fairway=%d green=%d bunker=%d water=%d dressing=%d corner=%.3f bounds=%s" % [
 		float(hole.nominal_yardage),
 		int(hole.par),
 		int(grid.width),
@@ -62,6 +89,7 @@ func _init() -> void:
 		int(grid.count_surface("BUNKER")),
 		int(grid.count_surface("WATER")),
 		proof.dressing_plan.size(),
+		renderer.terrain_corner_elevation(corner_x, corner_y),
 		str(renderer.visual_bounds())
 	])
 
