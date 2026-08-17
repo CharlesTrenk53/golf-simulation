@@ -9,9 +9,10 @@ func _init() -> void:
 	print("POC-31: player-facing isometric construction")
 	var scene = ConstructionScene.instantiate()
 	get_root().add_child(scene)
+	var initialized_now: bool = bool(scene.initialize_property())
 
-	_assert_true(bool(scene.initialized), "construction scene initializes")
-	if not bool(scene.initialized):
+	_assert_true(initialized_now and bool(scene.initialized), "construction scene initializes")
+	if not initialized_now or not bool(scene.initialized):
 		scene.free()
 		_finish()
 		return
@@ -54,8 +55,8 @@ func _init() -> void:
 	_assert_equal(int(repeat_result.get("cost", -1)), 0, "same-surface repaint is free")
 	_assert_equal(int(economy.cash_balance), repeat_cash, "free repaint leaves funds unchanged")
 
-	# Prepare a user-authored tee and connected green, then mark tee/cup. This is
-	# the bridge to POC-31D: the HoleDefinition is built from exactly these cells.
+	# Prepare a player-authored tee and connected green, then mark tee/cup. This
+	# proves that the editor can hand exact construction truth to HoleDefinition.
 	_assert_true(bool(scene.build_at_cell(Vector2i(5, 20), "TEE").get("built", false)), "tee construction succeeds")
 	for cell in [Vector2i(16, 3), Vector2i(17, 3), Vector2i(16, 4), Vector2i(17, 4)]:
 		_assert_true(bool(scene.build_at_cell(cell, "GREEN").get("built", false)), "connected green cell builds at %s" % str(cell))
@@ -64,14 +65,16 @@ func _init() -> void:
 	_assert_true(not scene.set_cup_cell(Vector2i(0, 0)), "rough tile cannot receive cup")
 	_assert_equal(scene.cup_cell, Vector2i(16, 3), "invalid cup attempt does not replace valid cup")
 
-	var hole = scene.build_current_hole(4, "Construction Test Hole")
+	var validation: Dictionary = scene.validate_current_hole(4)
+	_assert_true(bool(validation.get("valid", false)), "player-authored construction validates as a hole")
+	var hole = validation.get("hole", null)
 	_assert_true(hole != null, "player construction builds a real HoleDefinition")
 	if hole != null:
 		_assert_equal(int(hole.par), 4, "player-authored hole preserves selected par")
 		_assert_true(float(hole.nominal_yardage) > 150.0, "player-authored tee/cup produce meaningful yardage")
 
-	# Save/reload the economy + grid + hole markers + view orientation. This is a
-	# real FileAccess round trip, not just an in-memory duplicate.
+	# Save/reload economy + grid + hole markers + view orientation through an
+	# actual FileAccess round trip.
 	renderer.set_view_rotation_quarters(3)
 	var saved_grid: Dictionary = grid.to_dictionary()
 	var saved_cash: int = int(economy.cash_balance)
@@ -88,6 +91,16 @@ func _init() -> void:
 	_assert_equal(scene.tee_anchor, Vector2i(5, 20), "reload restores tee marker")
 	_assert_equal(scene.cup_cell, Vector2i(16, 3), "reload restores cup marker")
 	_assert_equal(int(renderer.rotation_quarters), 3, "reload restores cardinal camera orientation")
+
+	# Repainting a marked hole feature must invalidate the marker rather than
+	# leave stale hole-authoring state behind.
+	_assert_true(bool(scene.build_at_cell(Vector2i(16, 3), "FRINGE").get("built", false)), "cup tile can be repainted")
+	_assert_equal(scene.cup_cell, Vector2i(-1, -1), "repainting cup tile away from green clears cup marker")
+	_assert_true(not bool(scene.validate_current_hole(4).get("valid", false)), "hole validation fails after cup marker is invalidated")
+	_assert_true(scene.load_from_path(save_path), "saved valid construction can be restored after marker invalidation")
+	grid = scene.grid
+	economy = scene.economy
+	renderer = scene.renderer
 
 	# Insufficient funds must reject construction without touching the grid.
 	var reject_before: Dictionary = grid.to_dictionary()
