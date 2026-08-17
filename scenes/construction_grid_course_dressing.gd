@@ -74,7 +74,7 @@ func build_dressing_plan(grid) -> Array:
 				})
 
 			# Low shrubs provide near-ground variation, also only in safe rough.
-			if (seed / 7) % SHRUB_DENSITY_MOD == 0:
+			if int(seed / 7) % SHRUB_DENSITY_MOD == 0:
 				var shrub_offset := Vector3(
 					_offset_component(seed, 37) * size * 0.30,
 					0.0,
@@ -84,7 +84,7 @@ func build_dressing_plan(grid) -> Array:
 					"kind": "SHRUB",
 					"cell": Vector2i(x, y),
 					"position": base + shrub_offset,
-					"scale": 0.70 + float((seed / 13) % 6) * 0.055,
+					"scale": 0.70 + float(int(seed / 13) % 6) * 0.055,
 					"source": "construction_grid_safe_rough"
 				})
 	return plan
