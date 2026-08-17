@@ -12,8 +12,9 @@ func _init() -> void:
 
 	var proof = VisualProofScene.instantiate()
 	get_root().add_child(proof)
-	_assert_true(bool(proof.initialized), "visual proof scene initializes from authoritative construction grid")
-	if not bool(proof.initialized):
+	var initialized_now: bool = bool(proof.initialize_proof())
+	_assert_true(initialized_now and bool(proof.initialized), "visual proof scene initializes from authoritative construction grid")
+	if not initialized_now or not bool(proof.initialized):
 		_finish()
 		return
 
