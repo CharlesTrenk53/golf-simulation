@@ -1,35 +1,36 @@
 extends Node3D
 
-# POC-30G: Continuous Course Surface Projection
-# ---------------------------------------------
+# POC-30G: Dense Course Surface Projection with Crisp Ownership
+# --------------------------------------------------------------
 # Presentation-only visual projection of the authoritative construction grid.
 # The 10-yard construction cells remain the sole source of truth for surface
-# ownership and authored elevation, but they are no longer the visible polygons.
+# ownership and authored elevation.
 #
-# One dense continuous mesh spans the property. At each visual sample, nearby
-# authoritative tile centers contribute smoothly to the displayed surface color.
-# That produces rounded/organic turf and hazard boundaries without changing lie,
-# hazard, scoring, construction cost, save data, or HoleDefinition authority.
+# One dense mesh spans the property so terrain can be smooth and well lit, but
+# surface classification is intentionally NOT blended. Every presentation
+# triangle inside an authoritative cell inherits that cell's exact surface type.
+# Vertices are duplicated at cell boundaries, allowing FAIRWAY to end and ROUGH
+# to begin at the same geometric edge with a hard, readable cut instead of a
+# smeared gradient.
 #
-# This renderer intentionally replaces the old one-polygon-per-cell POC-30B/C
-# proof path only for the POC-30 visual acceptance scene. The legacy renderer
-# remains untouched for its focused backward-compatibility tests.
+# BUNKER and WATER may depress visually inside their owner cells, but their depth
+# fades back to the common terrain at the cell boundary to avoid cracks. None of
+# this changes lie, hazard, scoring, construction cost, save data, or HoleDefinition
+# authority.
 
 const SUBDIVISIONS_PER_CELL: int = 6
-const VISUAL_KERNEL_RADIUS_CELLS: float = 1.65
-const VISUAL_KERNEL_SIGMA_CELLS: float = 0.48
-const VISUAL_WEIGHT_SHARPNESS: float = 1.35
 const SURFACE_Y_OFFSET: float = 0.018
 const NORMAL_SAMPLE_STEP_CELLS: float = 0.14
+const HAZARD_EDGE_FADE_CELLS: float = 0.22
 const SURFACE_ORDER := ["ROUGH", "FAIRWAY", "TEE", "FRINGE", "GREEN", "BUNKER", "WATER"]
 const SURFACE_VISUAL_DEPTH := {
 	"ROUGH": 0.000,
-	"FAIRWAY": 0.010,
-	"TEE": 0.014,
-	"FRINGE": 0.012,
-	"GREEN": 0.016,
-	"BUNKER": -0.045,
-	"WATER": -0.085
+	"FAIRWAY": 0.000,
+	"TEE": 0.000,
+	"FRINGE": 0.000,
+	"GREEN": 0.000,
+	"BUNKER": -0.060,
+	"WATER": -0.110
 }
 
 var construction_grid = null
@@ -80,7 +81,7 @@ func render_grid(grid) -> bool:
 	continuous_visual.set_meta("classification", "CONTINUOUS_COURSE_SURFACE")
 	continuous_visual.set_meta("source", "construction_grid")
 	continuous_visual.set_meta("authority", "presentation_only")
-	continuous_visual.set_meta("visual_projection", "smoothed_dense_surface_field")
+	continuous_visual.set_meta("visual_projection", "dense_crisp_authoritative_blocks")
 	continuous_visual.set_meta("subdivisions_per_cell", SUBDIVISIONS_PER_CELL)
 	continuous_visual.set_meta("triangle_count", rendered_triangles)
 	continuous_visual.set_meta("transition_edge_count", authoritative_transition_edges)
@@ -106,7 +107,7 @@ func clear_grid() -> void:
 
 
 # Compatibility with the POC-30F proof contract. There is no longer a legacy
-# ROUGH overlay plane at all; the continuous mesh includes the visual rough base.
+# ROUGH overlay plane at all; the dense mesh includes the visible rough base.
 func rough_base_hidden() -> bool:
 	return continuous_surface_active
 
@@ -170,21 +171,22 @@ func terrain_height_at_grid_corner(corner_x: int, corner_y: int) -> float:
 	return total / float(elevations.size())
 
 
-func visual_surface_weight_at_cell_uv(cell_x: int, cell_y: int, u_value: float, v_value: float, surface_value: String) -> float:
+# Visual ownership is deliberately one-hot. Dense geometry improves the terrain;
+# it does not invent fractional surface ownership between authoritative cells.
+func visual_surface_weight_at_cell_uv(cell_x: int, cell_y: int, _u_value: float, _v_value: float, surface_value: String) -> float:
 	if construction_grid == null or not construction_grid.is_in_bounds(cell_x, cell_y):
 		return 0.0
-	var grid_x: float = float(cell_x) + clampf(u_value, 0.0, 1.0)
-	var grid_y: float = float(cell_y) + clampf(v_value, 0.0, 1.0)
-	var weights: Dictionary = _surface_weights_at_grid_position(grid_x, grid_y)
-	return float(weights.get(surface_value.to_upper(), 0.0))
+	return 1.0 if str(construction_grid.surface_at(cell_x, cell_y)) == surface_value.to_upper() else 0.0
 
 
 func visual_color_at_cell_uv(cell_x: int, cell_y: int, u_value: float, v_value: float) -> Color:
 	if construction_grid == null or not construction_grid.is_in_bounds(cell_x, cell_y):
 		return Color.BLACK
-	var grid_x: float = float(cell_x) + clampf(u_value, 0.0, 1.0)
-	var grid_y: float = float(cell_y) + clampf(v_value, 0.0, 1.0)
-	return _visual_color_at_grid_position(grid_x, grid_y)
+	var u: float = clampf(u_value, 0.0, 1.0)
+	var v: float = clampf(v_value, 0.0, 1.0)
+	var grid_x: float = float(cell_x) + u
+	var grid_y: float = float(cell_y) + v
+	return _visual_color_for_cell(cell_x, cell_y, grid_x, grid_y)
 
 
 func _append_dense_cell(vertices: PackedVector3Array, normals: PackedVector3Array, colors: PackedColorArray, cell_x: int, cell_y: int) -> void:
@@ -200,20 +202,23 @@ func _append_dense_cell(vertices: PackedVector3Array, normals: PackedVector3Arra
 			var gy0: float = float(cell_y) + v0
 			var gy1: float = float(cell_y) + v1
 
-			var p00: Vector3 = _grid_position_to_world(gx0, gy0)
-			var p10: Vector3 = _grid_position_to_world(gx1, gy0)
-			var p11: Vector3 = _grid_position_to_world(gx1, gy1)
-			var p01: Vector3 = _grid_position_to_world(gx0, gy1)
+			var p00: Vector3 = _grid_position_to_world_for_cell(cell_x, cell_y, gx0, gy0, u0, v0)
+			var p10: Vector3 = _grid_position_to_world_for_cell(cell_x, cell_y, gx1, gy0, u1, v0)
+			var p11: Vector3 = _grid_position_to_world_for_cell(cell_x, cell_y, gx1, gy1, u1, v1)
+			var p01: Vector3 = _grid_position_to_world_for_cell(cell_x, cell_y, gx0, gy1, u0, v1)
 
 			var n00: Vector3 = _smooth_normal_at_grid_position(gx0, gy0)
 			var n10: Vector3 = _smooth_normal_at_grid_position(gx1, gy0)
 			var n11: Vector3 = _smooth_normal_at_grid_position(gx1, gy1)
 			var n01: Vector3 = _smooth_normal_at_grid_position(gx0, gy1)
 
-			var c00: Color = _visual_color_at_grid_position(gx0, gy0)
-			var c10: Color = _visual_color_at_grid_position(gx1, gy0)
-			var c11: Color = _visual_color_at_grid_position(gx1, gy1)
-			var c01: Color = _visual_color_at_grid_position(gx0, gy1)
+			# These use the OWNER cell explicitly. Adjacent cells therefore duplicate
+			# their shared boundary vertices with different colors when their surfaces
+			# differ, producing a hard visual cut with no cross-boundary interpolation.
+			var c00: Color = _visual_color_for_cell(cell_x, cell_y, gx0, gy0)
+			var c10: Color = _visual_color_for_cell(cell_x, cell_y, gx1, gy0)
+			var c11: Color = _visual_color_for_cell(cell_x, cell_y, gx1, gy1)
+			var c01: Color = _visual_color_for_cell(cell_x, cell_y, gx0, gy1)
 
 			_append_triangle(vertices, normals, colors, p00, n00, c00, p11, n11, c11, p10, n10, c10)
 			_append_triangle(vertices, normals, colors, p00, n00, c00, p01, n01, c01, p11, n11, c11)
@@ -240,21 +245,30 @@ func _append_triangle(
 	rendered_vertices += 3
 
 
-func _grid_position_to_world(grid_x_value: float, grid_y_value: float) -> Vector3:
+func _grid_position_to_world_for_cell(cell_x: int, cell_y: int, grid_x_value: float, grid_y_value: float, u: float, v: float) -> Vector3:
 	var gx: float = clampf(grid_x_value, 0.0, float(construction_grid.width))
 	var gy: float = clampf(grid_y_value, 0.0, float(construction_grid.height))
 	var size: float = float(construction_grid.tile_size_yards)
 	var base_height: float = _height_at_grid_position(gx, gy)
-	var weights: Dictionary = _surface_weights_at_grid_position(gx, gy)
-	var visual_depth: float = 0.0
-	for surface_value in SURFACE_ORDER:
-		var surface: String = str(surface_value)
-		visual_depth += float(weights.get(surface, 0.0)) * float(SURFACE_VISUAL_DEPTH.get(surface, 0.0))
+	var surface: String = str(construction_grid.surface_at(cell_x, cell_y))
+	var visual_depth: float = float(SURFACE_VISUAL_DEPTH.get(surface, 0.0)) * _interior_depth_factor(u, v)
 	return Vector3(
 		float(construction_grid.origin.x) + gx * size,
 		base_height + visual_depth + SURFACE_Y_OFFSET,
 		float(construction_grid.origin.y) + gy * size
 	)
+
+
+func _interior_depth_factor(u_value: float, v_value: float) -> float:
+	var u: float = clampf(u_value, 0.0, 1.0)
+	var v: float = clampf(v_value, 0.0, 1.0)
+	var edge_distance: float = minf(minf(u, 1.0 - u), minf(v, 1.0 - v))
+	return _smoothstep01(edge_distance / HAZARD_EDGE_FADE_CELLS)
+
+
+func _smoothstep01(value: float) -> float:
+	var t: float = clampf(value, 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
 
 
 func _height_at_grid_position(grid_x_value: float, grid_y_value: float) -> float:
@@ -283,64 +297,12 @@ func _smooth_normal_at_grid_position(grid_x: float, grid_y: float) -> Vector3:
 	return Vector3(left - right, world_step, north - south).normalized()
 
 
-func _surface_weights_at_grid_position(grid_x: float, grid_y: float) -> Dictionary:
-	var raw: Dictionary = {}
-	for surface_value in SURFACE_ORDER:
-		raw[str(surface_value)] = 0.0
-
-	var radius: int = int(ceil(VISUAL_KERNEL_RADIUS_CELLS)) + 1
-	var center_x: int = int(floor(grid_x))
-	var center_y: int = int(floor(grid_y))
-	var sigma_sq_twice: float = 2.0 * VISUAL_KERNEL_SIGMA_CELLS * VISUAL_KERNEL_SIGMA_CELLS
-	var radius_sq: float = VISUAL_KERNEL_RADIUS_CELLS * VISUAL_KERNEL_RADIUS_CELLS
-
-	for y in range(center_y - radius, center_y + radius + 1):
-		for x in range(center_x - radius, center_x + radius + 1):
-			if not construction_grid.is_in_bounds(x, y):
-				continue
-			var dx: float = grid_x - (float(x) + 0.5)
-			var dy: float = grid_y - (float(y) + 0.5)
-			var distance_sq: float = dx * dx + dy * dy
-			if distance_sq > radius_sq:
-				continue
-			var influence: float = exp(-distance_sq / sigma_sq_twice)
-			var surface: String = str(construction_grid.surface_at(x, y))
-			raw[surface] = float(raw.get(surface, 0.0)) + influence
-
-	var sharpened_total: float = 0.0
-	for surface_value in SURFACE_ORDER:
-		var surface: String = str(surface_value)
-		var sharpened: float = pow(maxf(float(raw.get(surface, 0.0)), 0.0), VISUAL_WEIGHT_SHARPNESS)
-		raw[surface] = sharpened
-		sharpened_total += sharpened
-
-	if sharpened_total <= 0.000001:
-		return {"ROUGH": 1.0}
-
-	for surface_value in SURFACE_ORDER:
-		var surface: String = str(surface_value)
-		raw[surface] = float(raw.get(surface, 0.0)) / sharpened_total
-	return raw
-
-
-func _visual_color_at_grid_position(grid_x: float, grid_y: float) -> Color:
+func _visual_color_for_cell(cell_x: int, cell_y: int, grid_x: float, grid_y: float) -> Color:
 	var size: float = float(construction_grid.tile_size_yards)
 	var world_x: float = float(construction_grid.origin.x) + grid_x * size
 	var world_z: float = float(construction_grid.origin.y) + grid_y * size
-	var weights: Dictionary = _surface_weights_at_grid_position(grid_x, grid_y)
-	var result := Color(0.0, 0.0, 0.0, 1.0)
-
-	for surface_value in SURFACE_ORDER:
-		var surface: String = str(surface_value)
-		var weight: float = float(weights.get(surface, 0.0))
-		if weight <= 0.00001:
-			continue
-		var color: Color = _surface_color_with_variation(surface, world_x, world_z)
-		result.r += color.r * weight
-		result.g += color.g * weight
-		result.b += color.b * weight
-
-	return Color(clampf(result.r, 0.0, 1.0), clampf(result.g, 0.0, 1.0), clampf(result.b, 0.0, 1.0), 1.0)
+	var surface: String = str(construction_grid.surface_at(cell_x, cell_y))
+	return _surface_color_with_variation(surface, world_x, world_z)
 
 
 func _surface_color_with_variation(surface: String, world_x: float, world_z: float) -> Color:
