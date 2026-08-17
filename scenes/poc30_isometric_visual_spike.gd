@@ -79,6 +79,7 @@ func initialize_proof() -> bool:
 
 	var dressing_planner = CourseDressing.new()
 	dressing_plan = dressing_planner.build_dressing_plan(grid)
+	dressing_planner.free()
 
 	renderer = IsometricCourseRenderer.new()
 	renderer.name = "IsometricCourseRenderer"
