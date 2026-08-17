@@ -1,18 +1,23 @@
 extends Node3D
 
-# POC-22D: Construction Grid -> Course Renderer
-# ----------------------------------------------
+# POC-22D / POC-30A: Construction Grid -> Course Renderer
+# --------------------------------------------------------
 # Visual projection of the authoritative player-buildable construction grid.
 # The grid remains the source of truth. This renderer groups tiles by surface
 # into lightweight meshes and derives corner heights from authored tile
 # elevations so neighboring tiles share a continuous terrain edge.
+#
+# POC-30A adds FRINGE as a first-class rendered construction surface. Organic
+# edge smoothing comes next; this layer must always remain downstream of the
+# exact surface ownership stored in CourseConstructionGrid.
 
-const SURFACE_ORDER := ["ROUGH", "FAIRWAY", "TEE", "GREEN", "BUNKER", "WATER"]
+const SURFACE_ORDER := ["ROUGH", "FAIRWAY", "TEE", "GREEN", "FRINGE", "BUNKER", "WATER"]
 const SURFACE_HEIGHT_OFFSET := {
 	"ROUGH": 0.000,
 	"FAIRWAY": 0.015,
 	"TEE": 0.020,
 	"GREEN": 0.025,
+	"FRINGE": 0.022,
 	"BUNKER": -0.030,
 	"WATER": -0.060
 }
@@ -153,6 +158,8 @@ func _surface_color(surface_value: String) -> Color:
 			return Color(0.27, 0.58, 0.24)
 		"GREEN":
 			return Color(0.38, 0.68, 0.31)
+		"FRINGE":
+			return Color(0.32, 0.62, 0.27)
 		"ROUGH":
 			return Color(0.19, 0.42, 0.18)
 		"BUNKER":
