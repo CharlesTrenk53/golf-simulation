@@ -36,6 +36,8 @@ func _init() -> void:
 	_assert_equal(grid.count_surface("GREEN"), 9, "green remains a separate nine-cell surface")
 	_assert_equal(grid.surface_at(3, 0), "FRINGE", "fringe ownership comes from the grid")
 	_assert_equal(grid.surface_at(3, 2), "GREEN", "green ownership comes from the grid")
+	_assert_equal(grid.surface_at(3, 4), "FRINGE", "later player paint replaces earlier fairway ownership authoritatively")
+	_assert_equal(grid.count_surface("FAIRWAY"), 5, "surface repaint leaves five authoritative fairway cells")
 
 	var top_green_neighbors: Dictionary = grid.surface_neighbors(3, 1)
 	_assert_equal(str(top_green_neighbors.get("N", "")), "FRINGE", "north neighbor exposes authoritative fringe boundary")
@@ -80,8 +82,8 @@ func _init() -> void:
 	var hole = builder.build_hole(grid, "poc30_grid_course", 1, "Surface Truth", 4, Vector2i(3, 10), Vector2i(3, 2), "default", "Back Tee")
 	_assert_true(hole != null, "expanded construction grid still builds a playable HoleDefinition")
 	if hole != null:
-		_assert_equal(_count_surface_regions(hole.surface_regions, "FRINGE"), 16, "all authoritative fringe cells propagate into HoleDefinition")
-		_assert_equal(_count_surface_regions(hole.surface_regions, "FAIRWAY"), 6, "existing fairway projection remains intact")
+		_assert_equal(_count_surface_regions(hole.surface_regions, "FRINGE"), grid.count_surface("FRINGE"), "all authoritative fringe cells propagate into HoleDefinition")
+		_assert_equal(_count_surface_regions(hole.surface_regions, "FAIRWAY"), grid.count_surface("FAIRWAY"), "fairway projection exactly matches final authoritative grid ownership")
 
 	print("POC30A_SURFACE_SUMMARY rough=%d fairway=%d tee=%d green=%d fringe=%d bunker=%d water=%d" % [
 		grid.count_surface("ROUGH"),
