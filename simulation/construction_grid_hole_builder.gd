@@ -1,10 +1,12 @@
 extends RefCounted
 
-# POC-22C: Construction Grid -> HoleDefinition
-# ---------------------------------------------
+# POC-22C / POC-30A: Construction Grid -> HoleDefinition
+# -------------------------------------------------------
 # Converts the player-owned construction grid into the same authoritative
 # HoleDefinition consumed by the autonomous golfer systems. Rendering remains
 # downstream of this data; the construction grid is the source of truth.
+# POC-30A carries FRINGE through as an authored surface region rather than
+# allowing the graphical layer to invent a collar around a green.
 
 const HoleAuthoringModel = preload("res://simulation/hole_authoring_model.gd")
 
@@ -54,7 +56,7 @@ func build_hole(
 			var region_id := "%s_%d_%d_%d" % [surface.to_lower(), x, y, region_index]
 			region_index += 1
 			match surface:
-				"FAIRWAY", "TEE":
+				"FAIRWAY", "TEE", "FRINGE":
 					author.add_surface_region(region_id, surface.capitalize(), surface, polygon)
 				"BUNKER":
 					author.add_hazard(region_id, "Bunker", "BUNKER", polygon, 0, "")

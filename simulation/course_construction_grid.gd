@@ -1,10 +1,15 @@
 extends RefCounted
 
-# POC-22A: Course Construction Grid
-# ---------------------------------
+# POC-22A / POC-30A: Course Construction Grid
+# ---------------------------------------------
 # Authoritative player-buildable land grid. The grid is intentionally separate
 # from rendering and golfer simulation so the same saved construction data can
-# later drive economics, visuals, navigation, and HoleDefinition generation.
+# drive economics, visuals, navigation, and HoleDefinition generation.
+#
+# POC-30A keeps that authority intact while formalizing the complete first-pass
+# golf-surface vocabulary and exposing neighborhood information for downstream
+# organic rendering. Renderers may smooth these boundaries; they may not invent
+# a different surface assignment than the cells stored here.
 
 const SCHEMA_VERSION: int = 1
 const DEFAULT_TILE_SIZE_YARDS: float = 5.0
@@ -14,20 +19,37 @@ const SURFACE_TYPES := [
 	"ROUGH",
 	"FAIRWAY",
 	"GREEN",
+	"FRINGE",
 	"TEE",
 	"BUNKER",
 	"WATER"
 ]
 
-# Placeholder construction prices. POC-22B will own balancing/budget rules;
-# keeping prices here makes every placed tile economically describable now.
+# Placeholder construction prices. Balancing remains outside POC-30; FRINGE uses
+# the same placeholder price as FAIRWAY so adding the authoritative surface does
+# not introduce a new economic tuning claim.
 const SURFACE_BUILD_COST := {
 	"ROUGH": 0,
 	"FAIRWAY": 80,
 	"GREEN": 220,
+	"FRINGE": 80,
 	"TEE": 140,
 	"BUNKER": 180,
 	"WATER": 260
+}
+
+# Stable eight-neighbor order used by presentation code when deriving rounded
+# edges/corners from the authoritative grid. Values outside the property return
+# an empty surface string rather than being silently treated as ROUGH.
+const NEIGHBOR_OFFSETS := {
+	"N": Vector2i(0, -1),
+	"NE": Vector2i(1, -1),
+	"E": Vector2i(1, 0),
+	"SE": Vector2i(1, 1),
+	"S": Vector2i(0, 1),
+	"SW": Vector2i(-1, 1),
+	"W": Vector2i(-1, 0),
+	"NW": Vector2i(-1, -1)
 }
 
 var width: int = 0
@@ -70,6 +92,29 @@ func surface_at(x: int, y: int) -> String:
 	if not is_in_bounds(x, y):
 		return ""
 	return str(_tiles[y][x].get("surface", DEFAULT_SURFACE))
+
+
+func surface_neighbors(x: int, y: int) -> Dictionary:
+	if not is_in_bounds(x, y):
+		return {}
+	var result := {}
+	for direction_value in NEIGHBOR_OFFSETS.keys():
+		var direction: String = str(direction_value)
+		var offset: Vector2i = NEIGHBOR_OFFSETS[direction]
+		result[direction] = surface_at(x + offset.x, y + offset.y)
+	return result
+
+
+func same_surface_neighbors(x: int, y: int) -> Dictionary:
+	if not is_in_bounds(x, y):
+		return {}
+	var own_surface: String = surface_at(x, y)
+	var neighbors: Dictionary = surface_neighbors(x, y)
+	var result := {}
+	for direction_value in NEIGHBOR_OFFSETS.keys():
+		var direction: String = str(direction_value)
+		result[direction] = not own_surface.is_empty() and str(neighbors.get(direction, "")) == own_surface
+	return result
 
 
 func tile_at(x: int, y: int) -> Dictionary:

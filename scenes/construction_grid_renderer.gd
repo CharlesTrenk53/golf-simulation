@@ -1,24 +1,42 @@
 extends Node3D
 
-# POC-22D: Construction Grid -> Course Renderer
-# ----------------------------------------------
+# POC-22D / POC-30A / POC-30B / POC-30C: Construction Grid -> Course Renderer
+# -----------------------------------------------------------------------------
 # Visual projection of the authoritative player-buildable construction grid.
 # The grid remains the source of truth. This renderer groups tiles by surface
 # into lightweight meshes and derives corner heights from authored tile
 # elevations so neighboring tiles share a continuous terrain edge.
+#
+# POC-30A adds FRINGE as a first-class rendered construction surface.
+# POC-30B makes non-rough surface footprints neighborhood-aware: adjoining
+# cells remain visually continuous, exposed edges pull inward slightly, and
+# exposed outside corners are softened. Every generated footprint stays inside
+# its authoritative source cell.
+# POC-30C fills those deliberate edge insets with transition bands derived only
+# from the two authoritative surfaces that meet at each cardinal cell boundary.
+# Turf transitions receive a subtle blended shoulder. BUNKER and WATER receive
+# a sloped bank from the neighboring surface height down to their depressed core.
+# No transition crosses into another owner's cell and no transition changes lie,
+# hazard, scoring, traffic, or shot authority.
 
-const SURFACE_ORDER := ["ROUGH", "FAIRWAY", "TEE", "GREEN", "BUNKER", "WATER"]
+const SURFACE_ORDER := ["ROUGH", "FAIRWAY", "TEE", "FRINGE", "GREEN", "BUNKER", "WATER"]
 const SURFACE_HEIGHT_OFFSET := {
 	"ROUGH": 0.000,
 	"FAIRWAY": 0.015,
 	"TEE": 0.020,
 	"GREEN": 0.025,
+	"FRINGE": 0.022,
 	"BUNKER": -0.030,
 	"WATER": -0.060
 }
+const EDGE_INSET_RATIO: float = 0.12
+const CORNER_SOFTEN_RATIO: float = 0.16
+const CARDINAL_DIRECTIONS := ["N", "E", "S", "W"]
+const HAZARD_SURFACES := ["BUNKER", "WATER"]
 
 var construction_grid = null
 var rendered_surfaces: Array = []
+var rendered_transitions: Array = []
 
 
 func render_grid(grid) -> bool:
@@ -33,6 +51,7 @@ func render_grid(grid) -> bool:
 		if tile_count <= 0:
 			continue
 		_add_surface_mesh(surface, tile_count)
+	_add_transition_meshes()
 	return not rendered_surfaces.is_empty()
 
 
@@ -41,6 +60,7 @@ func clear_grid() -> void:
 		remove_child(child)
 		child.queue_free()
 	rendered_surfaces.clear()
+	rendered_transitions.clear()
 	construction_grid = null
 
 
@@ -52,11 +72,54 @@ func surface_visual(surface: String) -> Node3D:
 	return null
 
 
+func transition_visual(from_surface: String, to_surface: String) -> Node3D:
+	var from_normalized: String = from_surface.to_upper()
+	var to_normalized: String = to_surface.to_upper()
+	for child in get_children():
+		if not child is Node3D:
+			continue
+		if str(child.get_meta("classification", "")) != "TRANSITION":
+			continue
+		if str(child.get_meta("from_surface", "")) == from_normalized and str(child.get_meta("to_surface", "")) == to_normalized:
+			return child
+	return null
+
+
 func rendered_tile_count(surface: String) -> int:
 	var visual: Node3D = surface_visual(surface)
 	if visual == null:
 		return 0
 	return int(visual.get_meta("tile_count", 0))
+
+
+func softened_boundary_cell_count(surface: String) -> int:
+	var visual: Node3D = surface_visual(surface)
+	if visual == null:
+		return 0
+	return int(visual.get_meta("softened_boundary_cells", 0))
+
+
+# Counts both halves of a boundary when two non-rough surfaces meet. That is
+# intentional: each transition half remains inside its own authoritative cell.
+# A FAIRWAY/ROUGH edge has one rendered half because ROUGH itself is not inset.
+func transition_edge_count(surface_a: String, surface_b: String) -> int:
+	var a: String = surface_a.to_upper()
+	var b: String = surface_b.to_upper()
+	var count: int = 0
+	for record_value in rendered_transitions:
+		var record: Dictionary = record_value
+		var from_surface: String = str(record.get("from_surface", ""))
+		var to_surface: String = str(record.get("to_surface", ""))
+		if (from_surface == a and to_surface == b) or (from_surface == b and to_surface == a):
+			count += int(record.get("edge_count", 0))
+	return count
+
+
+func rendered_transition_edge_count() -> int:
+	var count: int = 0
+	for record_value in rendered_transitions:
+		count += int(record_value.get("edge_count", 0))
+	return count
 
 
 func terrain_height_at_grid_corner(corner_x: int, corner_y: int) -> float:
@@ -77,29 +140,152 @@ func terrain_height_at_grid_corner(corner_x: int, corner_y: int) -> float:
 	return total / float(elevations.size())
 
 
+# Returns a convex local-space X/Z footprint for one authoritative cell.
+# The polygon never leaves [0, tile_size] in either axis. Same-surface cardinal
+# neighbors keep their shared edge flush; different-surface edges pull inward.
+# When two adjacent edges are exposed, the outside corner becomes a two-point
+# bevel instead of a square 90-degree corner.
+func visual_footprint_for_cell(x: int, y: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	if construction_grid == null or not construction_grid.is_in_bounds(x, y):
+		return points
+
+	var size: float = float(construction_grid.tile_size_yards)
+	var surface: String = str(construction_grid.surface_at(x, y))
+	if surface == "ROUGH":
+		return PackedVector2Array([
+			Vector2(0.0, 0.0),
+			Vector2(size, 0.0),
+			Vector2(size, size),
+			Vector2(0.0, size)
+		])
+
+	var same: Dictionary = construction_grid.same_surface_neighbors(x, y)
+	var north_same: bool = bool(same.get("N", false))
+	var east_same: bool = bool(same.get("E", false))
+	var south_same: bool = bool(same.get("S", false))
+	var west_same: bool = bool(same.get("W", false))
+	var inset: float = size * EDGE_INSET_RATIO
+	var soften: float = size * CORNER_SOFTEN_RATIO
+
+	var left: float = 0.0 if west_same else inset
+	var right: float = size if east_same else size - inset
+	var top: float = 0.0 if north_same else inset
+	var bottom: float = size if south_same else size - inset
+	var max_soften: float = minf((right - left) * 0.45, (bottom - top) * 0.45)
+	soften = minf(soften, max_soften)
+
+	# Clockwise when viewed from above in the renderer's X/Z coordinate plane.
+	if not north_same and not west_same:
+		points.append(Vector2(left + soften, top))
+		points.append(Vector2(left, top + soften))
+	else:
+		points.append(Vector2(left, top))
+
+	if not north_same and not east_same:
+		points.append(Vector2(right - soften, top))
+		points.append(Vector2(right, top + soften))
+	else:
+		points.append(Vector2(right, top))
+
+	if not south_same and not east_same:
+		points.append(Vector2(right, bottom - soften))
+		points.append(Vector2(right - soften, bottom))
+	else:
+		points.append(Vector2(right, bottom))
+
+	if not south_same and not west_same:
+		points.append(Vector2(left + soften, bottom))
+		points.append(Vector2(left, bottom - soften))
+	else:
+		points.append(Vector2(left, bottom))
+
+	return points
+
+
+# Describes one transition half-strip in local cell coordinates. The outer edge
+# is the exact authoritative cell boundary; the inner edge is the POC-30B inset.
+# The strip never crosses the boundary. Empty/out-of-property/same-surface edges
+# deliberately produce no transition.
+func transition_strip_for_edge(x: int, y: int, direction_value: String) -> Dictionary:
+	if construction_grid == null or not construction_grid.is_in_bounds(x, y):
+		return {"valid": false, "reason": "INVALID_CELL"}
+	var direction: String = direction_value.to_upper()
+	if not CARDINAL_DIRECTIONS.has(direction):
+		return {"valid": false, "reason": "INVALID_DIRECTION"}
+
+	var surface: String = str(construction_grid.surface_at(x, y))
+	if surface == "ROUGH":
+		return {"valid": false, "reason": "ROUGH_IS_BASE"}
+	var neighbors: Dictionary = construction_grid.surface_neighbors(x, y)
+	var neighbor_surface: String = str(neighbors.get(direction, ""))
+	if neighbor_surface.is_empty():
+		return {"valid": false, "reason": "PROPERTY_EDGE"}
+	if neighbor_surface == surface:
+		return {"valid": false, "reason": "SAME_SURFACE"}
+
+	var size: float = float(construction_grid.tile_size_yards)
+	var inset: float = size * EDGE_INSET_RATIO
+	var outer_a := Vector2.ZERO
+	var outer_b := Vector2.ZERO
+	var inner_a := Vector2.ZERO
+	var inner_b := Vector2.ZERO
+	match direction:
+		"N":
+			outer_a = Vector2(0.0, 0.0)
+			outer_b = Vector2(size, 0.0)
+			inner_a = Vector2(0.0, inset)
+			inner_b = Vector2(size, inset)
+		"E":
+			outer_a = Vector2(size, 0.0)
+			outer_b = Vector2(size, size)
+			inner_a = Vector2(size - inset, 0.0)
+			inner_b = Vector2(size - inset, size)
+		"S":
+			outer_a = Vector2(size, size)
+			outer_b = Vector2(0.0, size)
+			inner_a = Vector2(size, size - inset)
+			inner_b = Vector2(0.0, size - inset)
+		"W":
+			outer_a = Vector2(0.0, size)
+			outer_b = Vector2(0.0, 0.0)
+			inner_a = Vector2(inset, size)
+			inner_b = Vector2(inset, 0.0)
+
+	return {
+		"valid": true,
+		"cell": Vector2i(x, y),
+		"direction": direction,
+		"from_surface": surface,
+		"to_surface": neighbor_surface,
+		"outer_a": outer_a,
+		"outer_b": outer_b,
+		"inner_a": inner_a,
+		"inner_b": inner_b,
+		"outer_offset_y": _boundary_surface_offset(surface, neighbor_surface),
+		"inner_offset_y": float(SURFACE_HEIGHT_OFFSET.get(surface, 0.0)),
+		"blend_color": _transition_color(surface, neighbor_surface)
+	}
+
+
 func _add_surface_mesh(surface: String, tile_count: int) -> void:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var size: float = float(construction_grid.tile_size_yards)
 	var offset_y: float = float(SURFACE_HEIGHT_OFFSET.get(surface, 0.0))
+	var softened_cells: int = 0
 
 	for y in range(int(construction_grid.height)):
 		for x in range(int(construction_grid.width)):
 			if str(construction_grid.surface_at(x, y)) != surface:
 				continue
 
-			var x0: float = float(construction_grid.origin.x) + float(x) * size
-			var x1: float = x0 + size
-			var z0: float = float(construction_grid.origin.y) + float(y) * size
-			var z1: float = z0 + size
-
-			var p00: Vector3 = Vector3(x0, terrain_height_at_grid_corner(x, y) + offset_y, z0)
-			var p10: Vector3 = Vector3(x1, terrain_height_at_grid_corner(x + 1, y) + offset_y, z0)
-			var p11: Vector3 = Vector3(x1, terrain_height_at_grid_corner(x + 1, y + 1) + offset_y, z1)
-			var p01: Vector3 = Vector3(x0, terrain_height_at_grid_corner(x, y + 1) + offset_y, z1)
-
-			_append_triangle(vertices, normals, p00, p11, p10)
-			_append_triangle(vertices, normals, p00, p01, p11)
+			var footprint: PackedVector2Array = visual_footprint_for_cell(x, y)
+			if footprint.size() < 3:
+				continue
+			if surface != "ROUGH" and _has_exposed_cardinal_edge(x, y):
+				softened_cells += 1
+			_append_cell_footprint(vertices, normals, x, y, footprint, offset_y, size)
 
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -115,13 +301,139 @@ func _add_surface_mesh(surface: String, tile_count: int) -> void:
 	visual.mesh = mesh
 	visual.set_meta("classification", surface)
 	visual.set_meta("tile_count", tile_count)
+	visual.set_meta("softened_boundary_cells", softened_cells)
 	visual.set_meta("source", "construction_grid")
+	visual.set_meta("visual_projection", "topology_softened" if surface != "ROUGH" else "authoritative_base")
 	add_child(visual)
 	rendered_surfaces.append({
 		"classification": surface,
 		"tile_count": tile_count,
+		"softened_boundary_cells": softened_cells,
 		"node": visual
 	})
+
+
+func _add_transition_meshes() -> void:
+	var groups := {}
+	for y in range(int(construction_grid.height)):
+		for x in range(int(construction_grid.width)):
+			var surface: String = str(construction_grid.surface_at(x, y))
+			if surface == "ROUGH":
+				continue
+			for direction_value in CARDINAL_DIRECTIONS:
+				var direction: String = str(direction_value)
+				var strip: Dictionary = transition_strip_for_edge(x, y, direction)
+				if not bool(strip.get("valid", false)):
+					continue
+				var neighbor_surface: String = str(strip.get("to_surface", ""))
+				var key: String = "%s__%s" % [surface, neighbor_surface]
+				if not groups.has(key):
+					groups[key] = {
+						"from_surface": surface,
+						"to_surface": neighbor_surface,
+						"strips": []
+					}
+				groups[key]["strips"].append(strip)
+
+	for key_value in groups.keys():
+		var group: Dictionary = groups[key_value]
+		_add_transition_group_mesh(group)
+
+
+func _add_transition_group_mesh(group: Dictionary) -> void:
+	var strips: Array = group.get("strips", [])
+	if strips.is_empty():
+		return
+	var from_surface: String = str(group.get("from_surface", ""))
+	var to_surface: String = str(group.get("to_surface", ""))
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var size: float = float(construction_grid.tile_size_yards)
+
+	for strip_value in strips:
+		var strip: Dictionary = strip_value
+		var cell: Vector2i = strip.get("cell", Vector2i.ZERO)
+		var outer_offset: float = float(strip.get("outer_offset_y", 0.0))
+		var inner_offset: float = float(strip.get("inner_offset_y", 0.0))
+		var outer_a: Vector3 = _cell_local_to_world(cell.x, cell.y, strip.get("outer_a", Vector2.ZERO), outer_offset, size)
+		var outer_b: Vector3 = _cell_local_to_world(cell.x, cell.y, strip.get("outer_b", Vector2.ZERO), outer_offset, size)
+		var inner_a: Vector3 = _cell_local_to_world(cell.x, cell.y, strip.get("inner_a", Vector2.ZERO), inner_offset, size)
+		var inner_b: Vector3 = _cell_local_to_world(cell.x, cell.y, strip.get("inner_b", Vector2.ZERO), inner_offset, size)
+		_append_triangle(vertices, normals, outer_a, inner_b, outer_b)
+		_append_triangle(vertices, normals, outer_a, inner_a, inner_b)
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(0, _transition_material(from_surface, to_surface))
+
+	var visual := MeshInstance3D.new()
+	visual.name = "%sTo%sTransition" % [from_surface.capitalize(), to_surface.capitalize()]
+	visual.mesh = mesh
+	visual.set_meta("classification", "TRANSITION")
+	visual.set_meta("from_surface", from_surface)
+	visual.set_meta("to_surface", to_surface)
+	visual.set_meta("edge_count", strips.size())
+	visual.set_meta("source", "construction_grid_topology")
+	visual.set_meta("visual_projection", "authoritative_half_cell_transition")
+	add_child(visual)
+	rendered_transitions.append({
+		"from_surface": from_surface,
+		"to_surface": to_surface,
+		"edge_count": strips.size(),
+		"node": visual
+	})
+
+
+func _append_cell_footprint(vertices: PackedVector3Array, normals: PackedVector3Array, cell_x: int, cell_y: int, footprint: PackedVector2Array, offset_y: float, size: float) -> void:
+	var center_local := Vector2.ZERO
+	for point: Vector2 in footprint:
+		center_local += point
+	center_local /= float(footprint.size())
+	var center_world: Vector3 = _cell_local_to_world(cell_x, cell_y, center_local, offset_y, size)
+
+	for i in range(footprint.size()):
+		var current: Vector3 = _cell_local_to_world(cell_x, cell_y, footprint[i], offset_y, size)
+		var next: Vector3 = _cell_local_to_world(cell_x, cell_y, footprint[(i + 1) % footprint.size()], offset_y, size)
+		_append_triangle(vertices, normals, center_world, next, current)
+
+
+func _cell_local_to_world(cell_x: int, cell_y: int, local_point: Vector2, offset_y: float, size: float) -> Vector3:
+	var world_x: float = float(construction_grid.origin.x) + float(cell_x) * size + local_point.x
+	var world_z: float = float(construction_grid.origin.y) + float(cell_y) * size + local_point.y
+	var elevation: float = _terrain_height_inside_cell(cell_x, cell_y, local_point.x / size, local_point.y / size)
+	return Vector3(world_x, elevation + offset_y, world_z)
+
+
+func _terrain_height_inside_cell(cell_x: int, cell_y: int, tx_value: float, tz_value: float) -> float:
+	var tx: float = clampf(tx_value, 0.0, 1.0)
+	var tz: float = clampf(tz_value, 0.0, 1.0)
+	var h00: float = terrain_height_at_grid_corner(cell_x, cell_y)
+	var h10: float = terrain_height_at_grid_corner(cell_x + 1, cell_y)
+	var h11: float = terrain_height_at_grid_corner(cell_x + 1, cell_y + 1)
+	var h01: float = terrain_height_at_grid_corner(cell_x, cell_y + 1)
+	var near_height: float = lerpf(h00, h10, tx)
+	var far_height: float = lerpf(h01, h11, tx)
+	return lerpf(near_height, far_height, tz)
+
+
+func _has_exposed_cardinal_edge(x: int, y: int) -> bool:
+	var same: Dictionary = construction_grid.same_surface_neighbors(x, y)
+	for direction in CARDINAL_DIRECTIONS:
+		if not bool(same.get(direction, false)):
+			return true
+	return false
+
+
+func _boundary_surface_offset(surface_a: String, surface_b: String) -> float:
+	var a_offset: float = float(SURFACE_HEIGHT_OFFSET.get(surface_a, 0.0))
+	var b_offset: float = float(SURFACE_HEIGHT_OFFSET.get(surface_b, 0.0))
+	if HAZARD_SURFACES.has(surface_a) or HAZARD_SURFACES.has(surface_b):
+		return maxf(a_offset, b_offset)
+	return (a_offset + b_offset) * 0.5
 
 
 func _append_triangle(vertices: PackedVector3Array, normals: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3) -> void:
@@ -138,11 +450,22 @@ func _material_for_surface(surface: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = _surface_color(surface)
 	material.roughness = 0.95
-	# Construction terrain is a visual projection of authoritative grid data.
-	# Render both sides so camera orientation cannot accidentally make the entire
-	# property disappear because of triangle winding/back-face culling.
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
+
+
+func _transition_material(surface_a: String, surface_b: String) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = _transition_color(surface_a, surface_b)
+	material.roughness = 0.96
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return material
+
+
+func _transition_color(surface_a: String, surface_b: String) -> Color:
+	var a: Color = _surface_color(surface_a)
+	var b: Color = _surface_color(surface_b)
+	return a.lerp(b, 0.5)
 
 
 func _surface_color(surface_value: String) -> Color:
@@ -153,6 +476,8 @@ func _surface_color(surface_value: String) -> Color:
 			return Color(0.27, 0.58, 0.24)
 		"GREEN":
 			return Color(0.38, 0.68, 0.31)
+		"FRINGE":
+			return Color(0.32, 0.62, 0.27)
 		"ROUGH":
 			return Color(0.19, 0.42, 0.18)
 		"BUNKER":
