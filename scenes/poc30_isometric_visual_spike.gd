@@ -10,7 +10,7 @@ const CourseConstructionGrid = preload("res://simulation/course_construction_gri
 const CourseConstructionEconomy = preload("res://simulation/course_construction_economy.gd")
 const ConstructionGridHoleBuilder = preload("res://simulation/construction_grid_hole_builder.gd")
 const CourseDressing = preload("res://scenes/construction_grid_course_dressing.gd")
-const IsometricCourseRenderer = preload("res://scenes/isometric_course_renderer.gd")
+const RotatableIsometricCourseRenderer = preload("res://scenes/isometric_rotatable_course_renderer.gd")
 
 var grid = null
 var economy = null
@@ -20,6 +20,7 @@ var dressing_plan: Array = []
 var camera: Camera2D = null
 var initialized: bool = false
 var initialization_reason: String = ""
+var active_review_view: int = 1
 
 
 func _ready() -> void:
@@ -81,7 +82,7 @@ func initialize_proof() -> bool:
 	dressing_plan = dressing_planner.build_dressing_plan(grid)
 	dressing_planner.free()
 
-	renderer = IsometricCourseRenderer.new()
+	renderer = RotatableIsometricCourseRenderer.new()
 	renderer.name = "IsometricCourseRenderer"
 	add_child(renderer)
 	if not renderer.configure(grid, dressing_plan, Vector2i(7, 3), Vector2i(7, 44)):
@@ -179,6 +180,7 @@ func _add_camera() -> void:
 func switch_review_view(view_index: int) -> void:
 	if camera == null or renderer == null:
 		return
+	active_review_view = view_index
 	match view_index:
 		1:
 			var bounds: Rect2 = renderer.visual_bounds().grow(80.0)
@@ -195,7 +197,25 @@ func switch_review_view(view_index: int) -> void:
 			camera.position = renderer.cell_center_iso(7, 3) + Vector2(0.0, -50.0)
 			camera.zoom = Vector2(1.35, 1.35)
 		_:
+			active_review_view = 1
 			switch_review_view(1)
+
+
+func rotate_camera_view(step_quarters: int) -> void:
+	if renderer == null:
+		return
+	var saved_zoom: Vector2 = camera.zoom if camera != null else Vector2.ONE
+	renderer.rotate_view(step_quarters)
+	if camera == null:
+		return
+	match active_review_view:
+		2:
+			camera.position = renderer.cell_center_iso(7, 44) + Vector2(0.0, -70.0)
+		3:
+			camera.position = renderer.cell_center_iso(7, 3) + Vector2(0.0, -50.0)
+		_:
+			camera.position = renderer.visual_bounds().get_center()
+	camera.zoom = saved_zoom
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -206,6 +226,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			switch_review_view(2)
 		elif event.keycode == KEY_3:
 			switch_review_view(3)
+		elif event.keycode == KEY_Q:
+			rotate_camera_view(-1)
+		elif event.keycode == KEY_E:
+			rotate_camera_view(1)
 	elif event is InputEventMouseButton and event.pressed and camera != null:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			camera.zoom = (camera.zoom * 1.10).clamp(Vector2(0.35, 0.35), Vector2(2.5, 2.5))
@@ -230,11 +254,11 @@ func _add_hud() -> void:
 	var panel := ColorRect.new()
 	panel.color = Color(0.025, 0.04, 0.025, 0.86)
 	panel.position = Vector2(18.0, 18.0)
-	panel.size = Vector2(520.0, 118.0)
+	panel.size = Vector2(560.0, 118.0)
 	layer.add_child(panel)
 
 	var label := Label.new()
 	label.position = Vector2(34.0, 29.0)
-	label.text = "POC-30H  •  CONTOUR CREEK  •  64×32 ISOMETRIC SPIKE\n410 yd  •  Par 4  •  Same authoritative construction grid\n1 Full course    2 Tee area    3 Green area\nArrow keys pan  •  Mouse wheel zoom  •  Crisp block ownership"
+	label.text = "POC-30H  •  CONTOUR CREEK  •  64×32 ISOMETRIC SPIKE\n410 yd  •  Par 4  •  Same authoritative construction grid\n1 Full course    2 Tee area    3 Green area    Q/E Rotate view\nArrow keys pan  •  Mouse wheel zoom  •  Crisp surfaces + smooth elevation"
 	label.add_theme_font_size_override("font_size", 16)
 	layer.add_child(label)
