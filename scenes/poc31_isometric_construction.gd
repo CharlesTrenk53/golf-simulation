@@ -2,9 +2,9 @@ extends Node2D
 
 # POC-31: Player-Facing Isometric Construction
 # ----------------------------------------------
-# This is the first actual construction-game surface over the POC-30 isometric
-# architecture. Input selects authoritative grid cells; build actions route
-# through CourseConstructionEconomy; the renderer only presents the result.
+# First actual construction-game surface over the POC-30 isometric architecture.
+# Input selects authoritative grid cells; paid changes route through the existing
+# construction economy; presentation never becomes golf-rule authority.
 
 const CourseConstructionGrid = preload("res://simulation/course_construction_grid.gd")
 const CourseConstructionEconomy = preload("res://simulation/course_construction_economy.gd")
@@ -16,6 +16,7 @@ const GRID_HEIGHT := 24
 const TILE_SIZE_YARDS := 10.0
 const STARTING_CASH := 30000
 const INVALID_CELL := Vector2i(-1, -1)
+const DEFAULT_SAVE_PATH := "user://poc31_player_course.json"
 const SURFACE_KEYS := {
 	KEY_1: "ROUGH",
 	KEY_2: "FAIRWAY",
@@ -41,6 +42,7 @@ var initialized: bool = false
 var funds_label: Label = null
 var tool_label: Label = null
 var hover_label: Label = null
+var marker_label: Label = null
 var status_label: Label = null
 var palette_buttons := {}
 
@@ -79,8 +81,8 @@ func initialize_property() -> bool:
 
 
 func _author_starting_landform() -> void:
-	# A gentle undeveloped property. Elevation is authored data even though the
-	# player-facing elevation tools arrive in POC-32.
+	# A gentle undeveloped property. Elevation is authoritative even though the
+	# player-facing terrain-shaping tools arrive in POC-32.
 	for y in range(GRID_HEIGHT):
 		for x in range(GRID_WIDTH):
 			var elevation := (
@@ -116,8 +118,14 @@ func build_at_cell(cell: Vector2i, surface: String = "") -> Dictionary:
 	if bool(result.get("built", false)):
 		selected_cell = cell
 		renderer.set_selected_cell(cell)
+		_reconcile_hole_markers_after_build(cell)
 		renderer.queue_redraw()
-		current_status = "%s built at (%d, %d) for $%d" % [target_surface.capitalize(), cell.x, cell.y, int(result.get("cost", 0))]
+		current_status = "%s built at (%d, %d) for $%d" % [
+			target_surface.capitalize(),
+			cell.x,
+			cell.y,
+			int(result.get("cost", 0))
+		]
 	else:
 		current_status = "Build rejected: %s" % str(result.get("reason", "UNKNOWN"))
 	_update_hud()
@@ -171,6 +179,22 @@ func build_current_hole(par: int = 4, hole_name: String = "Player Hole"):
 	)
 
 
+func validate_current_hole(par: int = 4) -> Dictionary:
+	var hole = build_current_hole(par, "Player Hole")
+	if hole == null:
+		return {
+			"valid": false,
+			"reason": "Build a Tee, mark it with T, build a connected Green, and mark the Cup with C."
+		}
+	return {
+		"valid": true,
+		"reason": "",
+		"yardage": float(hole.nominal_yardage),
+		"par": int(hole.par),
+		"hole": hole
+	}
+
+
 func snapshot() -> Dictionary:
 	if economy == null:
 		return {}
@@ -199,6 +223,12 @@ func restore_snapshot(data: Dictionary) -> bool:
 	cup_cell = _array_to_cell(data.get("cup_cell", [-1, -1]))
 	selected_cell = INVALID_CELL
 	hovered_cell = INVALID_CELL
+
+	if tee_anchor != INVALID_CELL and grid.surface_at(tee_anchor.x, tee_anchor.y) != "TEE":
+		tee_anchor = INVALID_CELL
+	if cup_cell != INVALID_CELL and grid.surface_at(cup_cell.x, cup_cell.y) != "GREEN":
+		cup_cell = INVALID_CELL
+
 	if renderer == null:
 		renderer = InteractiveRenderer.new()
 		renderer.name = "InteractiveIsometricCourseRenderer"
@@ -212,19 +242,21 @@ func restore_snapshot(data: Dictionary) -> bool:
 	return true
 
 
-func save_to_path(path: String) -> bool:
+func save_to_path(path: String = DEFAULT_SAVE_PATH) -> bool:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return false
 	file.store_string(JSON.stringify(snapshot()))
 	file.close()
-	current_status = "Saved"
+	current_status = "Saved course construction"
 	_update_hud()
 	return true
 
 
-func load_from_path(path: String) -> bool:
+func load_from_path(path: String = DEFAULT_SAVE_PATH) -> bool:
 	if not FileAccess.file_exists(path):
+		current_status = "No saved construction found"
+		_update_hud()
 		return false
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
@@ -281,6 +313,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_tee_anchor(selected_cell)
 		elif event.keycode == KEY_C and selected_cell != INVALID_CELL:
 			set_cup_cell(selected_cell)
+		elif event.keycode == KEY_F5:
+			save_to_path()
+		elif event.keycode == KEY_F9:
+			load_from_path()
+		elif event.keycode == KEY_H:
+			_show_hole_validation()
 	elif event is InputEventMouseButton and event.pressed and camera != null:
 		if event.button_index == MOUSE_BUTTON_LEFT and hovered_cell != INVALID_CELL:
 			select_cell(hovered_cell)
@@ -333,7 +371,10 @@ func _fit_camera_to_property() -> void:
 	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
 	var usable_width: float = maxf(viewport_size.x - 300.0, 400.0)
 	var usable_height: float = maxf(viewport_size.y - 80.0, 320.0)
-	var zoom_factor: float = minf(usable_width / maxf(bounds.size.x, 1.0), usable_height / maxf(bounds.size.y, 1.0))
+	var zoom_factor: float = minf(
+		usable_width / maxf(bounds.size.x, 1.0),
+		usable_height / maxf(bounds.size.y, 1.0)
+	)
 	zoom_factor = clampf(zoom_factor, 0.45, 1.25)
 	camera.zoom = Vector2(zoom_factor, zoom_factor)
 
@@ -346,7 +387,7 @@ func _add_hud() -> void:
 
 	var panel := PanelContainer.new()
 	panel.position = Vector2(16.0, 16.0)
-	panel.size = Vector2(270.0, 430.0)
+	panel.size = Vector2(286.0, 500.0)
 	layer.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -357,7 +398,7 @@ func _add_hud() -> void:
 	panel.add_child(margin)
 
 	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 7)
+	stack.add_theme_constant_override("separation", 6)
 	margin.add_child(stack)
 
 	var title := Label.new()
@@ -370,27 +411,44 @@ func _add_hud() -> void:
 	tool_label = Label.new()
 	stack.add_child(tool_label)
 	hover_label = Label.new()
+	hover_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(hover_label)
-
-	var separator := HSeparator.new()
-	stack.add_child(separator)
+	marker_label = Label.new()
+	stack.add_child(marker_label)
+	stack.add_child(HSeparator.new())
 
 	var palette_title := Label.new()
-	palette_title.text = "SURFACES"
+	palette_title.text = "SURFACES  (1–7)"
 	stack.add_child(palette_title)
 
 	for surface in CourseConstructionGrid.SURFACE_TYPES:
 		var button := Button.new()
 		var cost: int = int(CourseConstructionGrid.SURFACE_BUILD_COST.get(surface, 0))
 		button.text = "%s   $%d" % [str(surface).capitalize(), cost]
-		button.pressed.connect(func(target: String = str(surface)):
-			set_selected_surface(target)
-		)
+		button.toggle_mode = true
+		button.pressed.connect(set_selected_surface.bind(str(surface)))
 		stack.add_child(button)
 		palette_buttons[str(surface)] = button
 
+	stack.add_child(HSeparator.new())
+
+	var save_row := HBoxContainer.new()
+	var save_button := Button.new()
+	save_button.text = "Save (F5)"
+	save_button.pressed.connect(save_to_path)
+	save_row.add_child(save_button)
+	var load_button := Button.new()
+	load_button.text = "Load (F9)"
+	load_button.pressed.connect(load_from_path)
+	save_row.add_child(load_button)
+	var validate_button := Button.new()
+	validate_button.text = "Check Hole (H)"
+	validate_button.pressed.connect(_show_hole_validation)
+	save_row.add_child(validate_button)
+	stack.add_child(save_row)
+
 	var marker_help := Label.new()
-	marker_help.text = "Right click: select only\nT: mark selected Tee\nC: mark selected Cup\nQ/E: rotate  •  arrows: pan\nWheel: zoom"
+	marker_help.text = "Left click: build  •  Right click: select\nT: mark selected Tee  •  C: mark selected Cup\nQ/E: rotate  •  Arrows: pan  •  Wheel: zoom"
 	marker_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(marker_help)
 
@@ -417,13 +475,35 @@ func _update_hud() -> void:
 				selected_surface.capitalize(),
 				int(quote.get("cost", 0))
 			]
+	if marker_label != null:
+		marker_label.text = "Tee: %s   Cup: %s" % [_cell_label(tee_anchor), _cell_label(cup_cell)]
 	if status_label != null:
 		status_label.text = current_status
 	for surface_value in palette_buttons.keys():
 		var surface: String = str(surface_value)
 		var button: Button = palette_buttons[surface]
-		button.disabled = false
 		button.button_pressed = surface == selected_surface
+
+
+func _show_hole_validation() -> void:
+	var validation: Dictionary = validate_current_hole(4)
+	if bool(validation.get("valid", false)):
+		current_status = "Hole valid: %.0f yd, Par %d" % [
+			float(validation.get("yardage", 0.0)),
+			int(validation.get("par", 4))
+		]
+	else:
+		current_status = str(validation.get("reason", "Hole is not ready"))
+	_update_hud()
+
+
+func _reconcile_hole_markers_after_build(cell: Vector2i) -> void:
+	if cell == tee_anchor and grid.surface_at(cell.x, cell.y) != "TEE":
+		tee_anchor = INVALID_CELL
+		renderer.tee_cell = INVALID_CELL
+	if cell == cup_cell and grid.surface_at(cell.x, cell.y) != "GREEN":
+		cup_cell = INVALID_CELL
+		renderer.flag_cell = INVALID_CELL
 
 
 func _array_to_cell(value) -> Vector2i:
@@ -433,3 +513,9 @@ func _array_to_cell(value) -> Vector2i:
 	if grid != null and grid.is_in_bounds(cell.x, cell.y):
 		return cell
 	return INVALID_CELL
+
+
+func _cell_label(cell: Vector2i) -> String:
+	if cell == INVALID_CELL:
+		return "—"
+	return "(%d,%d)" % [cell.x, cell.y]
