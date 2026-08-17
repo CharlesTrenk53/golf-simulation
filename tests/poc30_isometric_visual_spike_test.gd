@@ -42,8 +42,28 @@ func _init() -> void:
 	_assert_vector2_close(renderer.grid_to_iso(0.0, 1.0, 0.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), Vector2(-32.0, 16.0), "one grid step south projects to -32,16 pixels")
 	_assert_vector2_close(renderer.grid_to_iso(0.0, 0.0, 1.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), Vector2(0.0, -IsometricCourseRenderer.ELEVATION_PIXELS_PER_YARD), "one yard of elevation projects vertically without changing surface ownership")
 
-	# Elevation presentation now reconciles shared corners/edges while preserving
-	# exact authored tile-center elevations.
+	# Four cardinal viewpoints rotate only the presentation basis. The authoritative
+	# grid and 64x32 diamond geometry remain unchanged.
+	_assert_equal(int(renderer.rotation_quarters), 0, "isometric view starts at canonical orientation")
+	var canonical_origin: Vector2 = renderer.grid_to_iso(0.0, 0.0, 0.0)
+	var canonical_east_step: Vector2 = renderer.grid_to_iso(1.0, 0.0, 0.0) - canonical_origin
+	var canonical_south_step: Vector2 = renderer.grid_to_iso(0.0, 1.0, 0.0) - canonical_origin
+	renderer.rotate_view(1)
+	_assert_equal(int(renderer.rotation_quarters), 1, "clockwise rotation advances one cardinal viewpoint")
+	_assert_vector2_close(renderer.grid_to_iso(1.0, 0.0, 0.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), Vector2(-32.0, 16.0), "rotated east grid step projects down-left")
+	_assert_vector2_close(renderer.grid_to_iso(0.0, 1.0, 0.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), Vector2(-32.0, -16.0), "rotated south grid step projects up-left")
+	var rotated_west_tile_corners: PackedVector2Array = renderer.tile_corners_iso(6, 20)
+	var rotated_east_tile_corners: PackedVector2Array = renderer.tile_corners_iso(7, 20)
+	_assert_vector2_close(rotated_west_tile_corners[1], rotated_east_tile_corners[0], "shared terrain corner remains crack-free after camera rotation")
+	_assert_vector2_close(rotated_west_tile_corners[2], rotated_east_tile_corners[3], "shared terrain edge remains crack-free after camera rotation")
+	_assert_true(renderer.visual_bounds().size.x > 0.0 and renderer.visual_bounds().size.y > 0.0, "rotated viewpoint exposes finite course bounds")
+	renderer.rotate_view(3)
+	_assert_equal(int(renderer.rotation_quarters), 0, "four quarter turns return to canonical orientation")
+	_assert_vector2_close(renderer.grid_to_iso(1.0, 0.0, 0.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), canonical_east_step, "full rotation restores canonical east projection")
+	_assert_vector2_close(renderer.grid_to_iso(0.0, 1.0, 0.0) - renderer.grid_to_iso(0.0, 0.0, 0.0), canonical_south_step, "full rotation restores canonical south projection")
+
+	# Elevation presentation reconciles shared corners/edges while preserving exact
+	# authored tile-center elevations.
 	var corner_x: int = 7
 	var corner_y: int = 20
 	var expected_corner_elevation: float = 0.0
@@ -75,9 +95,9 @@ func _init() -> void:
 	_assert_equal(renderer.rendered_surface_count("WATER"), grid.count_surface("WATER"), "isometric water presentation reconciles exact grid ownership")
 	_assert_true(renderer.visual_bounds().size.x > 0.0 and renderer.visual_bounds().size.y > 0.0, "isometric renderer exposes finite full-course visual bounds")
 	_assert_true(proof.dressing_plan.size() > 0, "same deterministic safe-rough dressing feeds isometric world")
-	_assert_equal(grid.to_dictionary(), before, "isometric presentation never mutates authoritative construction data")
+	_assert_equal(grid.to_dictionary(), before, "isometric rotation/presentation never mutates authoritative construction data")
 
-	print("POC30H_ISOMETRIC_SUMMARY yardage=%.1f par=%d width=%d height=%d tile=%dx%d fairway=%d green=%d bunker=%d water=%d dressing=%d corner=%.3f bounds=%s" % [
+	print("POC30H_ISOMETRIC_SUMMARY yardage=%.1f par=%d width=%d height=%d tile=%dx%d fairway=%d green=%d bunker=%d water=%d dressing=%d corner=%.3f rotation=%d bounds=%s" % [
 		float(hole.nominal_yardage),
 		int(hole.par),
 		int(grid.width),
@@ -90,6 +110,7 @@ func _init() -> void:
 		int(grid.count_surface("WATER")),
 		proof.dressing_plan.size(),
 		renderer.terrain_corner_elevation(corner_x, corner_y),
+		int(renderer.rotation_quarters),
 		str(renderer.visual_bounds())
 	])
 
