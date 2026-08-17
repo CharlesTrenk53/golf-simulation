@@ -7,8 +7,11 @@ extends Node2D
 # save data, and simulation. This renderer exists only to answer whether the
 # project reads better as a crisp SimGolf-like 2.5D management world.
 #
-# No surface blending occurs. Adjacent blocks with the same surface visually join;
-# different authoritative surfaces meet on the exact shared diamond edge.
+# Surface ownership stays crisp and tile-authoritative. Terrain elevation is a
+# separate presentation concern: tile centers preserve their exact authored
+# elevations while shared edges/corners reconcile neighboring values into one
+# continuous landform. That removes the stacked-step look without blending
+# FAIRWAY/ROUGH/GREEN/BUNKER/WATER classifications.
 
 const TILE_WIDTH: float = 64.0
 const TILE_HEIGHT: float = 32.0
@@ -53,6 +56,72 @@ func rendered_surface_count(surface: String) -> int:
 	return int(construction_grid.count_surface(surface))
 
 
+func terrain_corner_elevation(corner_x: int, corner_y: int) -> float:
+	if construction_grid == null:
+		return 0.0
+	var total: float = 0.0
+	var count: int = 0
+	for tile_y_value in [corner_y - 1, corner_y]:
+		var tile_y: int = int(tile_y_value)
+		for tile_x_value in [corner_x - 1, corner_x]:
+			var tile_x: int = int(tile_x_value)
+			if construction_grid.is_in_bounds(tile_x, tile_y):
+				total += _tile_elevation(tile_x, tile_y)
+				count += 1
+	if count == 0:
+		return 0.0
+	return total / float(count)
+
+
+func terrain_height_at_cell_uv(cell_x: int, cell_y: int, u_value: float, v_value: float) -> float:
+	if construction_grid == null or not construction_grid.is_in_bounds(cell_x, cell_y):
+		return 0.0
+
+	var u: float = clampf(u_value, 0.0, 1.0)
+	var v: float = clampf(v_value, 0.0, 1.0)
+	var center: float = _tile_elevation(cell_x, cell_y)
+	var north: float = _edge_midpoint_height(cell_x, cell_y, "N")
+	var east: float = _edge_midpoint_height(cell_x, cell_y, "E")
+	var south: float = _edge_midpoint_height(cell_x, cell_y, "S")
+	var west: float = _edge_midpoint_height(cell_x, cell_y, "W")
+	var nw: float = terrain_corner_elevation(cell_x, cell_y)
+	var ne: float = terrain_corner_elevation(cell_x + 1, cell_y)
+	var se: float = terrain_corner_elevation(cell_x + 1, cell_y + 1)
+	var sw: float = terrain_corner_elevation(cell_x, cell_y + 1)
+
+	if u <= 0.5 and v <= 0.5:
+		return _bilinear(nw, north, west, center, u * 2.0, v * 2.0)
+	if u > 0.5 and v <= 0.5:
+		return _bilinear(north, ne, center, east, (u - 0.5) * 2.0, v * 2.0)
+	if u > 0.5 and v > 0.5:
+		return _bilinear(center, east, south, se, (u - 0.5) * 2.0, (v - 0.5) * 2.0)
+	return _bilinear(west, center, sw, south, u * 2.0, (v - 0.5) * 2.0)
+
+
+func terrain_height_at_grid_position(grid_x_value: float, grid_y_value: float) -> float:
+	if construction_grid == null:
+		return 0.0
+	var gx: float = clampf(grid_x_value, 0.0, float(construction_grid.width))
+	var gy: float = clampf(grid_y_value, 0.0, float(construction_grid.height))
+	var cell_x: int = mini(int(floor(gx)), int(construction_grid.width) - 1)
+	var cell_y: int = mini(int(floor(gy)), int(construction_grid.height) - 1)
+	cell_x = maxi(cell_x, 0)
+	cell_y = maxi(cell_y, 0)
+	var u: float = gx - float(cell_x)
+	var v: float = gy - float(cell_y)
+	if gx >= float(construction_grid.width):
+		u = 1.0
+	if gy >= float(construction_grid.height):
+		v = 1.0
+	return terrain_height_at_cell_uv(cell_x, cell_y, u, v)
+
+
+func tile_corners_iso(x: int, y: int) -> PackedVector2Array:
+	if construction_grid == null or not construction_grid.is_in_bounds(x, y):
+		return PackedVector2Array()
+	return _tile_corners(x, y)
+
+
 func visual_bounds() -> Rect2:
 	if construction_grid == null:
 		return Rect2()
@@ -62,8 +131,7 @@ func visual_bounds() -> Rect2:
 	var max_y: float = -INF
 	for y in range(int(construction_grid.height)):
 		for x in range(int(construction_grid.width)):
-			var elevation: float = _tile_elevation(x, y)
-			for corner in _tile_corners(x, y, elevation):
+			for corner in _tile_corners(x, y):
 				min_x = minf(min_x, corner.x)
 				min_y = minf(min_y, corner.y)
 				max_x = maxf(max_x, corner.x)
@@ -92,39 +160,19 @@ func _draw_property_tiles() -> void:
 
 
 func _draw_tile(x: int, y: int) -> void:
-	var elevation: float = _tile_elevation(x, y)
-	var corners: PackedVector2Array = _tile_corners(x, y, elevation)
+	var corners: PackedVector2Array = _tile_corners(x, y)
 	var surface: String = str(construction_grid.surface_at(x, y))
 
-	_draw_visible_side_faces(x, y, elevation, corners)
+	# There are intentionally no internal vertical side walls anymore. Neighboring
+	# tiles share the same smoothed edge heights, so the land reads as one rolling
+	# surface rather than a stack of raised diamonds.
 	draw_colored_polygon(corners, _surface_color(surface, x, y))
 	_draw_surface_detail(surface, x, y, corners)
 	_draw_surface_boundaries(x, y, surface, corners)
 
 
-func _draw_visible_side_faces(x: int, y: int, elevation: float, corners: PackedVector2Array) -> void:
-	# Only front-facing east/south faces are needed for the isometric camera.
-	if x + 1 < int(construction_grid.width):
-		var east_elevation: float = _tile_elevation(x + 1, y)
-		if elevation > east_elevation + 0.03:
-			var east_top_a: Vector2 = corners[1]
-			var east_top_b: Vector2 = corners[2]
-			var east_low_a: Vector2 = grid_to_iso(float(x + 1), float(y), east_elevation)
-			var east_low_b: Vector2 = grid_to_iso(float(x + 1), float(y + 1), east_elevation)
-			draw_colored_polygon(PackedVector2Array([east_top_a, east_top_b, east_low_b, east_low_a]), Color(0.20, 0.31, 0.17))
-
-	if y + 1 < int(construction_grid.height):
-		var south_elevation: float = _tile_elevation(x, y + 1)
-		if elevation > south_elevation + 0.03:
-			var south_top_a: Vector2 = corners[3]
-			var south_top_b: Vector2 = corners[2]
-			var south_low_a: Vector2 = grid_to_iso(float(x), float(y + 1), south_elevation)
-			var south_low_b: Vector2 = grid_to_iso(float(x + 1), float(y + 1), south_elevation)
-			draw_colored_polygon(PackedVector2Array([south_top_a, south_top_b, south_low_b, south_low_a]), Color(0.16, 0.26, 0.14))
-
-
 func _draw_surface_detail(surface: String, x: int, y: int, corners: PackedVector2Array) -> void:
-	var center: Vector2 = (corners[0] + corners[1] + corners[2] + corners[3]) * 0.25
+	var center: Vector2 = cell_center_iso(x, y)
 	match surface:
 		"WATER":
 			var line_a: Vector2 = corners[3].lerp(corners[0], 0.48)
@@ -178,7 +226,8 @@ func _draw_dressing() -> void:
 		var position: Vector3 = record.get("position", Vector3.ZERO)
 		var gx: float = (position.x - float(construction_grid.origin.x)) / float(construction_grid.tile_size_yards)
 		var gy: float = (position.z - float(construction_grid.origin.y)) / float(construction_grid.tile_size_yards)
-		var base: Vector2 = grid_to_iso(gx, gy, position.y)
+		var terrain_elevation: float = terrain_height_at_grid_position(gx, gy)
+		var base: Vector2 = grid_to_iso(gx, gy, terrain_elevation)
 		var scale_value: float = float(record.get("scale", 1.0))
 		if str(record.get("kind", "")) == "TREE":
 			_draw_tree(base, scale_value)
@@ -217,12 +266,12 @@ func _draw_markers() -> void:
 		draw_circle(tee_base + Vector2(7.0, -2.0), 3.0, Color(0.94, 0.94, 0.90))
 
 
-func _tile_corners(x: int, y: int, elevation: float) -> PackedVector2Array:
+func _tile_corners(x: int, y: int) -> PackedVector2Array:
 	return PackedVector2Array([
-		grid_to_iso(float(x), float(y), elevation),
-		grid_to_iso(float(x + 1), float(y), elevation),
-		grid_to_iso(float(x + 1), float(y + 1), elevation),
-		grid_to_iso(float(x), float(y + 1), elevation)
+		grid_to_iso(float(x), float(y), terrain_corner_elevation(x, y)),
+		grid_to_iso(float(x + 1), float(y), terrain_corner_elevation(x + 1, y)),
+		grid_to_iso(float(x + 1), float(y + 1), terrain_corner_elevation(x + 1, y + 1)),
+		grid_to_iso(float(x), float(y + 1), terrain_corner_elevation(x, y + 1))
 	])
 
 
@@ -244,6 +293,29 @@ func _ellipse_points(center: Vector2, radius_x: float, radius_y: float) -> Packe
 
 func _tile_elevation(x: int, y: int) -> float:
 	return float(construction_grid.tile_at(x, y).get("elevation", 0.0))
+
+
+func _edge_midpoint_height(cell_x: int, cell_y: int, direction: String) -> float:
+	var neighbor := Vector2i(cell_x, cell_y)
+	match direction:
+		"N":
+			neighbor.y -= 1
+		"E":
+			neighbor.x += 1
+		"S":
+			neighbor.y += 1
+		"W":
+			neighbor.x -= 1
+	var own: float = _tile_elevation(cell_x, cell_y)
+	if not construction_grid.is_in_bounds(neighbor.x, neighbor.y):
+		return own
+	return (own + _tile_elevation(neighbor.x, neighbor.y)) * 0.5
+
+
+func _bilinear(nw: float, ne: float, sw: float, se: float, u: float, v: float) -> float:
+	var north: float = lerpf(nw, ne, u)
+	var south: float = lerpf(sw, se, u)
+	return lerpf(north, south, v)
 
 
 func _surface_color(surface: String, x: int, y: int) -> Color:
