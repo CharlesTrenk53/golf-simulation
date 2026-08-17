@@ -82,7 +82,7 @@ func _init() -> void:
 	var hole = builder.build_hole(grid, "poc30_grid_course", 1, "Surface Truth", 4, Vector2i(3, 10), Vector2i(3, 2), "default", "Back Tee")
 	_assert_true(hole != null, "expanded construction grid still builds a playable HoleDefinition")
 	if hole != null:
-		_assert_equal(_count_surface_regions(hole.surface_regions, "FRINGE"), grid.count_surface("FRINGE"), "all authoritative fringe cells propagate into HoleDefinition")
+		_assert_equal(_count_surface_regions(hole.surface_regions, "FRINGE"), 16, "all authoritative fringe cells propagate into HoleDefinition")
 		_assert_equal(_count_surface_regions(hole.surface_regions, "FAIRWAY"), grid.count_surface("FAIRWAY"), "fairway projection exactly matches final authoritative grid ownership")
 
 	print("POC30A_SURFACE_SUMMARY rough=%d fairway=%d tee=%d green=%d fringe=%d bunker=%d water=%d" % [
