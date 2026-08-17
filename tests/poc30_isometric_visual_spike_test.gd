@@ -14,6 +14,7 @@ func _init() -> void:
 	var initialized_now: bool = bool(proof.initialize_proof())
 	_assert_true(initialized_now and bool(proof.initialized), "isometric proof initializes from authoritative construction grid")
 	if not initialized_now or not bool(proof.initialized):
+		proof.free()
 		_finish()
 		return
 
@@ -64,7 +65,7 @@ func _init() -> void:
 		str(renderer.visual_bounds())
 	])
 
-	proof.queue_free()
+	proof.free()
 	_finish()
 
 
