@@ -1,7 +1,7 @@
 extends Node
 
-# POC-28A-F: Persistent Player World Session
-# -------------------------------------------
+# POC-28A-F / POC-29D: Persistent Player World Session
+# ----------------------------------------------------
 # Long-lived authority bridge above the existing living-course stack. The player
 # golfer is owned by this node so activity/presentation scenes can come and go
 # without replacing the golfer. The living-course controller remains the sole
@@ -9,9 +9,9 @@ extends Node
 #
 # A round is not a special player simulation. enter_round() inserts the exact same
 # golfer object into an ordinary GolferGroup and designates that member as human
-# through the existing POC-26 control contract. Per-round AutonomousRound/
-# RoundState objects remain disposable activity state while golfer memory,
-# development traits, GolfActivity, and world time persist here.
+# through the existing POC-26 control contract. Practice is likewise persistent
+# activity state: it records factual repetitions/results through the existing
+# GolfActivity + DevelopmentEvidenceBridge rather than awarding player XP.
 
 const ShotProgressiveLivingCourseController = preload("res://simulation/shot_progressive_living_course_controller.gd")
 const GolfActivity = preload("res://simulation/golf_activity.gd")
@@ -35,14 +35,17 @@ var world_day: int = 0
 var world_time_seconds: float = 0.0
 var activity_history: Array = []
 var completed_rounds: Array = []
+var completed_practices: Array = []
 var active_round: Dictionary = {}
+var active_practice: Dictionary = {}
 var round_sequence: int = 0
+var practice_sequence: int = 0
 
 
 func configure(golfer, course_definition, starting_day: int = 0, starting_world_time_seconds: float = 0.0) -> bool:
 	if golfer == null or course_definition == null or course_definition.hole_count() <= 0:
 		return false
-	if not active_round.is_empty():
+	if _player_activity_active():
 		return false
 
 	_adopt_player_golfer(golfer)
@@ -62,8 +65,11 @@ func configure(golfer, course_definition, starting_day: int = 0, starting_world_
 	development_bridge = DevelopmentEvidenceBridge.new()
 	activity_history.clear()
 	completed_rounds.clear()
+	completed_practices.clear()
 	active_round.clear()
+	active_practice.clear()
 	round_sequence = 0
+	practice_sequence = 0
 	return true
 
 
@@ -76,7 +82,7 @@ func enter_round(
 ) -> Dictionary:
 	if player_golfer == null or controller == null or course == null:
 		return {"entered": false, "reason": "SESSION_NOT_CONFIGURED"}
-	if not active_round.is_empty():
+	if _player_activity_active():
 		return {"entered": false, "reason": "PLAYER_ACTIVITY_ALREADY_ACTIVE"}
 	if other_golfers.size() > 3:
 		return {"entered": false, "reason": "GROUP_TOO_LARGE"}
@@ -125,6 +131,144 @@ func enter_round(
 		"tee_id": tee_id,
 		"member_count": members.size(),
 		"golfer_instance_id": player_golfer.get_instance_id()
+	}
+
+
+# POC-29D: entering practice only establishes the selected activity. No practice
+# repetitions, skill change, or world-time cost are committed until observed
+# practice results are finalized.
+func enter_practice(total_repetitions: int, focus: Dictionary, quality: float = 1.0, duration_seconds: float = 1800.0) -> Dictionary:
+	if player_golfer == null or controller == null:
+		return {"entered": false, "reason": "SESSION_NOT_CONFIGURED"}
+	if _player_activity_active():
+		return {"entered": false, "reason": "PLAYER_ACTIVITY_ALREADY_ACTIVE"}
+	if total_repetitions <= 0:
+		return {"entered": false, "reason": "INVALID_PRACTICE_REPETITIONS"}
+	if duration_seconds < 0.0:
+		return {"entered": false, "reason": "INVALID_PRACTICE_DURATION"}
+
+	development.set_current_age(float(player_golfer.age))
+	practice_sequence += 1
+	active_practice = {
+		"activity_type": "PRACTICE",
+		"sequence": practice_sequence,
+		"total_repetitions": total_repetitions,
+		"focus": focus.duplicate(true),
+		"quality": clampf(quality, 0.0, 1.0),
+		"duration_seconds": duration_seconds,
+		"entered_day": world_day,
+		"entered_time_seconds": world_time_seconds,
+		"golfer_instance_id": player_golfer.get_instance_id(),
+		"status": STATUS_PLAYING
+	}
+	activity_history.append({
+		"type": "PRACTICE_ENTERED",
+		"sequence": practice_sequence,
+		"day": world_day,
+		"time_seconds": world_time_seconds,
+		"total_repetitions": total_repetitions,
+		"focus": focus.duplicate(true),
+		"quality": float(active_practice["quality"])
+	})
+	return {
+		"entered": true,
+		"sequence": practice_sequence,
+		"activity_type": "PRACTICE",
+		"golfer_instance_id": player_golfer.get_instance_id(),
+		"total_repetitions": total_repetitions,
+		"focus": focus.duplicate(true),
+		"quality": float(active_practice["quality"]),
+		"duration_seconds": duration_seconds
+	}
+
+
+# Observations are produced by the practice experience, not by the menu/selection
+# layer. One observed execution profile per practiced shot family is enough for the
+# existing evidence bridge to apply factual repetitions at the recorded quality.
+func finalize_practice(observations: Dictionary) -> Dictionary:
+	if controller == null or active_practice.is_empty():
+		return {"finalized": false, "reason": "NO_ACTIVE_PLAYER_PRACTICE"}
+
+	var repetitions: int = int(active_practice.get("total_repetitions", 0))
+	var focus: Dictionary = active_practice.get("focus", {}).duplicate(true)
+	var allocations: Dictionary = _practice_allocations(repetitions, focus)
+	for shot_type in SHOT_TYPES:
+		if int(allocations.get(shot_type, 0)) <= 0:
+			continue
+		var observation_value = observations.get(shot_type, null)
+		if typeof(observation_value) != TYPE_DICTIONARY or not observation_value.has("execution_score"):
+			return {"finalized": false, "reason": "OBSERVED_EXECUTION_REQUIRED", "shot_type": shot_type}
+
+	var development_before: Dictionary = development_snapshot()
+	var entered_time: float = float(active_practice.get("entered_time_seconds", world_time_seconds))
+	var duration_seconds: float = maxf(float(active_practice.get("duration_seconds", 0.0)), 0.0)
+	if duration_seconds > 0.0:
+		advance_world_time(duration_seconds)
+
+	var quality: float = clampf(float(active_practice.get("quality", 1.0)), 0.0, 1.0)
+	var activity_result: Dictionary = golf_activity.record_practice_on_day(world_day, repetitions, focus, quality)
+	var evidence_by_type: Dictionary = {}
+	var total_evidence: int = 0
+	var total_experience_only: int = 0
+	for shot_type in SHOT_TYPES:
+		var reps: int = int(activity_result.get("practice_repetitions", {}).get(shot_type, 0))
+		if reps <= 0:
+			continue
+		var observation: Dictionary = observations.get(shot_type, {})
+		var evidence: Dictionary = development_bridge.apply_practice_exposure(
+			development,
+			shot_type,
+			reps,
+			quality,
+			clampf(float(observation.get("execution_score", 0.0)), 0.0, 100.0),
+			float(observation.get("lateral_error", 0.0)),
+			float(observation.get("distance_error", 0.0)),
+			float(observation.get("persistent_execution_score", -1.0))
+		)
+		evidence_by_type[shot_type] = evidence.duplicate(true)
+		total_evidence += int(evidence.get("evidence_repetitions", 0))
+		total_experience_only += int(evidence.get("experience_only_repetitions", 0))
+
+	_sync_golfer_career_experience()
+	_sync_golfer_durable_skill()
+	var development_after: Dictionary = development_snapshot()
+	var archived: Dictionary = {
+		"activity_type": "PRACTICE",
+		"sequence": int(active_practice.get("sequence", practice_sequence)),
+		"golfer_instance_id": player_golfer.get_instance_id(),
+		"entered_day": int(active_practice.get("entered_day", world_day)),
+		"completed_day": world_day,
+		"entered_time_seconds": entered_time,
+		"completed_time_seconds": world_time_seconds,
+		"elapsed_world_seconds": maxf(world_time_seconds - entered_time, 0.0),
+		"duration_seconds": duration_seconds,
+		"activity_record": activity_result.duplicate(true),
+		"observations": observations.duplicate(true),
+		"development_before": development_before.duplicate(true),
+		"development_evidence": {
+			"total_raw_repetitions": repetitions,
+			"total_evidence": total_evidence,
+			"total_experience_only": total_experience_only,
+			"by_shot_type": evidence_by_type.duplicate(true)
+		},
+		"development_after": development_after.duplicate(true)
+	}
+	completed_practices.append(archived.duplicate(true))
+	activity_history.append({
+		"type": "PRACTICE_COMPLETED",
+		"sequence": int(archived.get("sequence", 0)),
+		"day": world_day,
+		"time_seconds": world_time_seconds,
+		"total_repetitions": repetitions,
+		"development_evidence": total_evidence
+	})
+	active_practice.clear()
+	return {
+		"finalized": true,
+		"practice": archived.duplicate(true),
+		"golfer_instance_id": player_golfer.get_instance_id(),
+		"world_time_seconds": world_time_seconds,
+		"development": development_after.duplicate(true)
 	}
 
 
@@ -249,8 +393,6 @@ func finalize_player_round() -> Dictionary:
 	if controller.live_sessions.has(group_id) or controller.live_metadata.has(group_id) or controller.blocked_transitions.has(group_id):
 		return {"finalized": false, "reason": "GROUP_AUTHORITY_STILL_ACTIVE"}
 
-	# Capture everything authoritative while the finished group still exists. No
-	# persistent consequence is committed until retirement itself succeeds.
 	var round_snapshot: Dictionary = round_state.snapshot()
 	var shot_events: Array = _player_round_shot_events(group_id, int(active_round.get("player_member_index", -1)))
 	var statistics: Dictionary = _authoritative_round_statistics(shot_events)
@@ -260,7 +402,6 @@ func finalize_player_round() -> Dictionary:
 	if not controller.retire_finished_group(group_id):
 		return {"finalized": false, "reason": "GROUP_RETIREMENT_REJECTED"}
 
-	# Retirement is now committed, so factual consequences may be applied once.
 	var activity_result: Dictionary = golf_activity.record_round_on_day(world_day, exposure)
 	var development_evidence: Dictionary = _apply_round_development_evidence(shot_events)
 	_sync_golfer_career_experience()
@@ -322,6 +463,12 @@ func latest_completed_round() -> Dictionary:
 	return completed_rounds[completed_rounds.size() - 1].duplicate(true)
 
 
+func latest_completed_practice() -> Dictionary:
+	if completed_practices.is_empty():
+		return {}
+	return completed_practices[completed_practices.size() - 1].duplicate(true)
+
+
 func development_snapshot() -> Dictionary:
 	var result: Dictionary = {}
 	if development == null:
@@ -340,7 +487,9 @@ func snapshot() -> Dictionary:
 		"day": world_day,
 		"world_time_seconds": world_time_seconds,
 		"active_round": active_round.duplicate(true),
+		"active_practice": active_practice.duplicate(true),
 		"completed_rounds": completed_rounds.duplicate(true),
+		"completed_practices": completed_practices.duplicate(true),
 		"activity_history": activity_history.duplicate(true),
 		"golf_activity": golf_activity.state() if golf_activity != null else {},
 		"development": development_snapshot(),
@@ -356,6 +505,10 @@ func _adopt_player_golfer(golfer) -> void:
 	if old_parent != null:
 		old_parent.remove_child(golfer)
 	add_child(golfer)
+
+
+func _player_activity_active() -> bool:
+	return not active_round.is_empty() or not active_practice.is_empty()
 
 
 func _player_group():
@@ -439,6 +592,37 @@ func _apply_round_development_evidence(shot_events: Array) -> Dictionary:
 	}
 
 
+func _practice_allocations(total_repetitions: int, focus: Dictionary) -> Dictionary:
+	var normalized: Dictionary = {}
+	var total_weight: float = 0.0
+	for shot_type in SHOT_TYPES:
+		var weight: float = maxf(float(focus.get(shot_type, 0.0)), 0.0)
+		normalized[shot_type] = weight
+		total_weight += weight
+	if total_weight <= 0.0:
+		for shot_type in SHOT_TYPES:
+			normalized[shot_type] = 1.0 / float(SHOT_TYPES.size())
+	else:
+		for shot_type in SHOT_TYPES:
+			normalized[shot_type] = float(normalized[shot_type]) / total_weight
+
+	var allocations: Dictionary = {}
+	var allocated: int = 0
+	var remainders: Array = []
+	for shot_type in SHOT_TYPES:
+		var exact: float = float(maxi(total_repetitions, 0)) * float(normalized.get(shot_type, 0.0))
+		var base: int = int(floor(exact))
+		allocations[shot_type] = base
+		allocated += base
+		remainders.append({"shot_type": shot_type, "remainder": exact - float(base)})
+	remainders.sort_custom(func(a, b): return float(a["remainder"]) > float(b["remainder"]))
+	var remaining: int = maxi(total_repetitions, 0) - allocated
+	for i in range(remaining):
+		var shot_type: int = int(remainders[i % remainders.size()]["shot_type"])
+		allocations[shot_type] = int(allocations[shot_type]) + 1
+	return allocations
+
+
 func _sync_golfer_career_experience() -> void:
 	if player_golfer == null or development == null:
 		return
@@ -449,11 +633,6 @@ func _sync_golfer_career_experience() -> void:
 		player_golfer.career_shot_experience[shot_type] = int(state.get("total_experience", player_golfer.skill_experience_for(shot_type)))
 
 
-# TechniqueSkillDevelopment owns durable skill change. The golfer's ordinary
-# ability fields are the values the existing shot/decision systems read, so after
-# a completed activity we project the development engine's effective skill back
-# onto those fields. The development baseline itself is not reinitialized here,
-# preventing cumulative skill deltas from being applied twice.
 func _sync_golfer_durable_skill() -> void:
 	if player_golfer == null or development == null:
 		return
