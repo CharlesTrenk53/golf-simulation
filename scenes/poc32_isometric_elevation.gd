@@ -50,7 +50,7 @@ func _ready() -> void:
 	super._ready()
 	if not initialized:
 		return
-	_add_terrain_hud()
+	_ensure_terrain_hud()
 	_update_hud()
 
 
@@ -228,6 +228,15 @@ func _update_hud() -> void:
 	_update_terrain_hud()
 
 
+func _ensure_terrain_hud() -> void:
+	if terrain_target_label != null and terrain_quote_label != null and terrain_raise_button != null and terrain_lower_button != null:
+		return
+	if not is_inside_tree():
+		return
+	if get_node_or_null("TerrainHUD") == null:
+		_add_terrain_hud()
+
+
 func _add_terrain_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "TerrainHUD"
@@ -296,6 +305,7 @@ func _terrain_target_cell() -> Vector2i:
 
 
 func _update_terrain_hud() -> void:
+	_ensure_terrain_hud()
 	if terrain_target_label == null or terrain_quote_label == null:
 		return
 	var target := _terrain_target_cell()
