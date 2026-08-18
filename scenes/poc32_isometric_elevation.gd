@@ -126,7 +126,7 @@ func max_cardinal_terrain_grade() -> float:
 			var here := Vector2i(x, y)
 			var here_elevation: float = _elevation_at(here)
 			for offset in [Vector2i(1, 0), Vector2i(0, 1)]:
-				var neighbor := here + offset
+				var neighbor: Vector2i = here + offset
 				if not grid.is_in_bounds(neighbor.x, neighbor.y):
 					continue
 				var grade: float = absf(here_elevation - _elevation_at(neighbor)) / float(grid.tile_size_yards)
@@ -152,7 +152,7 @@ func _stabilize_terrain_targets(initial_targets: Dictionary, direction: int) -> 
 		var cell_elevation: float = float(stabilized.get(cell, _elevation_at(cell)))
 
 		for offset in CARDINAL_OFFSETS:
-			var neighbor := cell + offset
+			var neighbor: Vector2i = cell + offset
 			if not grid.is_in_bounds(neighbor.x, neighbor.y):
 				continue
 			var neighbor_elevation: float = float(stabilized.get(neighbor, _elevation_at(neighbor)))
