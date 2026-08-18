@@ -32,6 +32,9 @@ jobs:
       - name: Import project
         run: godot --headless --editor --path . --quit
 
+      - name: Run POC-31 isometric construction tests
+        run: godot --headless --path . --script res://tests/poc31_isometric_construction_test.gd
+
       - name: Run club-model tests
         run: godot --headless --path . --script res://tests/golf_bag_test.gd
 
