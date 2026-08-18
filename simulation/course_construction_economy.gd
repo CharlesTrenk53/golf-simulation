@@ -1,12 +1,14 @@
 extends RefCounted
 
-# POC-22B: Course Construction Economy
-# -------------------------------------
-# Owns the player's construction cash and applies paid surface changes to the
-# authoritative CourseConstructionGrid. The grid still owns spatial truth;
-# this layer decides whether a proposed construction action can be afforded.
+# POC-22B / POC-32A: Course Construction Economy
+# ------------------------------------------------
+# Owns the player's construction cash and applies paid surface and terrain
+# changes to the authoritative CourseConstructionGrid. The grid still owns
+# spatial truth; this layer decides whether a proposed construction action can
+# be afforded and guarantees that paid edits are applied atomically.
 
 const SCHEMA_VERSION: int = 1
+const DEFAULT_TERRAIN_COST_PER_YARD: int = 120
 const CourseConstructionGrid = preload("res://simulation/course_construction_grid.gd")
 
 var grid = null
@@ -60,6 +62,87 @@ func build_surface(x: int, y: int, surface: String) -> Dictionary:
 		quote["reason"] = "GRID_REJECTED_CHANGE"
 		quote["balance_after"] = cash_balance
 		return quote
+
+	cash_balance -= cost
+	lifetime_construction_spend += cost
+	quote["built"] = true
+	quote["balance_after"] = cash_balance
+	transaction_history.append(quote.duplicate(true))
+	return quote
+
+
+func quote_elevation_changes(changes: Array, cost_per_yard: int = DEFAULT_TERRAIN_COST_PER_YARD) -> Dictionary:
+	if grid == null:
+		return {"valid": false, "reason": "NOT_INITIALIZED", "cost": 0}
+	if cost_per_yard < 0:
+		return {"valid": false, "reason": "INVALID_TERRAIN_COST", "cost": 0}
+	if changes.is_empty():
+		return {"valid": false, "reason": "NO_TERRAIN_CHANGES", "cost": 0}
+
+	var normalized_changes: Array = []
+	var seen_cells := {}
+	var total_vertical_yards: float = 0.0
+	for raw_change in changes:
+		if not raw_change is Dictionary:
+			return {"valid": false, "reason": "INVALID_TERRAIN_CHANGE", "cost": 0}
+		var x: int = int(raw_change.get("x", -1))
+		var y: int = int(raw_change.get("y", -1))
+		if not grid.is_in_bounds(x, y):
+			return {"valid": false, "reason": "OUT_OF_BOUNDS", "cost": 0}
+		var key := Vector2i(x, y)
+		if seen_cells.has(key):
+			return {"valid": false, "reason": "DUPLICATE_TERRAIN_CELL", "cost": 0}
+		seen_cells[key] = true
+
+		var from_elevation: float = float(grid.tile_at(x, y).get("elevation", 0.0))
+		var to_elevation: float = float(raw_change.get("to_elevation", from_elevation))
+		var delta: float = to_elevation - from_elevation
+		total_vertical_yards += absf(delta)
+		normalized_changes.append({
+			"x": x,
+			"y": y,
+			"from_elevation": from_elevation,
+			"to_elevation": to_elevation,
+			"delta_elevation": delta
+		})
+
+	var cost: int = int(ceil(total_vertical_yards * float(cost_per_yard)))
+	return {
+		"valid": true,
+		"reason": "",
+		"type": "TERRAIN",
+		"changes": normalized_changes,
+		"total_vertical_yards": total_vertical_yards,
+		"cost_per_yard": cost_per_yard,
+		"cost": cost,
+		"affordable": cost <= cash_balance
+	}
+
+
+func build_elevation_changes(changes: Array, cost_per_yard: int = DEFAULT_TERRAIN_COST_PER_YARD) -> Dictionary:
+	var quote: Dictionary = quote_elevation_changes(changes, cost_per_yard)
+	if not bool(quote.get("valid", false)):
+		quote["built"] = false
+		return quote
+	var cost: int = int(quote.get("cost", 0))
+	if cost > cash_balance:
+		quote["built"] = false
+		quote["reason"] = "INSUFFICIENT_FUNDS"
+		quote["balance_after"] = cash_balance
+		return quote
+
+	# The quote validates every cell before any mutation, so this loop is atomic
+	# with respect to normal construction-grid failures.
+	for normalized_change in quote.get("changes", []):
+		if not grid.set_elevation(
+			int(normalized_change.get("x", -1)),
+			int(normalized_change.get("y", -1)),
+			float(normalized_change.get("to_elevation", 0.0))
+		):
+			quote["built"] = false
+			quote["reason"] = "GRID_REJECTED_TERRAIN_CHANGE"
+			quote["balance_after"] = cash_balance
+			return quote
 
 	cash_balance -= cost
 	lifetime_construction_spend += cost

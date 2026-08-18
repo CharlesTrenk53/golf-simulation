@@ -35,6 +35,12 @@ jobs:
       - name: Run POC-31 isometric construction tests
         run: godot --headless --path . --script res://tests/poc31_isometric_construction_test.gd
 
+      - name: Run POC-32 isometric elevation tests
+        run: godot --headless --path . --script res://tests/poc32_isometric_elevation_test.gd
+
+      - name: Run POC-32 sculpted elevation build-and-play proof
+        run: godot --headless --path . --script res://tests/poc32_build_and_play_elevation_test.gd
+
       - name: Run club-model tests
         run: godot --headless --path . --script res://tests/golf_bag_test.gd
 
