@@ -99,9 +99,9 @@ func _init() -> void:
 	var first_golfer_midflight: Dictionary = layer.projected_record("group_1:%d" % first_member)
 	_assert_vector2_close(
 		first_golfer_midflight.get("iso_position", Vector2.ZERO),
-		layer.project_world_position(tee_positions[first_member]),
+		layer.project_world_position(first_ball.shot_start),
 		0.000001,
-		"first golfer remains with tee group while ball is in flight"
+		"first golfer addresses the authoritative tee-shot start while ball is in flight"
 	)
 	if first_ball != null:
 		first_ball.set_flight_progress(1.0)
@@ -156,15 +156,17 @@ func _init() -> void:
 			"golfer %d finishes at authoritative first-shot destination" % member_index
 		)
 
-	# Advance authoritative time in small increments until the existing visual
-	# begins its presentation-only walk into the next hole. We do not invent a
-	# second path; POC-33 only mirrors SpectatorGroupVisual's interpolation.
-	var transition_found: bool = false
-	for _step in range(120):
-		session.advance_time(30.0, false)
-		if visual.has_active_inter_hole_transition():
-			transition_found = true
-			break
+	# Advance exactly to the authoritative hole-finish boundary. Immediate playback
+	# intentionally drains presentation-only movement on later clock advancement;
+	# stopping on the boundary lets us observe the existing inter-hole walk before
+	# that historical headless convenience completes it on the next advance.
+	var active_hole_event: Dictionary = controller.active_event("group_1")
+	var finish_time: float = float(active_hole_event.get("finish_time_seconds", -1.0))
+	var remaining_to_finish: float = finish_time - float(controller.current_time_seconds)
+	_assert_true(not active_hole_event.is_empty() and remaining_to_finish >= 0.0, "authoritative first-hole finish boundary is available")
+	if remaining_to_finish >= 0.0:
+		session.advance_time(remaining_to_finish, false)
+	var transition_found: bool = visual.has_active_inter_hole_transition()
 	_assert_true(transition_found, "existing living-course presentation begins an inter-hole walk")
 	if transition_found:
 		var transition: Dictionary = visual.transition_snapshot()
