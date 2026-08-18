@@ -4,6 +4,8 @@ const ElevationScene = preload("res://scenes/poc32_isometric_elevation.tscn")
 const PlayableHoleRuntime = preload("res://scenes/playable_hole_runtime.gd")
 const Golfer = preload("res://scenes/golfer.gd")
 
+const VECTOR_ELEVATION_TOLERANCE: float = 0.000001
+
 var failures: int = 0
 
 
@@ -24,12 +26,14 @@ func _init() -> void:
 	_assert_true(scene.set_tee_anchor(tee_cell), "player marks authored tee")
 	_assert_true(scene.set_cup_cell(pin_cell), "player marks authored cup")
 
-	# Shape distinct elevations at both ends of the hole. These edits go through
-	# the same paid terrain economy as the player-facing controls.
-	for _i in range(4):
+	# Shape distinctly different elevations at both ends of the hole. Eight
+	# quarter-yard center edits in each direction overcome the deliberate starting
+	# landform difference without approaching the pathological stress-test regime.
+	# Every edit still goes through the same paid terrain economy as the UI.
+	for _i in range(8):
 		var raised: Dictionary = scene.sculpt_terrain(tee_cell, 1)
 		_assert_true(bool(raised.get("built", false)), "tee terrain raise succeeds")
-	for _i in range(3):
+	for _i in range(8):
 		var lowered: Dictionary = scene.sculpt_terrain(pin_cell, -1)
 		_assert_true(bool(lowered.get("built", false)), "green terrain lower succeeds")
 
@@ -66,8 +70,11 @@ func _init() -> void:
 	var pin_world: Vector3 = scene.grid.tile_center_world(pin_cell.x, pin_cell.y)
 	_assert_vector_close(hole.tee_position("player_tee"), tee_world, "HoleDefinition tee position includes player-authored elevation")
 	_assert_vector_close(hole.pin_position, pin_world, "HoleDefinition pin position includes player-authored elevation")
-	_assert_close(hole.tee_position("player_tee").y, authored_tee_elevation, 0.000000001, "HoleDefinition tee Y exactly matches construction grid")
-	_assert_close(hole.pin_position.y, authored_pin_elevation, 0.000000001, "HoleDefinition pin Y exactly matches construction grid")
+	# Vector3 components use Godot's real_t precision. The construction grid keeps
+	# full scalar precision, so compare the Vector3 bridge at an appropriate
+	# micro-yard tolerance rather than demanding impossible 1e-9 equality.
+	_assert_close(hole.tee_position("player_tee").y, authored_tee_elevation, VECTOR_ELEVATION_TOLERANCE, "HoleDefinition tee Y matches construction grid within Vector3 precision")
+	_assert_close(hole.pin_position.y, authored_pin_elevation, VECTOR_ELEVATION_TOLERANCE, "HoleDefinition pin Y matches construction grid within Vector3 precision")
 	_assert_equal(hole.elevation_points.size(), int(scene.grid.width * scene.grid.height), "HoleDefinition carries one authoritative elevation sample for every construction cell")
 	_assert_true(_definition_contains_elevation(hole, tee_world, authored_tee_elevation), "HoleDefinition elevation field contains sculpted tee terrain")
 	_assert_true(_definition_contains_elevation(hole, pin_world, authored_pin_elevation), "HoleDefinition elevation field contains sculpted green terrain")
@@ -139,8 +146,8 @@ func _build_surface(scene, cell: Vector2i, surface: String) -> bool:
 func _definition_contains_elevation(hole, expected_position: Vector3, expected_elevation: float) -> bool:
 	for point in hole.elevation_points:
 		var position: Vector3 = point.get("position", Vector3.ZERO)
-		if absf(position.x - expected_position.x) <= 0.000001 and absf(position.z - expected_position.z) <= 0.000001:
-			return absf(float(point.get("elevation", 0.0)) - expected_elevation) <= 0.000000001 and absf(position.y - expected_elevation) <= 0.000000001
+		if absf(position.x - expected_position.x) <= VECTOR_ELEVATION_TOLERANCE and absf(position.z - expected_position.z) <= VECTOR_ELEVATION_TOLERANCE:
+			return absf(float(point.get("elevation", 0.0)) - expected_elevation) <= VECTOR_ELEVATION_TOLERANCE and absf(position.y - expected_elevation) <= VECTOR_ELEVATION_TOLERANCE
 	return false
 
 
@@ -173,7 +180,7 @@ func _assert_close(actual: float, expected: float, tolerance: float, label: Stri
 
 
 func _assert_vector_close(actual: Vector3, expected: Vector3, label: String) -> void:
-	if actual.distance_to(expected) <= 0.000001:
+	if actual.distance_to(expected) <= VECTOR_ELEVATION_TOLERANCE:
 		print("PASS: %s (actual=%s expected=%s)" % [label, str(actual), str(expected)])
 	else:
 		failures += 1
