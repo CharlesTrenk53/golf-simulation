@@ -74,7 +74,8 @@ func _init() -> void:
 		_assert_true(float(hole.nominal_yardage) > 150.0, "player-authored tee/cup produce meaningful yardage")
 
 	# Save/reload economy + grid + hole markers + view orientation through an
-	# actual FileAccess round trip.
+	# actual FileAccess round trip. Integer/string construction truth is exact;
+	# authored elevations must survive within negligible serialization precision.
 	renderer.set_view_rotation_quarters(3)
 	var saved_grid: Dictionary = grid.to_dictionary()
 	var saved_cash: int = int(economy.cash_balance)
@@ -86,7 +87,7 @@ func _init() -> void:
 	grid = scene.grid
 	economy = scene.economy
 	renderer = scene.renderer
-	_assert_equal(grid.to_dictionary(), saved_grid, "reload restores authoritative grid exactly")
+	_assert_grid_roundtrip(grid.to_dictionary(), saved_grid, "reload restores authoritative grid")
 	_assert_equal(int(economy.cash_balance), saved_cash, "reload restores cash balance")
 	_assert_equal(scene.tee_anchor, Vector2i(5, 20), "reload restores tee marker")
 	_assert_equal(scene.cup_cell, Vector2i(16, 3), "reload restores cup marker")
@@ -122,6 +123,63 @@ func _init() -> void:
 
 	scene.free()
 	_finish()
+
+
+func _assert_grid_roundtrip(actual: Dictionary, expected: Dictionary, label: String) -> void:
+	const ELEVATION_TOLERANCE := 0.000000000001
+	var structural_ok := true
+	var max_elevation_drift := 0.0
+
+	for key in ["schema_version", "width", "height"]:
+		if int(actual.get(key, -1)) != int(expected.get(key, -2)):
+			structural_ok = false
+
+	if absf(float(actual.get("tile_size_yards", 0.0)) - float(expected.get("tile_size_yards", 0.0))) > ELEVATION_TOLERANCE:
+		structural_ok = false
+
+	var actual_origin: Array = actual.get("origin", [])
+	var expected_origin: Array = expected.get("origin", [])
+	if actual_origin.size() != 2 or expected_origin.size() != 2:
+		structural_ok = false
+	else:
+		for i in range(2):
+			if absf(float(actual_origin[i]) - float(expected_origin[i])) > ELEVATION_TOLERANCE:
+				structural_ok = false
+
+	var actual_rows: Array = actual.get("tiles", [])
+	var expected_rows: Array = expected.get("tiles", [])
+	if actual_rows.size() != expected_rows.size():
+		structural_ok = false
+	else:
+		for y in range(actual_rows.size()):
+			if not actual_rows[y] is Array or not expected_rows[y] is Array or actual_rows[y].size() != expected_rows[y].size():
+				structural_ok = false
+				continue
+			for x in range(actual_rows[y].size()):
+				var actual_tile: Dictionary = actual_rows[y][x]
+				var expected_tile: Dictionary = expected_rows[y][x]
+				if int(actual_tile.get("x", -1)) != int(expected_tile.get("x", -2)):
+					structural_ok = false
+				if int(actual_tile.get("y", -1)) != int(expected_tile.get("y", -2)):
+					structural_ok = false
+				if str(actual_tile.get("surface", "")) != str(expected_tile.get("surface", "__missing__")):
+					structural_ok = false
+				if int(actual_tile.get("build_cost", -1)) != int(expected_tile.get("build_cost", -2)):
+					structural_ok = false
+				var elevation_drift := absf(float(actual_tile.get("elevation", 0.0)) - float(expected_tile.get("elevation", 0.0)))
+				max_elevation_drift = maxf(max_elevation_drift, elevation_drift)
+
+	var elevation_ok := max_elevation_drift <= ELEVATION_TOLERANCE
+	if structural_ok and elevation_ok:
+		print("PASS: %s (max_elevation_drift=%.3e)" % [label, max_elevation_drift])
+	else:
+		failures += 1
+		push_error("FAIL: %s (structural_ok=%s max_elevation_drift=%.16g tolerance=%.3e)" % [
+			label,
+			str(structural_ok),
+			max_elevation_drift,
+			ELEVATION_TOLERANCE
+		])
 
 
 func _assert_true(value: bool, label: String) -> void:
