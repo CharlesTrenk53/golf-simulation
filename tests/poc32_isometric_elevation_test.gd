@@ -6,7 +6,7 @@ var failures := 0
 
 
 func _init() -> void:
-	print("POC-32A: player-facing isometric elevation")
+	print("POC-32A/B: player-facing isometric elevation")
 	var scene = ElevationScene.instantiate()
 	get_root().add_child(scene)
 	var initialized_now: bool = bool(scene.initialize_property())
@@ -32,8 +32,8 @@ func _init() -> void:
 
 	var quote: Dictionary = scene.quote_terrain_sculpt(target, 1)
 	_assert_true(bool(quote.get("valid", false)), "raise terrain quote is valid")
-	_assert_equal(int(quote.get("changes", []).size()), 9, "interior terrain brush affects nine authoritative cells")
-	_assert_equal(int(quote.get("cost", -1)), 120, "full 3x3 terrain brush has deterministic placeholder cost")
+	_assert_equal(int(quote.get("changes", []).size()), 9, "accepted normal terrain brush remains nine authoritative cells")
+	_assert_equal(int(quote.get("cost", -1)), 120, "accepted normal 3x3 terrain brush keeps deterministic placeholder cost")
 	_assert_true(bool(quote.get("affordable", false)), "initial terrain edit is affordable")
 
 	var raised: Dictionary = scene.sculpt_terrain(target, 1)
@@ -43,7 +43,7 @@ func _init() -> void:
 	_assert_approx(_elevation_at(grid, target), center_before + 0.25, 0.0000000001, "center elevation rises by full brush step")
 	_assert_approx(_elevation_at(grid, target + Vector2i(0, -1)), north_before + 0.125, 0.0000000001, "orthogonal neighbor receives half terrain step")
 	_assert_approx(_elevation_at(grid, target + Vector2i(1, 1)), diagonal_before + 0.0625, 0.0000000001, "diagonal neighbor receives quarter terrain step")
-	_assert_approx(_elevation_at(grid, target + Vector2i(2, 0)), far_before, 0.0000000001, "terrain brush does not mutate cells outside 3x3 footprint")
+	_assert_approx(_elevation_at(grid, target + Vector2i(2, 0)), far_before, 0.0000000001, "normal terrain brush does not mutate cells outside 3x3 footprint")
 	_assert_equal(grid.surface_at(target.x, target.y), surface_before, "terrain sculpting never changes authoritative surface ownership")
 	_assert_true(not economy.transaction_history.is_empty(), "terrain action records an economy transaction")
 	if not economy.transaction_history.is_empty():
@@ -66,7 +66,7 @@ func _init() -> void:
 	_assert_true(scene.save_to_path(save_path), "elevation construction state saves to disk")
 	var lowered: Dictionary = scene.sculpt_terrain(target, -1)
 	_assert_true(bool(lowered.get("built", false)), "lower terrain action succeeds")
-	_assert_approx(_elevation_at(grid, target), center_before, 0.0000000001, "opposite brush returns center to original elevation")
+	_assert_approx(_elevation_at(grid, target), center_before, 0.0000000001, "opposite normal brush returns center to original elevation")
 	_assert_true(scene.load_from_path(save_path), "saved elevation construction state reloads from disk")
 	grid = scene.grid
 	economy = scene.economy
@@ -81,17 +81,72 @@ func _init() -> void:
 	var rejected: Dictionary = scene.sculpt_terrain(target, -1)
 	_assert_true(not bool(rejected.get("built", false)), "unaffordable terrain edit is rejected")
 	_assert_equal(str(rejected.get("reason", "")), "INSUFFICIENT_FUNDS", "unaffordable terrain edit reports reason")
-	_assert_equal(grid.to_dictionary(), reject_before, "rejected terrain edit leaves authoritative grid unchanged")
+	_assert_true(grid.to_dictionary() == reject_before, "rejected terrain edit leaves authoritative grid unchanged")
 
-	print("POC32_ELEVATION_SUMMARY raise_cost=%d boundary_cost=%d center_step=%.2f brush_cells=%d saved_elevation=%.4f" % [
+	print("POC32A_ELEVATION_SUMMARY raise_cost=%d boundary_cost=%d center_step=%.2f brush_cells=%d saved_elevation=%.4f" % [
 		int(raised.get("cost", 0)),
 		int(boundary_quote.get("cost", 0)),
 		float(scene.TERRAIN_STEP_YARDS),
 		int(quote.get("changes", []).size()),
 		saved_center
 	])
-
 	scene.free()
+
+	# POC-32B: a deliberately exaggerated repeated edit should retain the exact
+	# accepted normal brush at first, then broaden only when needed to prevent a
+	# cliff. The safety ceiling is expressed as grade, so it scales with tile size.
+	var guard_scene = ElevationScene.instantiate()
+	get_root().add_child(guard_scene)
+	var guard_initialized: bool = bool(guard_scene.initialize_property())
+	_assert_true(guard_initialized and bool(guard_scene.initialized), "slope-guard scene initializes")
+	if guard_initialized and bool(guard_scene.initialized):
+		var guard_grid = guard_scene.grid
+		var guard_economy = guard_scene.economy
+		var guard_target := Vector2i(12, 12)
+		var guard_center_before: float = _elevation_at(guard_grid, guard_target)
+		var guard_surface_before: String = guard_grid.surface_at(guard_target.x, guard_target.y)
+		guard_economy.add_revenue(100000, "POC32B_TEST_FUNDS")
+
+		var all_built: bool = true
+		var broadened: bool = false
+		var widest_change_count: int = 0
+		var repeated_edits: int = 28
+		for _i in range(repeated_edits):
+			var repeated_quote: Dictionary = guard_scene.quote_terrain_sculpt(guard_target, 1)
+			if not bool(repeated_quote.get("valid", false)):
+				all_built = false
+				break
+			var change_count: int = int(repeated_quote.get("changes", []).size())
+			widest_change_count = maxi(widest_change_count, change_count)
+			broadened = broadened or change_count > 9
+			var repeated_result: Dictionary = guard_scene.sculpt_terrain(guard_target, 1)
+			if not bool(repeated_result.get("built", false)):
+				all_built = false
+				break
+
+		_assert_true(all_built, "repeated terrain shaping remains a valid paid construction action")
+		_assert_true(broadened, "strong repeated sculpting broadens beyond 3x3 instead of creating a cliff")
+		_assert_approx(
+			_elevation_at(guard_grid, guard_target),
+			guard_center_before + float(repeated_edits) * float(guard_scene.TERRAIN_STEP_YARDS),
+			0.000000001,
+			"slope guard preserves the player's requested center elevation"
+		)
+		_assert_equal(guard_grid.surface_at(guard_target.x, guard_target.y), guard_surface_before, "slope stabilization preserves surface ownership")
+		var maximum_grade: float = float(guard_scene.max_cardinal_terrain_grade())
+		_assert_true(
+			maximum_grade <= float(guard_scene.MAX_ADJACENT_GRADE) + 0.000000001,
+			"repeated terrain sculpting respects maximum adjacent grade"
+		)
+		print("POC32B_SLOPE_SUMMARY repeated_edits=%d widest_cells=%d max_grade=%.6f grade_limit=%.6f center_rise=%.2f" % [
+			repeated_edits,
+			widest_change_count,
+			maximum_grade,
+			float(guard_scene.MAX_ADJACENT_GRADE),
+			_elevation_at(guard_grid, guard_target) - guard_center_before
+		])
+	guard_scene.free()
+
 	_finish()
 
 
@@ -125,8 +180,8 @@ func _assert_approx(actual: float, expected: float, tolerance: float, label: Str
 
 func _finish() -> void:
 	if failures == 0:
-		print("POC-32A ISOMETRIC ELEVATION PASSED")
+		print("POC-32A/B ISOMETRIC ELEVATION PASSED")
 		quit(0)
 	else:
-		push_error("POC-32A ISOMETRIC ELEVATION FAILED: %d" % failures)
+		push_error("POC-32A/B ISOMETRIC ELEVATION FAILED: %d" % failures)
 		quit(1)
