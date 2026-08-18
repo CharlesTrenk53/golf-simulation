@@ -246,7 +246,11 @@ func save_to_path(path: String = DEFAULT_SAVE_PATH) -> bool:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return false
-	file.store_string(JSON.stringify(snapshot()))
+	# Terrain elevation is authoritative construction data. Godot's default JSON
+	# float formatting is compact and can trim a few low-order digits, which made
+	# an otherwise-correct save/load round trip fail exact grid reconciliation.
+	# Full precision keeps the authored elevation values bit-for-bit round-trippable.
+	file.store_string(JSON.stringify(snapshot(), "", true, true))
 	file.close()
 	current_status = "Saved course construction"
 	_update_hud()
