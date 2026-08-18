@@ -6,7 +6,7 @@ var failures := 0
 
 
 func _init() -> void:
-	print("POC-32A/B: player-facing isometric elevation")
+	print("POC-32A/B/C: player-facing isometric elevation")
 	var scene = ElevationScene.instantiate()
 	get_root().add_child(scene)
 	var initialized_now: bool = bool(scene.initialize_property())
@@ -35,6 +35,21 @@ func _init() -> void:
 	_assert_equal(int(quote.get("changes", []).size()), 9, "accepted normal terrain brush remains nine authoritative cells")
 	_assert_equal(int(quote.get("cost", -1)), 120, "accepted normal 3x3 terrain brush keeps deterministic placeholder cost")
 	_assert_true(bool(quote.get("affordable", false)), "initial terrain edit is affordable")
+
+	# POC-32C: the same quote is exposed in player-facing feedback before money is
+	# spent. Normal edits show their exact footprint, and affordable actions remain enabled.
+	var feedback: Dictionary = scene.terrain_feedback(target)
+	_assert_true(bool(feedback.get("valid", false)), "terrain feedback is valid for selected cell")
+	_assert_equal(int(feedback.get("raise_cost", -1)), 120, "terrain feedback exposes raise cost")
+	_assert_equal(int(feedback.get("lower_cost", -1)), 120, "terrain feedback exposes lower cost")
+	_assert_equal(int(feedback.get("raise_cells", -1)), 9, "terrain feedback exposes normal raise footprint")
+	_assert_equal(int(feedback.get("lower_cells", -1)), 9, "terrain feedback exposes normal lower footprint")
+	_assert_true(bool(feedback.get("raise_affordable", false)), "terrain feedback marks affordable raise")
+	_assert_true(bool(feedback.get("lower_affordable", false)), "terrain feedback marks affordable lower")
+	scene._update_terrain_hud()
+	_assert_true(scene.terrain_quote_label != null and "9 cells" in scene.terrain_quote_label.text, "terrain HUD displays quoted footprint")
+	_assert_true(scene.terrain_raise_button != null and not scene.terrain_raise_button.disabled, "affordable raise button remains enabled")
+	_assert_true(scene.terrain_lower_button != null and not scene.terrain_lower_button.disabled, "affordable lower button remains enabled")
 
 	var raised: Dictionary = scene.sculpt_terrain(target, 1)
 	_assert_true(bool(raised.get("built", false)), "raise terrain action succeeds")
@@ -75,15 +90,24 @@ func _init() -> void:
 	_assert_equal(int(economy.cash_balance), saved_cash, "reload restores terrain construction funds")
 	_assert_approx(renderer.cell_center_iso(target.x, target.y).y, iso_after.y, 0.000001, "reload restores rendered terrain height")
 
-	# Unaffordable terrain editing must be rejected without touching any grid data.
+	# Unaffordable terrain editing must be rejected without touching any grid data,
+	# and POC-32C should make that state obvious before the player clicks.
+	_assert_true(scene.select_cell(target), "terrain target can be reselected after reload")
 	var reject_before: Dictionary = grid.to_dictionary()
 	economy.cash_balance = 0
+	var no_funds_feedback: Dictionary = scene.terrain_feedback(target)
+	_assert_true(not bool(no_funds_feedback.get("raise_affordable", true)), "terrain feedback marks unaffordable raise")
+	_assert_true(not bool(no_funds_feedback.get("lower_affordable", true)), "terrain feedback marks unaffordable lower")
+	scene._update_terrain_hud()
+	_assert_true(scene.terrain_raise_button != null and scene.terrain_raise_button.disabled, "unaffordable raise button disables")
+	_assert_true(scene.terrain_lower_button != null and scene.terrain_lower_button.disabled, "unaffordable lower button disables")
+	_assert_true(scene.terrain_quote_label != null and "NO FUNDS" in scene.terrain_quote_label.text, "terrain HUD explicitly reports insufficient funds")
 	var rejected: Dictionary = scene.sculpt_terrain(target, -1)
 	_assert_true(not bool(rejected.get("built", false)), "unaffordable terrain edit is rejected")
 	_assert_equal(str(rejected.get("reason", "")), "INSUFFICIENT_FUNDS", "unaffordable terrain edit reports reason")
 	_assert_true(grid.to_dictionary() == reject_before, "rejected terrain edit leaves authoritative grid unchanged")
 
-	print("POC32A_ELEVATION_SUMMARY raise_cost=%d boundary_cost=%d center_step=%.2f brush_cells=%d saved_elevation=%.4f" % [
+	print("POC32A_C_ELEVATION_SUMMARY raise_cost=%d boundary_cost=%d center_step=%.2f brush_cells=%d saved_elevation=%.4f feedback=GREEN" % [
 		int(raised.get("cost", 0)),
 		int(boundary_quote.get("cost", 0)),
 		float(scene.TERRAIN_STEP_YARDS),
@@ -138,9 +162,19 @@ func _init() -> void:
 			maximum_grade <= float(guard_scene.MAX_ADJACENT_GRADE) + 0.000000001,
 			"repeated terrain sculpting respects maximum adjacent grade"
 		)
-		print("POC32B_SLOPE_SUMMARY repeated_edits=%d widest_cells=%d max_grade=%.6f grade_limit=%.6f center_rise=%.2f" % [
+		var spread_feedback: Dictionary = guard_scene.terrain_feedback(guard_target)
+		_assert_true(
+			bool(spread_feedback.get("raise_expanded", false)),
+			"terrain feedback warns when the next raise needs slope-safe spread"
+		)
+		_assert_true(
+			int(spread_feedback.get("raise_cells", 0)) > 9,
+			"terrain feedback reports expanded slope-safe footprint"
+		)
+		print("POC32B_SLOPE_SUMMARY repeated_edits=%d widest_cells=%d next_raise_cells=%d max_grade=%.6f grade_limit=%.6f center_rise=%.2f" % [
 			repeated_edits,
 			widest_change_count,
+			int(spread_feedback.get("raise_cells", 0)),
 			maximum_grade,
 			float(guard_scene.MAX_ADJACENT_GRADE),
 			_elevation_at(guard_grid, guard_target) - guard_center_before
@@ -180,8 +214,8 @@ func _assert_approx(actual: float, expected: float, tolerance: float, label: Str
 
 func _finish() -> void:
 	if failures == 0:
-		print("POC-32A/B ISOMETRIC ELEVATION PASSED")
+		print("POC-32A/B/C ISOMETRIC ELEVATION PASSED")
 		quit(0)
 	else:
-		push_error("POC-32A/B ISOMETRIC ELEVATION FAILED: %d" % failures)
+		push_error("POC-32A/B/C ISOMETRIC ELEVATION FAILED: %d" % failures)
 		quit(1)
