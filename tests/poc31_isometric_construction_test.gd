@@ -171,10 +171,10 @@ func _assert_grid_roundtrip(actual: Dictionary, expected: Dictionary, label: Str
 
 	var elevation_ok := max_elevation_drift <= ELEVATION_TOLERANCE
 	if structural_ok and elevation_ok:
-		print("PASS: %s (max_elevation_drift=%.3e)" % [label, max_elevation_drift])
+		print("PASS: %s (max_elevation_drift=%.16f)" % [label, max_elevation_drift])
 	else:
 		failures += 1
-		push_error("FAIL: %s (structural_ok=%s max_elevation_drift=%.16g tolerance=%.3e)" % [
+		push_error("FAIL: %s (structural_ok=%s max_elevation_drift=%.16f tolerance=%.16f)" % [
 			label,
 			str(structural_ok),
 			max_elevation_drift,
