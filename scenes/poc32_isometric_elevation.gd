@@ -231,8 +231,6 @@ func _update_hud() -> void:
 func _ensure_terrain_hud() -> void:
 	if terrain_target_label != null and terrain_quote_label != null and terrain_raise_button != null and terrain_lower_button != null:
 		return
-	if not is_inside_tree():
-		return
 	if get_node_or_null("TerrainHUD") == null:
 		_add_terrain_hud()
 
