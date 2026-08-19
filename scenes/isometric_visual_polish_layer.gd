@@ -195,7 +195,8 @@ func _draw_decorations() -> void:
 		var gp: Vector2 = record.get("grid_position", Vector2.ZERO)
 		if not _grid_point_on_property(gp):
 			continue
-		var base := _iso_at_grid(gp) + record.get("pixel_jitter", Vector2.ZERO)
+		var pixel_jitter: Vector2 = record.get("pixel_jitter", Vector2.ZERO)
+		var base: Vector2 = _iso_at_grid(gp) + pixel_jitter
 		var s: float = float(record.get("scale", 1.0))
 		match str(record.get("kind", "")):
 			"PINE":
