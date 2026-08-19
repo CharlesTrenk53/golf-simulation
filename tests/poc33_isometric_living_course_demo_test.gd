@@ -7,7 +7,13 @@ var failures: int = 0
 
 func _init() -> void:
 	print("POC-33D: full isometric living-course visual proof")
+	# SceneTree._init() runs before the root viewport is fully active. Defer the
+	# proof until the main loop is live so Camera2D activation is tested under the
+	# same lifecycle used by the launchable scene instead of during pre-tree setup.
+	call_deferred("_run")
 
+
+func _run() -> void:
 	var demo = POC33LivingCourseDemo.new()
 	demo.auto_advance = false
 	get_root().add_child(demo)
