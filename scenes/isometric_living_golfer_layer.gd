@@ -1,7 +1,7 @@
 extends Node2D
 
-# POC-33A / POC-33B: Isometric Living Golfer Projection Layer
-# ------------------------------------------------------------
+# POC-33A / POC-33B / POC-33C: Isometric Living Golfer Projection Layer
+# ----------------------------------------------------------------------
 # Presentation-only bridge between authoritative course-space golfer/ball
 # positions and the accepted POC-30/31/32 isometric renderer. This node never
 # advances a golfer, chooses a shot, resolves a lie, or changes traffic. It only
@@ -12,6 +12,12 @@ extends Node2D
 # movement continues to be owned by the existing tee-dispersion and inter-hole
 # transition presentation; resolved ball flight continues to be owned by
 # RuntimeBallVisual. This layer simply re-projects those positions into 2D.
+#
+# POC-33C aggregates every SpectatorGroupVisual owned by SpectatorPopulationView
+# into one painter-sorted isometric layer. Group status and traffic-hole metadata
+# are carried through with each golfer/ball so the visible population remains a
+# faithful projection of living-course authority rather than a second traffic
+# model.
 
 @export var shadow_radius_pixels: float = 5.0
 @export var body_radius_pixels: float = 4.5
@@ -101,21 +107,62 @@ func set_balls(records: Array) -> bool:
 
 
 func sync_from_group_visual(group_visual) -> bool:
-	if group_visual == null or not group_visual.has_method("member_world_positions"):
+	var extracted: Dictionary = _extract_group_visual_records(group_visual)
+	if not bool(extracted.get("valid", false)):
 		return false
+	return _set_group_visual_records(extracted.get("golfers", []), extracted.get("balls", []))
+
+
+func sync_from_population_view(population_view) -> bool:
+	if population_view == null or not population_view.has_method("group_visual"):
+		return false
+	var visuals_value = population_view.get("group_visuals")
+	if typeof(visuals_value) != TYPE_DICTIONARY:
+		return false
+	var visuals: Dictionary = visuals_value
+	if visuals.is_empty():
+		return false
+
+	var ids: Array = visuals.keys()
+	ids.sort()
+	var golfers: Array = []
+	var balls: Array = []
+	for group_id_value in ids:
+		var group_id: String = str(group_id_value)
+		var visual = population_view.group_visual(group_id)
+		var extracted: Dictionary = _extract_group_visual_records(visual)
+		if not bool(extracted.get("valid", false)):
+			return false
+		golfers.append_array(extracted.get("golfers", []))
+		balls.append_array(extracted.get("balls", []))
+	return _set_group_visual_records(golfers, balls)
+
+
+func _extract_group_visual_records(group_visual) -> Dictionary:
+	if group_visual == null or not group_visual.has_method("member_world_positions"):
+		return {"valid": false}
 	var positions: Array = group_visual.member_world_positions()
 	if positions.is_empty():
-		return false
+		return {"valid": false}
+
 	var group_id: String = ""
 	var golfers: Array = []
 	if group_visual.get("group") != null:
 		var group = group_visual.get("group")
 		group_id = str(group.get("group_id"))
 		golfers = group.get("golfers")
+	if group_id.is_empty():
+		return {"valid": false}
+
+	var visual_snapshot: Dictionary = group_visual.snapshot() if group_visual.has_method("snapshot") else {}
+	var group_status: String = str(visual_snapshot.get("status", group_visual.get("projected_status")))
+	var projected_hole_number: int = int(visual_snapshot.get("projected_hole_number", group_visual.get("projected_hole_number")))
+	var traffic_hole_number: int = int(visual_snapshot.get("traffic_hole_number", group_visual.get_meta("traffic_hole_number", 0)))
+
 	var records: Array = []
 	for index in range(positions.size()):
 		if typeof(positions[index]) != TYPE_VECTOR3:
-			return false
+			return {"valid": false}
 		var golfer_name := "Golfer %d" % (index + 1)
 		var golfer_id := "%s:%d" % [group_id, index]
 		if index < golfers.size() and golfers[index] != null:
@@ -128,23 +175,24 @@ func sync_from_group_visual(group_visual) -> bool:
 			"group_id": group_id,
 			"member_index": index,
 			"golfer_name": golfer_name,
+			"group_status": group_status,
+			"projected_hole_number": projected_hole_number,
+			"traffic_hole_number": traffic_hole_number,
 			"world_position": positions[index]
 		})
 
-	var balls: Array = group_visual.get("member_ball_visuals")
+	var ball_nodes: Array = group_visual.get("member_ball_visuals")
 	var projected_balls: Array = []
-	for index in range(balls.size()):
-		var ball = balls[index]
+	for index in range(ball_nodes.size()):
+		var ball = ball_nodes[index]
 		if ball == null:
 			continue
 		var course_position_value = ball.get("course_position")
 		if typeof(course_position_value) != TYPE_VECTOR3:
 			continue
 		var course_position: Vector3 = course_position_value
-		# RuntimeBallVisual keeps the authoritative/resolved course position separate
-		# from its presentation-only Y lift. Preserve only that lift so a 2D shot arc
-		# can ride above the player-authored isometric terrain without inventing a
-		# second trajectory.
+		# RuntimeBallVisual keeps resolved course position separate from its
+		# presentation-only Y lift. Mirror that lift over the isometric terrain.
 		var visual_height: float = 0.0
 		if ball is Node3D:
 			visual_height = maxf(float(ball.position.y - course_position.y), 0.0)
@@ -153,6 +201,9 @@ func sync_from_group_visual(group_visual) -> bool:
 			"golfer_id": "%s:%d" % [group_id, index],
 			"group_id": group_id,
 			"member_index": index,
+			"group_status": group_status,
+			"projected_hole_number": projected_hole_number,
+			"traffic_hole_number": traffic_hole_number,
 			"world_position": course_position,
 			"visual_height_yards": visual_height,
 			"visible": bool(ball.visible),
@@ -160,10 +211,7 @@ func sync_from_group_visual(group_visual) -> bool:
 			"flight_progress": float(ball.get("flight_progress")),
 			"trajectory_kind": str(ball.get_meta("trajectory_kind", "STATIONARY"))
 		})
-
-	if not _set_group_visual_records(records, projected_balls):
-		return false
-	return true
+	return {"valid": true, "golfers": records, "balls": projected_balls}
 
 
 func _set_group_visual_records(golfers: Array, balls: Array) -> bool:
@@ -277,10 +325,40 @@ func projected_ball_record(ball_id: String) -> Dictionary:
 	return {}
 
 
-func snapshot() -> Dictionary:
+func projected_group(group_id: String) -> Dictionary:
+	var target: String = group_id.strip_edges()
+	var group_records: Array = []
+	for value in projected_records:
+		var record: Dictionary = value
+		if str(record.get("group_id", "")) == target:
+			group_records.append(record)
+	if group_records.is_empty():
+		return {}
+	var first: Dictionary = group_records[0]
 	return {
+		"group_id": target,
+		"status": str(first.get("group_status", "")),
+		"projected_hole_number": int(first.get("projected_hole_number", 0)),
+		"traffic_hole_number": int(first.get("traffic_hole_number", 0)),
+		"member_count": group_records.size()
+	}
+
+
+func snapshot() -> Dictionary:
+	var group_ids: Dictionary = {}
+	for value in projected_records:
+		var record: Dictionary = value
+		group_ids[str(record.get("group_id", ""))] = true
+	var groups: Array = []
+	var ids: Array = group_ids.keys()
+	ids.sort()
+	for group_id in ids:
+		groups.append(projected_group(str(group_id)))
+	return {
+		"group_count": groups.size(),
 		"golfer_count": projected_records.size(),
 		"ball_count": projected_ball_records.size(),
+		"groups": groups,
 		"records": projected_records.duplicate(true),
 		"balls": projected_ball_records.duplicate(true)
 	}
