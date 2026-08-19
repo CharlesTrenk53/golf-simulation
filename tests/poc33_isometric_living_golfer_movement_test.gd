@@ -97,9 +97,10 @@ func _init() -> void:
 		"airborne ball renders above player-authored terrain rather than snapping to ground"
 	)
 	var first_golfer_midflight: Dictionary = layer.projected_record("group_1:%d" % first_member)
+	var first_shot_start: Vector3 = first_event.get("presented", {}).get("start_position", tee_positions[first_member])
 	_assert_vector2_close(
 		first_golfer_midflight.get("iso_position", Vector2.ZERO),
-		layer.project_world_position(first_ball.shot_start),
+		layer.project_world_position(first_shot_start),
 		0.000001,
 		"first golfer addresses the authoritative tee-shot start while ball is in flight"
 	)
@@ -156,16 +157,15 @@ func _init() -> void:
 			"golfer %d finishes at authoritative first-shot destination" % member_index
 		)
 
-	# Advance exactly to the authoritative hole-finish boundary. Immediate playback
-	# intentionally drains presentation-only movement on later clock advancement;
-	# stopping on the boundary lets us observe the existing inter-hole walk before
-	# that historical headless convenience completes it on the next advance.
-	var active_hole_event: Dictionary = controller.active_event("group_1")
-	var finish_time: float = float(active_hole_event.get("finish_time_seconds", -1.0))
-	var remaining_to_finish: float = finish_time - float(controller.current_time_seconds)
-	_assert_true(not active_hole_event.is_empty() and remaining_to_finish >= 0.0, "authoritative first-hole finish boundary is available")
-	if remaining_to_finish >= 0.0:
-		session.advance_time(remaining_to_finish, false)
+	# Stop exactly at the first-hole finish boundary. At that boundary authority
+	# enters the open next hole and SpectatorGroupVisual starts its presentation-
+	# only inter-hole interpolation. Advancing again in immediate/headless mode
+	# would intentionally drain that animation, so the proof inspects it here.
+	var active_event: Dictionary = controller.active_event("group_1")
+	var finish_time: float = float(active_event.get("finish_time_seconds", controller.current_time_seconds))
+	_assert_true(finish_time > controller.current_time_seconds, "authoritative first-hole finish boundary is available")
+	if finish_time > controller.current_time_seconds:
+		session.advance_time(finish_time - controller.current_time_seconds, false)
 	var transition_found: bool = visual.has_active_inter_hole_transition()
 	_assert_true(transition_found, "existing living-course presentation begins an inter-hole walk")
 	if transition_found:
