@@ -333,6 +333,7 @@ func _build_camera() -> void:
 	camera.zoom = Vector2(z, z)
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 6.0
+	camera.enabled = true
 	add_child(camera)
 	camera.make_current()
 
