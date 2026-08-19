@@ -120,8 +120,8 @@ func _draw_golfer(record: Dictionary) -> void:
 	var stride: float = 2.6 if waiting else 4.1
 	if swinging:
 		stride = 5.0
-	draw_line(hip + Vector2(-1.0, 0.0), base + Vector2(-stride, -1.0), pants.lightened(0.03).with_alpha(alpha), 2.8, true)
-	draw_line(hip + Vector2(1.0, 0.0), base + Vector2(stride, 0.0), pants.darkened(0.08).with_alpha(alpha), 2.8, true)
+	draw_line(hip + Vector2(-1.0, 0.0), base + Vector2(-stride, -1.0), _with_alpha(pants.lightened(0.03), alpha), 2.8, true)
+	draw_line(hip + Vector2(1.0, 0.0), base + Vector2(stride, 0.0), _with_alpha(pants.darkened(0.08), alpha), 2.8, true)
 	draw_line(base + Vector2(-stride, -1.0), base + Vector2(-stride - 1.5, 0.0), Color(0.13, 0.12, 0.10, alpha), 2.4, true)
 	draw_line(base + Vector2(stride, 0.0), base + Vector2(stride + 1.6, 1.0), Color(0.13, 0.12, 0.10, alpha), 2.4, true)
 
@@ -132,27 +132,27 @@ func _draw_golfer(record: Dictionary) -> void:
 		hip + Vector2(3.6, 0.0),
 		hip + Vector2(-3.8, -0.3)
 	])
-	draw_colored_polygon(torso, shirt.with_alpha(alpha))
-	draw_line(shoulder + Vector2(-4.0, 1.0), hip + Vector2(-3.0, -0.5), shirt.darkened(0.16).with_alpha(alpha), 1.2, true)
+	draw_colored_polygon(torso, _with_alpha(shirt, alpha))
+	draw_line(shoulder + Vector2(-4.0, 1.0), hip + Vector2(-3.0, -0.5), _with_alpha(shirt.darkened(0.16), alpha), 1.2, true)
 
 	# Head and cap.
 	draw_circle(head, 4.4, Color(0.20, 0.14, 0.10, 0.18 * alpha))
-	draw_circle(head + Vector2(-0.6, -0.6), 3.8, skin.with_alpha(alpha))
+	draw_circle(head + Vector2(-0.6, -0.6), 3.8, _with_alpha(skin, alpha))
 	draw_colored_polygon(PackedVector2Array([
 		head + Vector2(-4.0, -3.4), head + Vector2(3.0, -3.3), head + Vector2(5.0, -1.6), head + Vector2(-3.4, -1.5)
-	]), cap.with_alpha(alpha))
+	]), _with_alpha(cap, alpha))
 
 	# Arms and club. A live RuntimeBallVisual flight produces a follow-through pose;
 	# otherwise the club rests naturally beside the golfer.
 	if swinging:
 		var hand := shoulder + Vector2(7.0, 2.0)
-		draw_line(shoulder + Vector2(2.5, 1.5), hand, skin.with_alpha(alpha), 2.1, true)
-		draw_line(shoulder + Vector2(-2.2, 1.6), hand + Vector2(-1.0, 1.0), skin.with_alpha(alpha), 2.0, true)
+		draw_line(shoulder + Vector2(2.5, 1.5), hand, _with_alpha(skin, alpha), 2.1, true)
+		draw_line(shoulder + Vector2(-2.2, 1.6), hand + Vector2(-1.0, 1.0), _with_alpha(skin, alpha), 2.0, true)
 		draw_line(hand, hand + Vector2(12.0, -12.0), Color(0.34, 0.34, 0.31, alpha), 1.35, true)
 		draw_line(hand + Vector2(12.0, -12.0), hand + Vector2(15.0, -13.0), Color(0.18, 0.18, 0.16, alpha), 2.0, true)
 	else:
 		var hand := shoulder + Vector2(4.5, 4.0)
-		draw_line(shoulder + Vector2(2.3, 1.4), hand, skin.with_alpha(alpha), 1.9, true)
+		draw_line(shoulder + Vector2(2.3, 1.4), hand, _with_alpha(skin, alpha), 1.9, true)
 		draw_line(hand, base + Vector2(7.0, -1.0), Color(0.34, 0.34, 0.31, alpha), 1.25, true)
 		draw_line(base + Vector2(7.0, -1.0), base + Vector2(10.0, -0.3), Color(0.17, 0.17, 0.15, alpha), 1.8, true)
 
@@ -205,6 +205,10 @@ func _pants_color(group_id: String) -> Color:
 	if group_id == "group_2":
 		return Color(0.30, 0.29, 0.27)
 	return Color(0.83, 0.81, 0.72)
+
+
+func _with_alpha(color: Color, alpha: float) -> Color:
+	return Color(color.r, color.g, color.b, alpha)
 
 
 func _ellipse_points(center: Vector2, radius_x: float, radius_y: float) -> PackedVector2Array:
